@@ -226,3 +226,7 @@ frontend/.vite/
 
 # local docs
 localDocs/
+
+# codex
+.codex/
+.codex_sync/
