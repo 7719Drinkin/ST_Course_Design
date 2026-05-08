@@ -9,14 +9,9 @@ This repository currently contains only the initial project scaffold. Implementa
 ```text
 .
 ├── algorithm/
-│   └── PLACEHOLDER.md
 ├── backend/
-│   └── PLACEHOLDER.md
 ├── frontend/
-│   └── PLACEHOLDER.md
 ├── tests/
-│   └── PLACEHOLDER.md
-├── localDocs/          # local-only course/reference documents, ignored by git
 ├── .gitignore
 └── README.md
 ```
@@ -40,9 +35,6 @@ This repository currently contains only the initial project scaffold. Implementa
 | D | Test/Integration/Doc lead: pytest, AUT SRS samples, RAGAS, A/B, README, and submission QA |
 | E | Algorithm/backend engineer: EP/BVA/DT generators and suite optimization |
 
-## Git Notes
-
-`localDocs/` is intentionally excluded from version control because it contains local course materials and working documents. Do not upload it to the remote repository.
 
 ## Current Status
 
