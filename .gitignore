@@ -230,3 +230,6 @@ localDocs/
 # codex
 .codex/
 .codex_sync/
+
+# macOS
+.DS_Store
