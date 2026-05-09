@@ -54,3 +54,38 @@ def test_15_requirement_samples_cover_teacher_required_techniques():
 
     assert {"EP", "BVA", "DT", "FSM"}.issubset(techniques)
     assert {"Book CRUD", "Member CRUD", "Borrowing", "Return", "Records", "Error Handling"}.issubset(areas)
+
+
+def test_day2_integration_interface_document_exists():
+    content = (ROOT / "docs" / "integration_interfaces.md").read_text(encoding="utf-8")
+
+    for heading in [
+        "# Day2 Integration Interfaces",
+        "## 3. A 后端接口预留",
+        "## 4. B RAG / LLM 输出接口预留",
+        "## 5. E 测试生成器输出接口预留",
+        "## 6. C 前端展示接口预留",
+        "## 7. D 验收规则",
+    ]:
+        assert heading in content
+
+
+def test_ragas_golden_qa_draft_has_valid_schema_and_traceability():
+    requirements = json.loads((ROOT / "tests" / "data" / "aut_15_requirements.json").read_text(encoding="utf-8"))
+    requirement_ids = {item["id"] for item in requirements}
+    samples = json.loads((ROOT / "tests" / "data" / "ragas_golden_qa_draft.json").read_text(encoding="utf-8"))
+
+    required_fields = {"id", "requirement_id", "question", "answer", "ground_truth", "contexts", "source"}
+    sample_ids = [item["id"] for item in samples]
+
+    assert len(samples) >= 6
+    assert len(sample_ids) == len(set(sample_ids))
+
+    for sample in samples:
+        assert required_fields.issubset(sample)
+        assert sample["requirement_id"] in requirement_ids
+        assert sample["question"]
+        assert sample["answer"]
+        assert sample["ground_truth"]
+        assert isinstance(sample["contexts"], list)
+        assert sample["contexts"]
