@@ -1,0 +1,90 @@
+[
+  {
+    "id": "RAGAS-AUT-001",
+    "requirement_id": "REQ-AUT-001",
+    "question": "What should the API return when a client requests all books?",
+    "answer": "It should return 200 OK with a JSON array containing all books.",
+    "ground_truth": "GET /api/books returns 200 OK and the response body is a JSON array.",
+    "contexts": [
+      "FR-AUT-BOOK-001 List Books: The system shall return all books when the API client sends GET /api/books. Acceptance criteria: response status is 200 OK and response body is a JSON array."
+    ],
+    "source": "docs/AUT_SRS.md"
+  },
+  {
+    "id": "RAGAS-AUT-002",
+    "requirement_id": "REQ-AUT-002",
+    "question": "What happens when a valid book payload is submitted to POST /api/books?",
+    "answer": "The system creates the book, returns 201 Created, echoes the submitted fields, and includes a generated id.",
+    "ground_truth": "POST /api/books with a valid Book payload returns 201 Created. The response body contains the submitted fields and a generated id.",
+    "contexts": [
+      "FR-AUT-BOOK-003 Create Book: The system shall create a book when the API client sends POST /api/books with a valid Book payload. Acceptance criteria include 201 Created, submitted fields, and generated id."
+    ],
+    "source": "docs/AUT_SRS.md"
+  },
+  {
+    "id": "RAGAS-AUT-003",
+    "requirement_id": "REQ-AUT-005",
+    "question": "Which fields are required to create a member?",
+    "answer": "A valid member payload contains name, email, phoneNumber, startDate, and endDate.",
+    "ground_truth": "The Member data model requires name, email, phoneNumber, startDate, and endDate for member creation.",
+    "contexts": [
+      "Member fields in docs/AUT_SRS.md: name, email, phoneNumber, startDate, and endDate are required fields."
+    ],
+    "source": "docs/AUT_SRS.md"
+  },
+  {
+    "id": "RAGAS-AUT-004",
+    "requirement_id": "REQ-AUT-008",
+    "question": "What should happen when an existing member borrows an existing book with available copies?",
+    "answer": "The API should return 201, create a borrowing record, set borrowDate and dueDate, keep returnDate null, and decrement availableCopies by 1.",
+    "ground_truth": "For a valid borrow request, the response is 201 Created, a borrowing record id is generated, borrowDate is the current date, dueDate is current date plus 14 days, returnDate is null, and the book availableCopies decreases by 1.",
+    "contexts": [
+      "FR-AUT-BORROW-002 Borrow Available Book acceptance criteria from docs/AUT_SRS.md."
+    ],
+    "source": "docs/AUT_SRS.md"
+  },
+  {
+    "id": "RAGAS-AUT-005",
+    "requirement_id": "REQ-AUT-009",
+    "question": "How should the AUT respond when a book has no available copies and a client tries to borrow it?",
+    "answer": "The AUT should reject the borrow request with 400 Bad Request and should not create a borrowing record.",
+    "ground_truth": "When availableCopies is less than or equal to 0, POST /api/borrow returns 400 Bad Request, no borrowing record is created, and availableCopies does not become negative.",
+    "contexts": [
+      "FR-AUT-BORROW-005 Reject Borrowing When No Copies Are Available: response status is 400 Bad Request; no borrowing record is created; availableCopies does not become negative."
+    ],
+    "source": "docs/AUT_SRS.md"
+  },
+  {
+    "id": "RAGAS-AUT-006",
+    "requirement_id": "REQ-AUT-012",
+    "question": "What should happen when a borrowed book is returned for an existing unreturned borrowing record?",
+    "answer": "The return request should return 200 OK, set returnDate, and increase the related book's availableCopies by 1.",
+    "ground_truth": "PUT /api/return/{recordId} for an existing unreturned borrowing record returns 200 OK, sets returnDate, and increments the related book availableCopies by 1.",
+    "contexts": [
+      "FR-AUT-RETURN-001 Return Borrowed Book acceptance criteria from docs/AUT_SRS.md."
+    ],
+    "source": "docs/AUT_SRS.md"
+  },
+  {
+    "id": "RAGAS-AUT-007",
+    "requirement_id": "REQ-AUT-013",
+    "question": "How should the AUT handle a duplicate return request?",
+    "answer": "The first return should succeed with 200 OK, while a second return for the same record should be rejected with 400 Bad Request.",
+    "ground_truth": "For a duplicate return, the first return returns 200 OK and the second return for the same record returns 400 Bad Request.",
+    "contexts": [
+      "FR-AUT-RETURN-003 Reject Duplicate Return: first return returns 200 OK; second return for the same record returns 400 Bad Request."
+    ],
+    "source": "docs/AUT_SRS.md"
+  },
+  {
+    "id": "RAGAS-AUT-008",
+    "requirement_id": "REQ-AUT-015",
+    "question": "What should happen when a JSON-based endpoint receives malformed JSON?",
+    "answer": "The request should be rejected with 400 Bad Request.",
+    "ground_truth": "Malformed JSON request bodies for JSON-based POST and PUT endpoints should return 400 Bad Request.",
+    "contexts": [
+      "REQ-AUT-015 Error Handling: The system shall reject malformed JSON request bodies for JSON-based POST and PUT endpoints. Expected action: return 400 Bad Request."
+    ],
+    "source": "tests/data/aut_15_requirements.json"
+  }
+]
