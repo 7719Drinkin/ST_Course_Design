@@ -5,37 +5,51 @@ on:
     branches:
       - main
       - develop
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: read
 
 jobs:
   validate-pr:
-    name: Validate PR Governance
+    name: PR Policy Gate
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-      - name: Require linked GitHub Issue
-        run: python scripts/check_pr_issue_link.py "$GITHUB_EVENT_PATH"
       - name: Enforce main receives only develop
-        if: github.base_ref == 'main'
+        if: github.event_name == 'pull_request' && github.base_ref == 'main'
         run: |
           if [ "${{ github.head_ref }}" != "develop" ]; then
             echo "PRs to main must come from develop."
             exit 1
           fi
       - name: Block local-only directories
+        if: github.event_name == 'pull_request'
         run: |
+          git fetch --no-tags --prune --depth=1 origin "${{ github.base_ref }}:refs/remotes/origin/${{ github.base_ref }}"
           if git diff --name-only origin/${{ github.base_ref }}...HEAD | grep -E '^(localDocs|external)/'; then
             echo "localDocs/ and external/ must not be included in pull requests."
             exit 1
           fi
+      - name: Explain optional issue policy
+        if: github.event_name == 'pull_request'
+        run: |
+          echo "GitHub Issues are optional for this project."
+          echo "This gate enforces branch flow and local-only directory protection only."
 
   conditional-builds:
     name: Conditional Builds
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Setup Node.js for frontend
+        if: hashFiles('frontend/package.json') != ''
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
       - name: Frontend build if frontend project exists
         run: |
           if [ -f frontend/package.json ]; then
@@ -45,6 +59,18 @@ jobs:
           else
             echo "No frontend/package.json found; skipping frontend build."
           fi
+      - name: Setup Java for Maven backend
+        if: hashFiles('backend/pom.xml') != ''
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: maven
+      - name: Setup Python for Python backend
+        if: hashFiles('backend/requirements.txt') != '' || hashFiles('backend/pyproject.toml') != ''
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
       - name: Backend build if backend project exists
         run: |
           if [ -f backend/pom.xml ]; then
@@ -74,7 +100,7 @@ jobs:
             pip install pytest requests
           fi
       - name: Run non-live tests
-        run: pytest -m "not aut_api and not ragas and not llm"
+        run: pytest -m "not aut_api and not ragas and not llm" -q
 
   ragas-gate:
     name: RAGAS Gate
@@ -86,10 +112,10 @@ jobs:
           python-version: "3.12"
       - name: Run RAGAS tests only when present
         run: |
-          if find tests -type f | grep -E 'ragas|evaluation' >/dev/null; then
+          if find tests -type f -name 'test_*.py' -print0 | xargs -0 grep -E '@pytest\.mark\.ragas|pytestmark.*ragas' >/dev/null; then
             python -m pip install --upgrade pip
             [ -f requirements-dev.txt ] && pip install -r requirements-dev.txt
             pytest -m ragas
           else
-            echo "No RAGAS/evaluation tests found; skipping RAGAS gate."
+            echo "No pytest tests marked ragas found; skipping RAGAS gate."
           fi
