@@ -1,0 +1,95 @@
+name: Project Quality Gate
+
+on:
+  pull_request:
+    branches:
+      - main
+      - develop
+
+jobs:
+  validate-pr:
+    name: Validate PR Governance
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Require linked GitHub Issue
+        run: python scripts/check_pr_issue_link.py "$GITHUB_EVENT_PATH"
+      - name: Enforce main receives only develop
+        if: github.base_ref == 'main'
+        run: |
+          if [ "${{ github.head_ref }}" != "develop" ]; then
+            echo "PRs to main must come from develop."
+            exit 1
+          fi
+      - name: Block local-only directories
+        run: |
+          if git diff --name-only origin/${{ github.base_ref }}...HEAD | grep -E '^(localDocs|external)/'; then
+            echo "localDocs/ and external/ must not be included in pull requests."
+            exit 1
+          fi
+
+  conditional-builds:
+    name: Conditional Builds
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Frontend build if frontend project exists
+        run: |
+          if [ -f frontend/package.json ]; then
+            cd frontend
+            npm ci
+            npm run build
+          else
+            echo "No frontend/package.json found; skipping frontend build."
+          fi
+      - name: Backend build if backend project exists
+        run: |
+          if [ -f backend/pom.xml ]; then
+            mvn -f backend/pom.xml test
+          elif [ -f backend/requirements.txt ] || [ -f backend/pyproject.toml ]; then
+            python -m pip install --upgrade pip
+            [ -f backend/requirements.txt ] && pip install -r backend/requirements.txt
+            python -m compileall backend
+          else
+            echo "No backend build descriptor found; skipping backend build."
+          fi
+
+  python-tests:
+    name: Python Test Suite
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements-dev.txt ]; then
+            pip install -r requirements-dev.txt
+          else
+            pip install pytest requests
+          fi
+      - name: Run non-live tests
+        run: pytest -m "not aut_api and not ragas and not llm"
+
+  ragas-gate:
+    name: RAGAS Gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Run RAGAS tests only when present
+        run: |
+          if find tests -type f | grep -E 'ragas|evaluation' >/dev/null; then
+            python -m pip install --upgrade pip
+            [ -f requirements-dev.txt ] && pip install -r requirements-dev.txt
+            pytest -m ragas
+          else
+            echo "No RAGAS/evaluation tests found; skipping RAGAS gate."
+          fi
