@@ -222,6 +222,7 @@ node_modules/
 frontend/node_modules/
 frontend/dist/
 frontend/.vite/
+frontend/.npm-cache/
 *.tsbuildinfo
 
 # local docs
