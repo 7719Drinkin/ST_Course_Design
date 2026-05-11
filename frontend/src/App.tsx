@@ -1,5 +1,4 @@
-import { useMemo, useState } from 'react'
-import type { UploadFile } from 'antd'
+import { useEffect, useMemo, useState } from 'react'
 import {
   Alert,
   Button,
@@ -7,462 +6,569 @@ import {
   Col,
   Layout,
   List,
-  Menu,
   Progress,
   Row,
   Segmented,
   Space,
+  Spin,
+  Steps,
   Table,
   Tag,
+  Tooltip,
   Typography,
   Upload,
 } from 'antd'
-import type { MenuProps } from 'antd'
+import type { UploadFile } from 'antd'
 import { useAppStore } from './store/appStore'
+import {
+  generateFSM,
+  getExportUrl,
+  getOptimizeResult,
+  getOracleResults,
+  getRiskData,
+  getTestCases,
+  ingestAndParse,
+} from './services/api'
+import type { ApiResult, DisplayRequirement, FSMResult, OptimizeMode, OptimizeResult, OracleResult, RiskEntry, TestCase } from './types'
 
-const { Header, Content, Footer } = Layout
+const { Header, Content, Sider } = Layout
 const { Title, Text } = Typography
 
-type ModuleKey =
-  | 'overview'
-  | 'phase1'
-  | 'phase2'
-  | 'phase3'
+// ── Shared helpers ────────────────────────────────────────────────────────────
 
-const menuItems: MenuProps['items'] = [
-  { key: 'overview', label: '项目概览' },
-  { key: 'phase1', label: '阶段 1: 需求与风险 (FR1/FR2)' },
-  { key: 'phase2', label: '阶段 2: 测试生成 (FR3/FR4)' },
-  { key: 'phase3', label: '阶段 3: 评估与优化 (FR5/FR7)' },
-]
-
-const ingestResultMock = [
-  {
-    requirement_id: 'REQ-001',
-    feature: '用户登录',
-    actor: '终端用户',
-    precondition: '用户已注册',
-    acceptance: '支持账号密码登录，3 次失败后触发验证码',
-    risk_level: 'High',
-  },
-  {
-    requirement_id: 'REQ-002',
-    feature: '订单查询',
-    actor: '终端用户',
-    precondition: '用户已登录',
-    acceptance: '按日期筛选并分页返回订单列表',
-    risk_level: 'Medium',
-  },
-  {
-    requirement_id: 'REQ-003',
-    feature: '退款审批',
-    actor: '管理员',
-    precondition: '订单状态为已支付',
-    acceptance: '审批后更新状态并发送通知',
-    risk_level: 'High',
-  },
-]
-
-const heatmapData = [
-  [1, 3, 6, 7, 10],
-  [2, 4, 8, 9, 11],
-  [3, 5, 7, 12, 16],
-  [4, 7, 10, 14, 19],
-  [6, 9, 13, 18, 24],
-]
-
-const blackboxCasesMock = [
-  { key: 'TC-001', technique: 'EP', risk: 'High', status: 'Ready', standard_ref: 'ISO29119-4.2' },
-  { key: 'TC-002', technique: 'BVA', risk: 'Medium', status: 'Draft', standard_ref: 'ISO29119-4.3' },
-  { key: 'TC-003', technique: 'DT', risk: 'High', status: 'Ready', standard_ref: 'ISTQB-CTFL-4.4' },
-]
-
-const oracleMock = [
-  { testId: 'TC-001', llmVerdict: 'Pass', ruleVerdict: 'Pass', confidence: 0.95, review: false },
-  { testId: 'TC-019', llmVerdict: 'Pass', ruleVerdict: 'Fail', confidence: 0.56, review: true },
-  { testId: 'TC-032', llmVerdict: 'Fail', ruleVerdict: 'Fail', confidence: 0.87, review: false },
-]
-
-const fsmMermaidMock = `stateDiagram-v2
-[*] --> Idle
-Idle --> Parsing: ingest
-Parsing --> Parsed: validate OK
-Parsed --> RiskScored: score risk
-RiskScored --> Designed: generate tests
-Designed --> [*]`
-
-const optimizeMock = {
-  beforeCount: 320,
-  afterCount: 121,
-  riskPriorityMode: true,
+function DataStatusTag({
+  result,
+}: {
+  result: { isLive: boolean; pendingFrom?: string } | null
+}) {
+  if (!result) return null
+  if (result.isLive)
+    return <Tag color="green" style={{ marginLeft: 8 }}>Live</Tag>
+  return (
+    <Tooltip title={`待对接：${result.pendingFrom}`}>
+      <Tag color="orange" style={{ marginLeft: 8, cursor: 'help' }}>
+        Mock · 待接入
+      </Tag>
+    </Tooltip>
+  )
 }
 
-function getRiskColor(value: number) {
-  if (value <= 5) return '#86efac'
-  if (value <= 12) return '#facc15'
-  return '#f87171'
+function riskColor(level: string) {
+  if (level === 'High') return 'volcano'
+  if (level === 'Medium') return 'gold'
+  return 'green'
 }
 
-function FR1Panel() {
+// ── Step 1: Input & Parse ─────────────────────────────────────────────────────
+
+function Step1InputParse() {
   const [fileList, setFileList] = useState<UploadFile[]>([])
-  const [parsed, setParsed] = useState<typeof ingestResultMock>([])
-  const [parsing, setParsing] = useState(false)
-  const [errors, setErrors] = useState<string[]>([])
+  const [loading, setLoading] = useState(false)
+  const [apiResult, setApiResult] = useState<ApiResult<DisplayRequirement[]> | null>(null)
+  const setCurrentStep = useAppStore((s) => s.setCurrentStep)
 
-  const handleParse = () => {
+  const handleParse = async () => {
     if (fileList.length === 0) {
-      setErrors(['请先上传 CSV 或 TXT 文件后再执行解析。'])
+      setApiResult({ data: [], isLive: false, pendingFrom: '请先上传文件' })
       return
     }
-
-    setParsing(true)
-    setErrors([])
-    window.setTimeout(() => {
-      setParsed(ingestResultMock)
-      setErrors(['REQ-002 缺少非功能约束字段，已在后台标记为待补充。'])
-      setParsing(false)
-    }, 600)
+    setLoading(true)
+    // Read first file content as text; fall back to filename as content for mock
+    const content = fileList[0].name
+    const result = await ingestAndParse(content)
+    setApiResult(result)
+    setLoading(false)
   }
 
+  const handleReset = () => {
+    setFileList([])
+    setApiResult(null)
+  }
+
+  const missingCount = apiResult?.data.filter((r) => r.missing_fields.length > 0).length ?? 0
+
+  const columns = [
+    { title: 'Requirement ID', dataIndex: 'requirement_id', width: 150 },
+    { title: 'Expected Action', dataIndex: 'expected_action', ellipsis: true },
+    {
+      title: 'Input Fields',
+      dataIndex: 'input_fields',
+      render: (v: string[]) => v.length ? v.join(', ') : <Text type="secondary">—</Text>,
+    },
+    {
+      title: 'Conditions',
+      dataIndex: 'conditions',
+      render: (v: string[]) => v.length ? v.join(' · ') : <Text type="secondary">—</Text>,
+    },
+    {
+      title: 'Confidence',
+      dataIndex: 'confidence',
+      width: 110,
+      render: (v: number) => (
+        <Tag color={v >= 0.85 ? 'green' : v >= 0.7 ? 'gold' : 'volcano'}>{v.toFixed(2)}</Tag>
+      ),
+    },
+    {
+      title: 'Missing Fields',
+      dataIndex: 'missing_fields',
+      width: 130,
+      render: (v: string[]) =>
+        v.length ? <Tag color="volcano">{v.join(', ')}</Tag> : <Tag color="green">OK</Tag>,
+    },
+  ]
+
   return (
-    <Space direction="vertical" size={16} className="full-width">
-      <Card title="FR1.0 输入上传">
+    <Space direction="vertical" size={24} className="full-width">
+      <Card title="需求文件上传">
         <Upload.Dragger
           multiple
-          accept=".csv,.txt"
+          accept=".csv,.txt,.json"
           beforeUpload={() => false}
           fileList={fileList}
           onChange={(info) => setFileList(info.fileList)}
           className="upload-zone"
         >
           <p className="upload-title">拖拽或点击上传需求文件</p>
-          <p className="upload-hint">支持 CSV/TXT；上传后可执行 mock parse 流程</p>
+          <p className="upload-hint">支持 CSV / TXT / JSON（AUT SRS 格式）</p>
         </Upload.Dragger>
 
         <Space className="top-gap">
-          <Button type="primary" onClick={handleParse} loading={parsing}>
+          <Button type="primary" onClick={handleParse} loading={loading}>
             执行解析
           </Button>
-          <Button onClick={() => { setParsed([]); setErrors([]); setFileList([]) }}>重置</Button>
+          <Button onClick={handleReset}>重置</Button>
         </Space>
       </Card>
 
-      <Card title="FR1.1 Parsed Result Panel">
-        {errors.length > 0 && (
-          <Alert
-            className="bottom-gap"
-            type="warning"
-            showIcon
-            message="字段校验提示"
-            description={
-              <ul className="error-list">
-                {errors.map((error) => (
-                  <li key={error}>{error}</li>
-                ))}
-              </ul>
-            }
-          />
-        )}
-
-        <Table
-          rowKey="requirement_id"
-          pagination={false}
-          dataSource={parsed}
-          locale={{ emptyText: '尚未解析，请上传文件并点击“执行解析”。' }}
-          columns={[
-            { title: 'Requirement ID', dataIndex: 'requirement_id' },
-            { title: 'Feature', dataIndex: 'feature' },
-            { title: 'Actor', dataIndex: 'actor' },
-            { title: 'Precondition', dataIndex: 'precondition' },
-            { title: 'Acceptance Criteria', dataIndex: 'acceptance' },
-            {
-              title: 'Risk',
-              dataIndex: 'risk_level',
-              render: (value: string) => (
-                <Tag color={value === 'High' ? 'volcano' : 'gold'}>{value}</Tag>
-              ),
-            },
-          ]}
-        />
-      </Card>
-    </Space>
-  )
-}
-
-function FR2Panel() {
-  return (
-    <Row gutter={[16, 16]}>
-      <Col xs={24} lg={16}>
-        <Card title="FR2 风险热力图（Mock Data Stream）">
-          <div className="heatmap">
-            {heatmapData.flatMap((row, rowIndex) =>
-              row.map((value, colIndex) => (
-                <div
-                  key={`${rowIndex}-${colIndex}`}
-                  className="heatmap-cell"
-                  style={{ background: getRiskColor(value) }}
-                >
-                  {value}
-                </div>
-              )),
+      {(loading || apiResult) && (
+        <Card
+          title={
+            <span>
+              解析结果 (FR1.1)
+              <DataStatusTag result={apiResult} />
+            </span>
+          }
+          extra={
+            apiResult && apiResult.data.length > 0 ? (
+              <Button type="primary" onClick={() => setCurrentStep(1)}>
+                下一步: 风险评估
+              </Button>
+            ) : null
+          }
+        >
+          <Spin spinning={loading}>
+            {!loading && missingCount > 0 && (
+              <Alert
+                className="bottom-gap"
+                type="warning"
+                showIcon
+                message={`字段完整性提示：${missingCount} 条需求存在缺失字段，已标记。`}
+              />
             )}
-          </div>
-          <div className="heatmap-legend">
-            <span>Low (1-5)</span>
-            <span>Medium (6-12)</span>
-            <span>High (13+)</span>
-          </div>
+            <Table
+              rowKey="requirement_id"
+              size="small"
+              pagination={false}
+              dataSource={apiResult?.data ?? []}
+              columns={columns}
+              locale={{ emptyText: '尚未解析，请上传文件并点击"执行解析"' }}
+            />
+          </Spin>
         </Card>
-      </Col>
-      <Col xs={24} lg={8}>
-        <Card title="Risk Report Snapshot">
-          <List
-            dataSource={[
-              '高风险需求：12 条',
-              '中风险需求：18 条',
-              '低风险需求：22 条',
-              '最高风险象限：高影响 x 高可能',
-            ]}
-            renderItem={(item) => <List.Item>{item}</List.Item>}
-          />
-        </Card>
-      </Col>
-    </Row>
+      )}
+    </Space>
   )
 }
 
-function FR3Panel() {
+// ── Step 2: Risk Analysis ─────────────────────────────────────────────────────
+
+function buildHeatmapMatrix(entries: RiskEntry[]): number[][] {
+  // 5×5 matrix: rows = likelihood (1-5), cols = impact (1-5), value = count of requirements in cell
+  const matrix = Array.from({ length: 5 }, () => Array<number>(5).fill(0))
+  entries.forEach(({ impact, likelihood }) => {
+    const r = Math.min(5, Math.max(1, likelihood)) - 1
+    const c = Math.min(5, Math.max(1, impact)) - 1
+    matrix[r][c]++
+  })
+  return matrix
+}
+
+function getCellBg(count: number, row: number, col: number) {
+  const score = (row + 1) * (col + 1)
+  if (count === 0) return score >= 15 ? 'rgba(248,113,113,0.15)' : score >= 8 ? 'rgba(250,204,21,0.15)' : 'rgba(134,239,172,0.15)'
+  if (score >= 15) return '#f87171'
+  if (score >= 8) return '#facc15'
+  return '#86efac'
+}
+
+function Step2RiskAnalysis() {
+  const setCurrentStep = useAppStore((s) => s.setCurrentStep)
+  const [apiResult, setApiResult] = useState<ApiResult<RiskEntry[]> | null>(null)
+
+  useEffect(() => {
+    getRiskData().then(setApiResult)
+  }, [])
+
+  const entries = useMemo(() => apiResult?.data ?? [], [apiResult])
+  const matrix = useMemo(() => buildHeatmapMatrix(entries), [entries])
+  const highCount = entries.filter((e) => e.level === 'High').length
+  const medCount = entries.filter((e) => e.level === 'Medium').length
+  const lowCount = entries.filter((e) => e.level === 'Low').length
+
   return (
-    <Card title="FR3 黑盒用例工作台（AG Grid Shell）">
-      <Space direction="vertical" size={12} className="full-width">
-        <Space wrap>
-          <Tag color="geekblue">Filter</Tag>
-          <Tag color="geekblue">Sort</Tag>
-          <Tag color="geekblue">Group</Tag>
-          <Tag color="geekblue">Row Selection</Tag>
+    <Space direction="vertical" size={24} className="full-width">
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <span>
+          <Title level={4} style={{ margin: 0, display: 'inline' }}>风险矩阵评估</Title>
+          <DataStatusTag result={apiResult} />
+        </span>
+        <Button type="primary" onClick={() => setCurrentStep(2)}>下一步: 测试生成与复核</Button>
+      </div>
+
+      <Row gutter={[16, 16]}>
+        <Col xs={24} lg={16}>
+          <Card title="Impact × Likelihood 热力图">
+            <Spin spinning={!apiResult}>
+              <div className="heatmap">
+                {matrix.flatMap((row, rIdx) =>
+                  row.map((count, cIdx) => (
+                    <div
+                      key={`${rIdx}-${cIdx}`}
+                      className="heatmap-cell"
+                      style={{ background: getCellBg(count, rIdx, cIdx) }}
+                    >
+                      {count > 0 ? count : ''}
+                    </div>
+                  )),
+                )}
+              </div>
+              <div className="heatmap-legend">
+                <span>Low Impact × Likelihood</span>
+                <span>Medium</span>
+                <span>High</span>
+              </div>
+              <Text type="secondary" style={{ fontSize: 11, display: 'block', marginTop: 6 }}>
+                数字 = 该象限内的需求数量
+              </Text>
+            </Spin>
+          </Card>
+        </Col>
+        <Col xs={24} lg={8}>
+          <Card title="Risk Snapshot">
+            <Spin spinning={!apiResult}>
+              <List
+                size="small"
+                dataSource={[
+                  `高风险需求：${highCount} 条`,
+                  `中风险需求：${medCount} 条`,
+                  `低风险需求：${lowCount} 条`,
+                ]}
+                renderItem={(item) => <List.Item>{item}</List.Item>}
+              />
+              {entries.length > 0 && (
+                <Table
+                  size="small"
+                  pagination={false}
+                  style={{ marginTop: 12 }}
+                  rowKey="requirement_id"
+                  dataSource={entries}
+                  columns={[
+                    { title: 'ID', dataIndex: 'requirement_id', ellipsis: true },
+                    { title: 'Score', dataIndex: 'score', width: 60 },
+                    {
+                      title: 'Level',
+                      dataIndex: 'level',
+                      width: 80,
+                      render: (v: string) => <Tag color={riskColor(v)}>{v}</Tag>,
+                    },
+                  ]}
+                />
+              )}
+            </Spin>
+          </Card>
+        </Col>
+      </Row>
+    </Space>
+  )
+}
+
+// ── Step 3: Generate & Evaluate ───────────────────────────────────────────────
+
+function Step3GenerateEvaluate() {
+  const setCurrentStep = useAppStore((s) => s.setCurrentStep)
+  const [tcResult, setTcResult] = useState<ApiResult<TestCase[]> | null>(null)
+  const [fsmResult, setFsmResult] = useState<ApiResult<FSMResult> | null>(null)
+  const [oracleResult, setOracleResult] = useState<ApiResult<OracleResult[]> | null>(null)
+
+  useEffect(() => {
+    getTestCases().then(setTcResult)
+    generateFSM(['REQ-AUT-008', 'REQ-AUT-012', 'REQ-AUT-001']).then(setFsmResult)
+    getOracleResults().then(setOracleResult)
+  }, [])
+
+  const testCases = tcResult?.data ?? []
+  const oracleMap = useMemo(() => {
+    const m = new Map<string, OracleResult>()
+    oracleResult?.data.forEach((o) => m.set(o.test_id, o))
+    return m
+  }, [oracleResult])
+
+  const tcColumns = [
+    { title: 'Test ID', dataIndex: 'test_id', width: 150 },
+    { title: 'Req ID', dataIndex: 'requirement_id', width: 140 },
+    {
+      title: 'Technique',
+      dataIndex: 'technique',
+      width: 90,
+      render: (v: string) => <Tag color="geekblue">{v}</Tag>,
+    },
+    { title: 'Title', dataIndex: 'title', ellipsis: true },
+    {
+      title: 'Risk',
+      dataIndex: 'risk_level',
+      width: 90,
+      render: (v: string) => <Tag color={riskColor(v)}>{v}</Tag>,
+    },
+    { title: 'Standard Ref', dataIndex: 'standard_ref', ellipsis: true },
+    {
+      title: 'Confidence',
+      width: 110,
+      render: (_: unknown, record: TestCase) => {
+        const o = oracleMap.get(record.test_id)
+        if (!o) return <Tag>Pending</Tag>
+        return (
+          <Tag color={o.confidence >= 0.85 ? 'green' : o.confidence >= 0.7 ? 'gold' : 'volcano'}>
+            {o.confidence.toFixed(2)}
+          </Tag>
+        )
+      },
+    },
+    {
+      title: 'Oracle',
+      width: 130,
+      render: (_: unknown, record: TestCase) => {
+        const o = oracleMap.get(record.test_id)
+        if (!o) return <Tag>Pending</Tag>
+        return o.needs_review ? (
+          <Button size="small" danger ghost>待复核</Button>
+        ) : (
+          <Tag color="green">自动通过</Tag>
+        )
+      },
+    },
+  ]
+
+  return (
+    <Space direction="vertical" size={24} className="full-width">
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <span>
+          <Title level={4} style={{ margin: 0, display: 'inline' }}>生成与复核工作区</Title>
+          <DataStatusTag result={tcResult} />
+        </span>
+        <Button type="primary" onClick={() => setCurrentStep(3)}>下一步: 套件优化与导出</Button>
+      </div>
+
+      <Row gutter={[16, 16]}>
+        <Col xs={24} lg={16}>
+          <Card
+            title={
+              <span>
+                综合测试用例池 (黑盒 + 白盒)
+                <DataStatusTag result={tcResult} />
+              </span>
+            }
+          >
+            <Spin spinning={!tcResult}>
+              <Table
+                rowKey="test_id"
+                size="small"
+                pagination={false}
+                dataSource={testCases}
+                columns={tcColumns}
+                locale={{ emptyText: '暂无用例数据' }}
+              />
+            </Spin>
+          </Card>
+        </Col>
+
+        <Col xs={24} lg={8}>
+          <Card
+            title={
+              <span>
+                FSM 状态机
+                <DataStatusTag result={fsmResult} />
+              </span>
+            }
+          >
+            <Spin spinning={!fsmResult}>
+              {fsmResult && (
+                <>
+                  <pre className="mermaid-block">{fsmResult.data.mermaid}</pre>
+                  <div style={{ marginTop: 12 }}>
+                    <Text type="secondary" style={{ fontSize: 12 }}>Coverage paths</Text>
+                    <List
+                      size="small"
+                      style={{ marginTop: 4 }}
+                      dataSource={fsmResult.data.coverage.all_transitions}
+                      renderItem={(t) => <List.Item style={{ fontSize: 12 }}>{t}</List.Item>}
+                    />
+                  </div>
+                </>
+              )}
+            </Spin>
+          </Card>
+        </Col>
+      </Row>
+    </Space>
+  )
+}
+
+// ── Step 4: Optimize & Export ─────────────────────────────────────────────────
+
+function Step4OptimizeExport() {
+  const [mode, setMode] = useState<OptimizeMode>('risk_priority')
+  const [apiResult, setApiResult] = useState<ApiResult<OptimizeResult> | null>(null)
+
+  useEffect(() => {
+    getOptimizeResult(mode).then(setApiResult)
+  }, [mode])
+
+  const opt = apiResult?.data
+  const reductionRate = opt?.reduction_rate ?? 0
+
+  return (
+    <Space direction="vertical" size={24} className="full-width">
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <span>
+          <Title level={4} style={{ margin: 0, display: 'inline' }}>套件优化与交付</Title>
+          <DataStatusTag result={apiResult} />
+        </span>
+        <Space>
+          <Button onClick={() => window.open(getExportUrl('csv'), '_blank')}>导出 CSV</Button>
+          <Button onClick={() => window.open(getExportUrl('xlsx'), '_blank')}>导出 XLSX</Button>
+          <Button
+            type="primary"
+            style={{ background: '#0f766e', borderColor: '#0f766e' }}
+            onClick={() => window.open(getExportUrl('json'), '_blank')}
+          >
+            导出 JSON
+          </Button>
         </Space>
-        <Table
-          pagination={false}
-          dataSource={blackboxCasesMock}
-          columns={[
-            { title: 'Test ID', dataIndex: 'key' },
-            { title: 'Technique', dataIndex: 'technique' },
-            { title: 'Risk', dataIndex: 'risk', render: (value) => <Tag>{value}</Tag> },
-            { title: 'Status', dataIndex: 'status' },
-            { title: 'Standard Ref', dataIndex: 'standard_ref' },
-          ]}
-        />
-      </Space>
-    </Card>
-  )
-}
+      </div>
 
-function FR4Panel() {
-  return (
-    <Row gutter={[16, 16]}>
-      <Col xs={24} lg={14}>
-        <Card title="FR4 Mermaid 状态图面板">
-          <pre className="mermaid-block">{fsmMermaidMock}</pre>
-        </Card>
-      </Col>
-      <Col xs={24} lg={10}>
-        <Card title="Test Sequence List">
-          <List
-            dataSource={[
-              'Seq-1: Idle -> Parsing -> Parsed',
-              'Seq-2: Parsed -> RiskScored -> Designed',
-              'Seq-3: Designed -> Exported',
-            ]}
-            renderItem={(item) => <List.Item>{item}</List.Item>}
-          />
-        </Card>
-      </Col>
-    </Row>
-  )
-}
+      <Card title="FR7.0 套件优化策略">
+        <Space direction="vertical" size={16} className="full-width">
+          <Space wrap>
+            <Text>优化模式：</Text>
+            <Segmented
+              value={mode}
+              onChange={(v) => setMode(v as OptimizeMode)}
+              options={[
+                { label: '风险优先', value: 'risk_priority' },
+                { label: '标准模式', value: 'normal' },
+              ]}
+            />
+          </Space>
 
-function FR5Panel() {
-  return (
-    <Card title="FR5 Oracle 评估（Mock Confidence Flow）">
-      <Table
-        pagination={false}
-        dataSource={oracleMock}
-        rowKey="testId"
-        columns={[
-          { title: 'Test ID', dataIndex: 'testId' },
-          { title: 'LLM Verdict', dataIndex: 'llmVerdict' },
-          { title: 'Rule Verdict', dataIndex: 'ruleVerdict' },
-          {
-            title: 'Confidence',
-            dataIndex: 'confidence',
-            render: (value: number) => (
-              <Tag color={value >= 0.85 ? 'green' : value >= 0.7 ? 'gold' : 'volcano'}>
-                {value.toFixed(2)}
-              </Tag>
-            ),
-          },
-          {
-            title: 'Review',
-            dataIndex: 'review',
-            render: (value: boolean) => (value ? <Tag color="volcano">Manual Review</Tag> : <Tag color="green">Auto Pass</Tag>),
-          },
-        ]}
-      />
-    </Card>
-  )
-}
-
-function FR7Panel() {
-  const [riskPriority, setRiskPriority] = useState(optimizeMock.riskPriorityMode)
-  const reduced = useMemo(
-    () => Math.round(((optimizeMock.beforeCount - optimizeMock.afterCount) / optimizeMock.beforeCount) * 100),
-    [],
-  )
-
-  return (
-    <Space direction="vertical" size={16} className="full-width">
-      <Card title="FR7 套件优化控制台">
-        <Space wrap>
-          <Text>优化模式：</Text>
-          <Segmented
-            value={riskPriority ? 'risk' : 'normal'}
-            onChange={(value) => setRiskPriority(value === 'risk')}
-            options={[
-              { label: '风险优先', value: 'risk' },
-              { label: '标准模式', value: 'normal' },
-            ]}
-          />
+          <Spin spinning={!apiResult}>
+            <Row gutter={[16, 16]}>
+              <Col xs={24} md={12}>
+                <div className="compare-card">
+                  <Text type="secondary">优化前用例数</Text>
+                  <Title level={3}>{opt?.before_count ?? '—'}</Title>
+                </div>
+              </Col>
+              <Col xs={24} md={12}>
+                <div className="compare-card compare-card-green">
+                  <Text type="secondary">优化后用例数</Text>
+                  <Title level={3}>{opt?.after_count ?? '—'}</Title>
+                </div>
+              </Col>
+            </Row>
+            <div style={{ marginTop: 16 }}>
+              <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 6 }}>
+                缩减率 (Reduction Rate)
+              </Text>
+              <Progress percent={reductionRate} strokeColor="#0f766e" />
+            </div>
+          </Spin>
         </Space>
       </Card>
-
-      <Card title="Before / After 对比">
-        <Row gutter={[16, 16]}>
-          <Col xs={24} md={12}>
-            <div className="compare-card">
-              <Text type="secondary">Before</Text>
-              <Title level={3}>{optimizeMock.beforeCount}</Title>
-            </div>
-          </Col>
-          <Col xs={24} md={12}>
-            <div className="compare-card compare-card-green">
-              <Text type="secondary">After</Text>
-              <Title level={3}>{riskPriority ? optimizeMock.afterCount - 8 : optimizeMock.afterCount}</Title>
-            </div>
-          </Col>
-        </Row>
-        <Progress className="top-gap" percent={reduced} />
-      </Card>
     </Space>
   )
 }
 
-function Phase1Panel() {
-  return (
-    <Space direction="vertical" size={24} className="full-width">
-      <FR1Panel />
-      <FR2Panel />
-    </Space>
-  )
-}
-
-function Phase2Panel() {
-  return (
-    <Space direction="vertical" size={24} className="full-width">
-      <FR3Panel />
-      <FR4Panel />
-    </Space>
-  )
-}
-
-function Phase3Panel() {
-  return (
-    <Space direction="vertical" size={24} className="full-width">
-      <FR5Panel />
-      <FR7Panel />
-    </Space>
-  )
-}
-
-function OverviewPanel() {
-  return (
-    <Card title="项目介绍：AutoTestDesign">
-      <Typography.Paragraph>
-        AutoTestDesign 是一个面向软件测试设计的智能化系统原型。系统以被测系统需求规格说明（AUTSRS）和标准测试知识库为输入，结合检索增强生成（RAG）、大语言模型（LLM）、测试设计算法与前端可视化能力，自动生成、评估、优化并导出测试用例。
-      </Typography.Paragraph>
-      <Title level={5} style={{ marginTop: 16, marginBottom: 12 }}>核心功能模块</Title>
-      <List
-        size="small"
-        dataSource={[
-          'FR1 需求输入与解析：支持文件导入及 LLM 智能字段抽取',
-          'FR2 风险分析：基于影响与可能性的矩阵热力图评估',
-          'FR3 黑盒测试设计：等价类 (EP)、边界值 (BVA) 及决策表 (DT) 用例生成',
-          'FR4 白盒与状态机：系统状态流转分析与 FSM 可视化',
-          'FR5 测试 Oracle：基于 LLM 置信度与规则判断的双层评估',
-          'FR6 测试用例导出：支持多格式的标准测试集交付',
-          'FR7 测试套件优化：风险优先的测试用例集最小化',
-        ]}
-        renderItem={(item) => <List.Item>{item}</List.Item>}
-      />
-    </Card>
-  )
-}
+// ── App shell ─────────────────────────────────────────────────────────────────
 
 function App() {
-  const activeModule = useAppStore((state) => state.activeModule)
-  const setActiveModule = useAppStore((state) => state.setActiveModule)
+  const currentStep = useAppStore((s) => s.currentStep)
+  const setCurrentStep = useAppStore((s) => s.setCurrentStep)
 
-  const handleMenuClick: MenuProps['onClick'] = ({ key }) => {
-    setActiveModule(key as ModuleKey)
-  }
-
-  const renderModule = () => {
-    switch (activeModule) {
-      case 'overview':
-        return <OverviewPanel />
-      case 'phase1':
-        return <Phase1Panel />
-      case 'phase2':
-        return <Phase2Panel />
-      case 'phase3':
-        return <Phase3Panel />
-      default:
-        return <OverviewPanel />
+  const renderStepContent = () => {
+    switch (currentStep) {
+      case 0: return <Step1InputParse />
+      case 1: return <Step2RiskAnalysis />
+      case 2: return <Step3GenerateEvaluate />
+      case 3: return <Step4OptimizeExport />
+      default: return <Step1InputParse />
     }
   }
 
   return (
-    <Layout className="app-shell">
-      <Header className="app-header">
-        <div className="brand">
+    <Layout className="app-shell" hasSider>
+      <Sider
+        width={280}
+        theme="light"
+        className="app-sider"
+        style={{ borderRight: '1px solid var(--border)' }}
+      >
+        <div
+          className="brand"
+          style={{
+            padding: '24px 20px',
+            borderBottom: '1px solid var(--border)',
+            marginBottom: 24,
+          }}
+        >
           <div className="brand-mark" />
-
-          <div>
-            <Title level={4} className="brand-title">
-              AutoTestDesign
-            </Title>
-
-          </div>
+          <Title level={4} className="brand-title" style={{ margin: 0 }}>
+            AutoTestDesign
+          </Title>
         </div>
 
-        <Menu
-          mode="horizontal"
-          items={menuItems}
-          selectedKeys={[activeModule]}
-          onClick={handleMenuClick}
-          className="app-menu"
-        />
-      </Header>
+        <div style={{ padding: '0 24px' }}>
+          <Steps
+            direction="vertical"
+            current={currentStep}
+            onChange={setCurrentStep}
+            items={[
+              { title: 'Input & Parse', description: '上传需求文件，智能字段解析' },
+              { title: 'Risk Analysis', description: '影响 × 可能性矩阵评估' },
+              { title: 'Generate & Evaluate', description: '黑盒/白盒生成 + Oracle 复核' },
+              { title: 'Optimize & Export', description: '用例最小化优化与格式导出' },
+            ]}
+          />
+        </div>
+      </Sider>
 
-      <Content className="app-content">
-        {renderModule()}
-      </Content>
+      <Layout>
+        <Header
+          className="app-header"
+          style={{
+            padding: '0 40px',
+            background: 'rgba(255, 255, 255, 0.8)',
+            borderBottom: '1px solid var(--border)',
+            display: 'flex',
+            alignItems: 'center',
+          }}
+        >
+          <Text style={{ fontWeight: 500 }}>AutoTest Pipeline</Text>
+        </Header>
 
-      <Footer className="app-footer">
-        <Space size="large">
-          <Text>AutoTestDesign Frontend</Text>
-          <Text type="secondary">C - Frontend & UX Delivery</Text>
-        </Space>
-      </Footer>
+        <Content className="app-content" style={{ overflowY: 'auto' }}>
+          {renderStepContent()}
+        </Content>
+      </Layout>
     </Layout>
   )
 }
