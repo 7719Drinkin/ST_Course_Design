@@ -1,11 +1,11 @@
 import { create } from 'zustand'
 
 type AppState = {
-  activeModule: string
-  setActiveModule: (moduleKey: string) => void
+  currentStep: number
+  setCurrentStep: (step: number) => void
 }
 
 export const useAppStore = create<AppState>((set) => ({
-  activeModule: 'overview',
-  setActiveModule: (moduleKey) => set({ activeModule: moduleKey }),
+  currentStep: 0,
+  setCurrentStep: (step) => set({ currentStep: step }),
 }))
