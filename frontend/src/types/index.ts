@@ -1,16 +1,14 @@
 /**
  * Shared types aligned with docs/integration_interfaces.md
+ * and docs/成员C/前端设计说明-作业要求对齐.md
  */
 
 export type RiskLevel = 'High' | 'Medium' | 'Low'
 export type Technique = 'EP' | 'BVA' | 'DT' | 'FSM'
 export type Verdict = 'Pass' | 'Fail'
 export type OptimizeMode = 'risk_priority' | 'normal'
+export type TestCaseStatus = 'Draft' | 'Approved' | 'Rejected'
 
-/**
- * Merged ingest + parse display shape for Step 1 table.
- * Combines §3.1 IngestResponse + §3.2 ParseResponse + §4.1 B parse output.
- */
 export interface DisplayRequirement {
   requirement_id: string
   raw_requirement: string
@@ -21,11 +19,17 @@ export interface DisplayRequirement {
   expected_action: string
   confidence: number
   missing_fields: string[]
+  designer_confirmed?: boolean
 }
 
-/**
- * E's test case output — integration_interfaces.md §5
- */
+export interface CoverageItem {
+  coverage_item_id: string
+  requirement_id: string
+  description: string
+  techniques: Technique[]
+  strategy_rationale?: string
+}
+
 export interface TestCase {
   test_id: string
   requirement_id: string
@@ -37,11 +41,10 @@ export interface TestCase {
   expected_result: string
   risk_level: RiskLevel
   standard_ref: string
+  status?: TestCaseStatus
+  coverage_item_id?: string
 }
 
-/**
- * A's FSM output — integration_interfaces.md §3.3
- */
 export interface FSMTransition {
   from: string
   to: string
@@ -59,9 +62,6 @@ export interface FSMResult {
   mermaid: string
 }
 
-/**
- * B's Oracle output — pending (Day 13-14)
- */
 export interface OracleResult {
   test_id: string
   llm_verdict: Verdict
@@ -70,9 +70,6 @@ export interface OracleResult {
   needs_review: boolean
 }
 
-/**
- * B's Risk Engine output — pending (Day 3-4)
- */
 export interface RiskEntry {
   requirement_id: string
   impact: number
@@ -81,21 +78,25 @@ export interface RiskEntry {
   level: RiskLevel
 }
 
-/**
- * E's optimize output — pending (Day 12-13)
- */
 export interface OptimizeResult {
   before_count: number
   after_count: number
   mode: OptimizeMode
   reduction_rate: number
+  removed_test_ids?: string[]
 }
 
-/**
- * Generic API result wrapper.
- * isLive=true  → data from real backend
- * isLive=false → data from local mock fallback; pendingFrom describes who owns the endpoint
- */
+export interface RevisionLog {
+  id: string
+  step: number
+  entity_type: 'requirement' | 'risk' | 'coverage' | 'test_case'
+  entity_id: string
+  field: string
+  old_value: string
+  new_value: string
+  timestamp: string
+}
+
 export interface ApiResult<T> {
   data: T
   isLive: boolean
