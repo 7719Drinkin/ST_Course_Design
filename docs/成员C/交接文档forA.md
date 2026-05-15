@@ -1,163 +1,191 @@
-# C → A 对接文档
+# C → A 对接文档（更新版）
 
 **写给**：A（AI / Backend Lead）  
-**来自**：C（Frontend & UX）
+**来自**：C（Frontend & UX）  
+**更新日期**：对齐 `作业要求updated.md` + 交互式审查能力
 
 ---
 
-## 概述
+## 1. 当前状态
 
-前端 UI 已全部就绪，4 个步骤的页面都已完成并通过 mock 数据流验证。你完成对应接口后，前端**无需任何改动**，会自动切换为真实数据并显示绿色 "Live" 标签。
+C 已提供 **参考后端实现** `backend/main.py`，前端默认连接 `http://localhost:8000`。  
+你可在该基础上替换为正式 FastAPI 实现；前端**接口契约不变**时无需改 UI。
 
-以下是前端正在等待的你的全部接口，按优先级排列。
+启动参考后端：
+
+```bash
+pip install -r backend/requirements.txt
+uvicorn backend.main:app --reload --port 8000
+```
+
+前端：
+
+```bash
+cd frontend && npm run dev
+```
 
 ---
 
-## 接口 1：`POST /ingest`（Step 1 页面，最高优先级）
+## 2. 你负责的接口清单
 
-**前端调用时机**：用户上传文件后点击"执行解析"。  
-**当前状态**：mock 兜底，Step 1 显示橙色 Mock 标签。
+| 接口 | 方法 | Step | 状态（参考后端） |
+|------|------|------|------------------|
+| `/ingest` | POST | 1 | ✅ 已实现 |
+| `/parse` | POST | 1 | ✅ 已实现（B 逻辑可替换） |
+| `/fsm` | POST | 3 | ✅ 已实现 |
+| `/export` | POST | 4 | ✅ 已实现（含 revisions） |
+| `/export/{fmt}` | GET | 4 | ✅ 已实现（全量，演示用） |
 
-### 请求体
+**CORS**：需允许 `http://localhost:5173`。
+
+---
+
+## 3. `POST /ingest`
+
+**触发**：用户上传文件或粘贴文本后点击「执行解析」。
+
+### 请求
 
 ```json
 {
   "source_type": "text",
-  "content": "<文件内容字符串>"
+  "content": "<文件内容或粘贴文本；空字符串则加载全部 15 条样本需求>"
 }
 ```
 
-`source_type` 目前前端只发 `"text"`，后续可扩展 `"csv"` / `"json"`。
-
-### 期望返回
+### 响应
 
 ```json
 {
   "requirements": [
     {
-      "requirement_id": "REQ-AUT-001",
-      "raw_requirement": "The system shall return a JSON array...",
+      "requirement_id": "REQ-AUT-008",
+      "raw_requirement": "The system shall create a borrowing record...",
       "source": "aut_15_requirements"
     }
   ],
-  "errors": ["REQ-AUT-009: missing expected_action field"]
+  "errors": []
 }
 ```
 
-**注意**：前端会把 `errors` 展示为黄色 Alert，不会报错中断流程。
+`errors` 非空时前端展示黄色 Alert，不中断流程。
 
 ---
 
-## 接口 2：`POST /parse`（Step 1 页面，与 /ingest 配套）
+## 4. `POST /parse`
 
-**前端调用时机**：`/ingest` 成功后，对每条需求逐一调用。  
-**当前状态**：mock 兜底。
+**触发**：前端对 `/ingest` 返回的每条需求逐一调用（见 `frontend/src/services/api.ts`）。
 
-### 请求体
+### 请求
 
 ```json
 {
   "requirement_id": "REQ-AUT-008",
-  "raw_requirement": "The system shall create a borrowing record..."
+  "raw_requirement": "..."
 }
 ```
 
-### 期望返回
+### 响应
 
 ```json
 {
   "requirement_id": "REQ-AUT-008",
-  "input_fields": ["book.id", "member.id", "availableCopies"],
+  "input_fields": ["book.id", "member.id"],
   "data_ranges": ["availableCopies: integer > 0"],
-  "conditions": ["Book exists", "Member exists", "availableCopies > 0"],
-  "expected_action": "Return 201, create borrowing record, decrement availableCopies by 1",
+  "conditions": ["Book exists", "Member exists"],
+  "expected_action": "Return 201, create borrowing record",
   "confidence": 0.85,
   "missing_fields": []
 }
 ```
 
-**说明**：`parse` 接口的 LLM 实现由 B 负责（Day 5），你负责将 B 的能力封装为 REST 接口暴露出来。
+**注意**：Day 5 由 B 提供 LLM parse 逻辑，你负责 REST 封装；字段必须齐全，否则 Step 1 表格无法展示。
 
-**前端使用字段**：全部字段均展示在 Step 1 的解析结果表格中。
+### 前端人工修订（仅前端 store，可不回写）
+
+用户可在 Step 1 **行内编辑** `expected_action`、`conditions`，并点击「确认」。修订记录写入 `revisions[]`，导出时一并提交。
 
 ---
 
-## 接口 3：`POST /fsm`（Step 3 页面）
+## 5. `POST /fsm`
 
-**前端调用时机**：进入 Step 3 页面时自动触发。  
-**当前状态**：mock 兜底，FSM 面板显示橙色 Mock 标签。
+**触发**：进入 Step 3 时自动调用。
 
-### 请求体
+### 请求
 
 ```json
-{
-  "requirement_ids": ["REQ-AUT-008", "REQ-AUT-012", "REQ-AUT-001"]
-}
+{ "requirement_ids": ["REQ-AUT-008", "REQ-AUT-012"] }
 ```
 
-### 期望返回
+### 响应
 
 ```json
 {
   "states": ["Available", "Borrowed", "Returned", "Rejected"],
   "transitions": [
-    {
-      "from": "Available",
-      "to": "Borrowed",
-      "event": "POST /api/borrow",
-      "condition": "book exists, member exists, availableCopies > 0"
-    }
+    { "from": "Available", "to": "Borrowed", "event": "POST /api/borrow", "condition": "..." }
   ],
   "coverage": {
     "all_states": ["Available", "Borrowed", "Returned", "Rejected"],
     "all_transitions": ["Available->Borrowed", "Borrowed->Returned"]
   },
-  "mermaid": "stateDiagram-v2\n    [*] --> Available\n    Available --> Borrowed : POST /api/borrow [copies > 0]\n    ..."
+  "mermaid": "stateDiagram-v2\n    [*] --> Available\n    ..."
 }
 ```
 
-**前端使用**：
-- `mermaid` 字段直接渲染在 FSM 面板的 `<pre>` 区域
-- `coverage.all_transitions` 渲染为右侧覆盖路径列表
-
 ---
 
-## 接口 4：`GET /export/json` / `GET /export/csv` / `GET /export/xlsx`（Step 4 页面）
+## 6. `POST /export`（推荐，Step 4 主路径）
 
-**前端调用时机**：用户点击 Step 4 页面顶部的导出按钮时，直接 `window.open(url)` 触发下载。  
-**当前状态**：按钮已就绪，但后端接口不存在时会报 404。
+**触发**：用户点击「导出 Approved CSV/JSON」。
+
+前端只提交 **status === Approved** 的用例 + 全部 `revisions`。
 
 ### 请求
 
-无请求体，GET 请求，直接返回文件流（Content-Disposition: attachment）。
+```json
+{
+  "format": "json",
+  "test_cases": [ { "test_id": "TC-AUT-008-001", "status": "Approved", ... } ],
+  "revisions": [
+    {
+      "id": "REV-1",
+      "step": 0,
+      "entity_type": "requirement",
+      "entity_id": "REQ-AUT-008",
+      "field": "expected_action",
+      "old_value": "...",
+      "new_value": "...",
+      "timestamp": "2026-05-11T..."
+    }
+  ]
+}
+```
 
-### 导出字段要求（参考 `integration_interfaces.md §3.4`）
+### 响应
 
-| 字段 | 必填 |
+- `format=json`：返回 JSON 文件流
+- `format=csv` / `xlsx`：返回 CSV（参考实现中 xlsx 亦为 csv）
+
+导出字段需包含：`test_id`, `requirement_id`, `technique`, `preconditions`, `test_steps`, `expected_result`, `risk_level`, `standard_ref`。
+
+### `GET /export/{fmt}`
+
+保留用于快速演示；**正式交付请实现 POST /export**，以支持 Approved 过滤与 revision 元数据。
+
+---
+
+## 7. 验收方式
+
+| 现象 | 含义 |
 |------|------|
-| `test_id` | ✅ |
-| `requirement_id` | ✅ |
-| `technique` | ✅ |
-| `preconditions` | ✅ |
-| `test_steps` | ✅ |
-| `expected_result` | ✅ |
-| `risk_level` | ✅ |
-| `standard_ref` | ✅ |
+| Step 卡片标题旁 **绿色 Live** | 接口可用 |
+| **橙色 Mock · 待接入** | 后端未启动或路径/字段不匹配 |
 
 ---
 
-## 配置说明
+## 8. 参考文件
 
-前端默认连接 `http://localhost:8000`，可通过 `frontend/.env.local` 修改：
-
-```
-VITE_API_BASE=http://localhost:8000
-```
-
-**CORS**：请在后端启用 CORS 允许 `http://localhost:5173`（Vite 默认端口）。
-
----
-
-## 对接验证方法
-
-你的接口完成后，前端在对应 Step 的卡片标题旁会由橙色 **"Mock · 待接入"** 变为绿色 **"Live"**，即代表对接成功。无需前端修改任何代码。
+- 参考后端：`backend/main.py`
+- 前端 API 层：`frontend/src/services/api.ts`
+- 样本数据：`tests/data/aut_15_requirements.json`

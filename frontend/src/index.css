@@ -316,6 +316,45 @@ body::after {
   padding-left: 18px;
 }
 
+.sider-brand {
+  padding: 24px 20px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.sider-steps {
+  padding: 0 24px;
+}
+
+.app-header-bar {
+  padding: 0 40px;
+  background: rgba(255, 255, 255, 0.8);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+}
+
+.heatmap-cell-btn {
+  border: none;
+  cursor: pointer;
+  font: inherit;
+}
+
+.heatmap-cell-btn:hover {
+  outline: 2px solid var(--brand);
+}
+
+.row-highlight {
+  background: rgba(31, 111, 235, 0.08) !important;
+}
+
+.revision-panel {
+  margin-top: 8px;
+}
+
 .app-footer {
   background: transparent;
   text-align: center;

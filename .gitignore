@@ -226,6 +226,8 @@ frontend/.npm-cache/
 *.tsbuildinfo
 
 # local docs
+.run/
+
 localDocs/
 
 # AUT external
