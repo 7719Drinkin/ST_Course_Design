@@ -1,0 +1,12 @@
+[
+  {
+    "requirement_id": "REQ-AUT-008",
+    "input_fields": ["book.id", "member.id", "availableCopies"],
+    "data_ranges": ["availableCopies: integer > 0"],
+    "conditions": ["Book exists", "Member exists", "availableCopies > 0"],
+    "expected_action": "Return 201, create a borrowing record, set borrowDate and dueDate, and decrement availableCopies by 1.",
+    "confidence": 0.85,
+    "source_context_ids": ["AUT-SRS-001#FR-AUT-BORROW-002"],
+    "prompt_template_id": "PROMPT-FR1-V1"
+  }
+]
