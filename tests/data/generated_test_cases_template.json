@@ -1,0 +1,19 @@
+[
+  {
+    "test_id": "TC-AUT-008-001",
+    "requirement_id": "REQ-AUT-008",
+    "coverage_item_id": "COV-AUT-BORROW-001",
+    "technique": "BVA",
+    "title": "Borrow available book at lower valid boundary",
+    "preconditions": ["Book exists", "Member exists"],
+    "input_data": {
+      "availableCopies": 1,
+      "book.id": 1,
+      "member.id": 1
+    },
+    "test_steps": ["POST /api/borrow"],
+    "expected_result": "201 Created; borrowing record created; availableCopies decreases by 1",
+    "risk_level": "High",
+    "standard_ref": "ISO/IEC/IEEE 29119-4 boundary value analysis"
+  }
+]
