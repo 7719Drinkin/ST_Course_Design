@@ -1,6 +1,5 @@
 /**
- * Shared types aligned with docs/integration_interfaces.md
- * and docs/成员C/前端设计说明-作业要求对齐.md
+ * Shared types aligned with docs/integration_interfaces.md (Day3–Day7)
  */
 
 export type RiskLevel = 'High' | 'Medium' | 'Low'
@@ -9,7 +8,15 @@ export type Verdict = 'Pass' | 'Fail'
 export type OptimizeMode = 'risk_priority' | 'normal'
 export type TestCaseStatus = 'Draft' | 'Approved' | 'Rejected'
 
-export interface DisplayRequirement {
+export interface ParseTransparency {
+  source_context_ids: string[]
+  prompt_template_id: string
+  retrieved_context_ids: string[]
+  model_name: string
+  output_schema_version: string
+}
+
+export interface DisplayRequirement extends Partial<ParseTransparency> {
   requirement_id: string
   raw_requirement: string
   source: string
@@ -28,7 +35,10 @@ export interface CoverageItem {
   description: string
   techniques: Technique[]
   strategy_rationale?: string
+  designer_added?: boolean
 }
+
+export type FsmPathCoverage = 'covered' | 'uncovered' | 'pending'
 
 export interface TestCase {
   test_id: string
@@ -95,6 +105,32 @@ export interface RevisionLog {
   old_value: string
   new_value: string
   timestamp: string
+}
+
+export interface ExportRevisionRecord {
+  revision_id: string
+  session_id: string
+  target_type: string
+  target_id: string
+  before: Record<string, string>
+  after: Record<string, string>
+  timestamp: string
+}
+
+export interface DashboardSummary {
+  total_requirements: number
+  generated_tests: number
+  high_risk_count: number
+  ci_status: string
+}
+
+export interface DashboardPayload {
+  summary: DashboardSummary
+  ragas: {
+    enabled: boolean
+    answer_relevancy: number | null
+    faithfulness: number | null
+  }
 }
 
 export interface ApiResult<T> {

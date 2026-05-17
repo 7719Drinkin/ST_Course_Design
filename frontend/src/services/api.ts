@@ -5,7 +5,9 @@
 import type {
   ApiResult,
   CoverageItem,
+  DashboardPayload,
   DisplayRequirement,
+  ExportRevisionRecord,
   FSMResult,
   OptimizeMode,
   OptimizeResult,
@@ -18,6 +20,8 @@ import type {
 const BASE: string =
   (import.meta.env.VITE_API_BASE as string | undefined) ?? 'http://localhost:8000'
 
+const DESIGN_SESSION_ID = 'DS-AUT-001'
+
 async function httpPost<T>(path: string, body: unknown, timeoutMs = 8000): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
     method: 'POST',
@@ -29,6 +33,12 @@ async function httpPost<T>(path: string, body: unknown, timeoutMs = 8000): Promi
   return res.json() as Promise<T>
 }
 
+async function httpGet<T>(path: string, timeoutMs = 8000): Promise<T> {
+  const res = await fetch(`${BASE}${path}`, { signal: AbortSignal.timeout(timeoutMs) })
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  return res.json() as Promise<T>
+}
+
 async function tryLive<T>(fn: () => Promise<T>, fallback: T, pendingFrom: string): Promise<ApiResult<T>> {
   try {
     const data = await fn()
@@ -36,6 +46,55 @@ async function tryLive<T>(fn: () => Promise<T>, fallback: T, pendingFrom: string
   } catch {
     return { data: fallback, isLive: false, pendingFrom }
   }
+}
+
+type ParseApiRow = {
+  requirement_id: string
+  input_fields: string[]
+  data_ranges: string[]
+  conditions: string[]
+  expected_action: string
+  confidence: number
+  missing_fields: string[]
+  source_context_ids?: string[]
+  prompt_template_id?: string
+  retrieved_context_ids?: string[]
+  model_name?: string
+  output_schema_version?: string
+}
+
+function mergeParseRow(
+  req: { requirement_id: string; raw_requirement: string; source: string },
+  parsed: ParseApiRow,
+): DisplayRequirement {
+  return {
+    requirement_id: req.requirement_id,
+    raw_requirement: req.raw_requirement,
+    source: req.source,
+    input_fields: parsed.input_fields,
+    data_ranges: parsed.data_ranges,
+    conditions: parsed.conditions,
+    expected_action: parsed.expected_action,
+    confidence: parsed.confidence,
+    missing_fields: parsed.missing_fields,
+    source_context_ids: parsed.source_context_ids ?? [],
+    prompt_template_id: parsed.prompt_template_id ?? '',
+    retrieved_context_ids: parsed.retrieved_context_ids ?? [],
+    model_name: parsed.model_name ?? '',
+    output_schema_version: parsed.output_schema_version ?? '',
+  }
+}
+
+export function mapRevisionsForExport(revisions: RevisionLog[]): ExportRevisionRecord[] {
+  return revisions.map((r) => ({
+    revision_id: r.id,
+    session_id: DESIGN_SESSION_ID,
+    target_type: r.entity_type,
+    target_id: r.entity_id,
+    before: { [r.field]: r.old_value },
+    after: { [r.field]: r.new_value },
+    timestamp: r.timestamp,
+  }))
 }
 
 // ── Mock fallbacks ────────────────────────────────────────────────────────────
@@ -52,6 +111,11 @@ const MOCK_REQUIREMENTS: DisplayRequirement[] = [
     expected_action: 'Return 201, create borrowing record, decrement availableCopies by 1',
     confidence: 0.85,
     missing_fields: [],
+    source_context_ids: ['AUT_SRS:FR-AUT-BORROW-001'],
+    prompt_template_id: 'PROMPT-FR1-V1',
+    retrieved_context_ids: ['AUT-SRS-001#FR-AUT-BORROW-001'],
+    model_name: 'reference-parser',
+    output_schema_version: 'parse-v1',
   },
 ]
 
@@ -68,7 +132,7 @@ const MOCK_TEST_CASES: TestCase[] = [
     risk_level: 'High',
     standard_ref: 'ISO/IEC/IEEE 29119-4 §6.4',
     status: 'Draft',
-    coverage_item_id: 'CI-REQ-AUT-008',
+    coverage_item_id: 'COV-AUT-BORROW-008',
   },
 ]
 
@@ -89,13 +153,23 @@ const MOCK_RISK: RiskEntry[] = [
 
 const MOCK_COVERAGE: CoverageItem[] = [
   {
-    coverage_item_id: 'CI-REQ-AUT-008',
+    coverage_item_id: 'COV-AUT-BORROW-008',
     requirement_id: 'REQ-AUT-008',
     description: 'Cover: Borrow an available book',
     techniques: ['DT', 'BVA', 'FSM'],
     strategy_rationale: 'High-priority borrowing flow',
   },
 ]
+
+const MOCK_DASHBOARD: DashboardPayload = {
+  summary: {
+    total_requirements: 15,
+    generated_tests: 25,
+    high_risk_count: 8,
+    ci_status: 'passing',
+  },
+  ragas: { enabled: false, answer_relevancy: null, faithfulness: null },
+}
 
 // ── API ───────────────────────────────────────────────────────────────────────
 
@@ -109,39 +183,27 @@ export async function ingestAndParse(content: string): Promise<ApiResult<Display
 
       const parseResults = await Promise.all(
         ingestRes.requirements.map((req) =>
-          httpPost<{
-            requirement_id: string
-            input_fields: string[]
-            data_ranges: string[]
-            conditions: string[]
-            expected_action: string
-            confidence: number
-            missing_fields: string[]
-          }>('/parse', {
+          httpPost<ParseApiRow>('/parse', {
             requirement_id: req.requirement_id,
             raw_requirement: req.raw_requirement,
           }),
         ),
       )
 
-      return ingestRes.requirements.map((req, i) => {
-        const parsed = parseResults[i]
-        return {
-          requirement_id: req.requirement_id,
-          raw_requirement: req.raw_requirement,
-          source: req.source,
-          input_fields: parsed.input_fields,
-          data_ranges: parsed.data_ranges,
-          conditions: parsed.conditions,
-          expected_action: parsed.expected_action,
-          confidence: parsed.confidence,
-          missing_fields: parsed.missing_fields,
-        }
-      })
+      return ingestRes.requirements.map((req, i) => mergeParseRow(req, parseResults[i]))
     },
     MOCK_REQUIREMENTS,
     'A: POST /ingest · B: POST /parse',
   )
+}
+
+/** 空 content 触发后端加载 aut_15_requirements.json 全部 15 条 */
+export async function loadAut15Sample(): Promise<ApiResult<DisplayRequirement[]>> {
+  return ingestAndParse('')
+}
+
+export async function getDashboard(): Promise<ApiResult<DashboardPayload>> {
+  return tryLive(() => httpGet<DashboardPayload>('/dashboard'), MOCK_DASHBOARD, 'GET /dashboard')
 }
 
 export async function getRiskData(requirementIds?: string[]): Promise<ApiResult<RiskEntry[]>> {
@@ -206,11 +268,18 @@ export async function exportApproved(
   format: 'json' | 'csv' | 'xlsx',
   testCases: TestCase[],
   revisions: RevisionLog[],
+  extras?: { risk_scores: RiskEntry[]; coverage_items: CoverageItem[] },
 ): Promise<Blob> {
   const res = await fetch(`${BASE}/export`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ format, test_cases: testCases, revisions }),
+    body: JSON.stringify({
+      format,
+      test_cases: testCases,
+      risk_scores: extras?.risk_scores ?? [],
+      coverage_items: extras?.coverage_items ?? [],
+      revisions: mapRevisionsForExport(revisions),
+    }),
   })
   if (!res.ok) throw new Error(`Export failed: ${res.status}`)
   return res.blob()

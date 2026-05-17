@@ -3,10 +3,12 @@ import type {
   CoverageItem,
   DisplayRequirement,
   FSMResult,
+  FsmPathCoverage,
   OptimizeResult,
   OracleResult,
   RevisionLog,
   RiskEntry,
+  Technique,
   TestCase,
 } from '../types'
 
@@ -24,6 +26,8 @@ type AppState = {
 
   coverageItems: CoverageItem[]
   setCoverageItems: (data: CoverageItem[]) => void
+  updateCoverageItem: (coverageItemId: string, patch: Partial<CoverageItem>) => void
+  addCoverageItem: (item: CoverageItem) => void
 
   testCases: TestCase[]
   setTestCases: (data: TestCase[]) => void
@@ -34,6 +38,8 @@ type AppState = {
 
   fsm: FSMResult | null
   setFsm: (data: FSMResult | null) => void
+  fsmPathCoverage: Record<string, FsmPathCoverage>
+  setFsmPathCoverage: (pathKey: string, status: FsmPathCoverage) => void
 
   optimizeResult: OptimizeResult | null
   setOptimizeResult: (data: OptimizeResult | null) => void
@@ -46,6 +52,10 @@ type AppState = {
 }
 
 let revisionCounter = 0
+
+const TECHNIQUE_OPTIONS: Technique[] = ['EP', 'BVA', 'DT', 'FSM']
+
+export { TECHNIQUE_OPTIONS }
 
 export const useAppStore = create<AppState>((set, get) => ({
   currentStep: 0,
@@ -99,6 +109,42 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   coverageItems: [],
   setCoverageItems: (data) => set({ coverageItems: data }),
+  updateCoverageItem: (coverageItemId, patch) => {
+    const prev = get().coverageItems.find((c) => c.coverage_item_id === coverageItemId)
+    if (!prev) return
+    Object.entries(patch).forEach(([field, newValue]) => {
+      const oldValue = Array.isArray((prev as unknown as Record<string, unknown>)[field])
+        ? ((prev as unknown as Record<string, unknown>)[field] as string[]).join(',')
+        : String((prev as unknown as Record<string, unknown>)[field] ?? '')
+      const nextVal = Array.isArray(newValue) ? newValue.join(',') : String(newValue)
+      if (nextVal !== oldValue) {
+        get().addRevision({
+          step: 1,
+          entity_type: 'coverage',
+          entity_id: coverageItemId,
+          field,
+          old_value: oldValue,
+          new_value: nextVal,
+        })
+      }
+    })
+    set({
+      coverageItems: get().coverageItems.map((c) =>
+        c.coverage_item_id === coverageItemId ? { ...c, ...patch } : c,
+      ),
+    })
+  },
+  addCoverageItem: (item) => {
+    get().addRevision({
+      step: 1,
+      entity_type: 'coverage',
+      entity_id: item.coverage_item_id,
+      field: 'created',
+      old_value: '',
+      new_value: item.description,
+    })
+    set({ coverageItems: [...get().coverageItems, { ...item, designer_added: true }] })
+  },
 
   testCases: [],
   setTestCases: (data) => set({ testCases: data }),
@@ -130,6 +176,21 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   fsm: null,
   setFsm: (data) => set({ fsm: data }),
+  fsmPathCoverage: {},
+  setFsmPathCoverage: (pathKey, status) => {
+    const prev = get().fsmPathCoverage[pathKey] ?? 'pending'
+    if (prev !== status) {
+      get().addRevision({
+        step: 2,
+        entity_type: 'test_case',
+        entity_id: pathKey,
+        field: 'fsm_path_coverage',
+        old_value: prev,
+        new_value: status,
+      })
+    }
+    set({ fsmPathCoverage: { ...get().fsmPathCoverage, [pathKey]: status } })
+  },
 
   optimizeResult: null,
   setOptimizeResult: (data) => set({ optimizeResult: data }),
@@ -142,7 +203,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         ...get().revisions,
         {
           ...entry,
-          id: `REV-${revisionCounter}`,
+          id: `REV-${String(revisionCounter).padStart(4, '0')}`,
           timestamp: new Date().toISOString(),
         },
       ],
