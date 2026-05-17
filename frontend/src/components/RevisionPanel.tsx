@@ -15,7 +15,7 @@ export function RevisionPanel() {
         renderItem={(r) => (
           <List.Item>
             <Text type="secondary" style={{ fontSize: 12 }}>
-              Step {r.step + 1} · {r.entity_type} · {r.entity_id}
+              {r.id} · Step {r.step + 1} · {r.entity_type} · {r.entity_id}
             </Text>
             <br />
             <Text style={{ fontSize: 12 }}>

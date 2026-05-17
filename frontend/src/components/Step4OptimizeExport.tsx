@@ -1,10 +1,26 @@
-import { useEffect, useState } from 'react'
-import { Alert, Button, Card, Col, List, Progress, Row, Segmented, Space, Spin, Typography, message } from 'antd'
+import { useEffect, useMemo, useState } from 'react'
+import {
+  Alert,
+  Button,
+  Card,
+  Col,
+  Descriptions,
+  List,
+  Modal,
+  Progress,
+  Row,
+  Segmented,
+  Space,
+  Spin,
+  Typography,
+  message,
+} from 'antd'
 import { useAppStore } from '../store/appStore'
-import { exportApproved, getOptimizeResult } from '../services/api'
+import { exportApproved, getOptimizeResult, mapRevisionsForExport } from '../services/api'
 import type { OptimizeMode } from '../types'
 import { DataStatusTag } from './shared'
 import { RevisionPanel } from './RevisionPanel'
+import { ImprovementSummary } from './ImprovementSummary'
 
 const { Title, Text } = Typography
 
@@ -13,9 +29,12 @@ export function Step4OptimizeExport() {
   const [optLive, setOptLive] = useState<boolean>()
   const [optPending, setOptPending] = useState<string>()
   const [exporting, setExporting] = useState(false)
+  const [previewOpen, setPreviewOpen] = useState(false)
 
   const testCases = useAppStore((s) => s.testCases)
   const revisions = useAppStore((s) => s.revisions)
+  const riskEntries = useAppStore((s) => s.riskEntries)
+  const coverageItems = useAppStore((s) => s.coverageItems)
   const optimizeResult = useAppStore((s) => s.optimizeResult)
   const setOptimizeResult = useAppStore((s) => s.setOptimizeResult)
 
@@ -32,6 +51,16 @@ export function Step4OptimizeExport() {
     })
   }, [mode, approvedIdsKey, allIdsKey, setOptimizeResult])
 
+  const previewPayload = useMemo(
+    () => ({
+      test_cases: approved,
+      risk_scores: riskEntries,
+      coverage_items: coverageItems,
+      revisions: mapRevisionsForExport(revisions),
+    }),
+    [approved, riskEntries, coverageItems, revisions],
+  )
+
   const handleExport = async (format: 'json' | 'csv' | 'xlsx') => {
     if (approved.length === 0) {
       message.warning('请先于 Step 3 批准至少一条测试用例')
@@ -39,14 +68,17 @@ export function Step4OptimizeExport() {
     }
     setExporting(true)
     try {
-      const blob = await exportApproved(format, approved, revisions)
+      const blob = await exportApproved(format, approved, revisions, {
+        risk_scores: riskEntries,
+        coverage_items: coverageItems,
+      })
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
       a.download = `autotest_export.${format === 'xlsx' ? 'csv' : format}`
       a.click()
       URL.revokeObjectURL(url)
-      message.success(`已导出 ${approved.length} 条 Approved 用例`)
+      message.success(`已导出 ${approved.length} 条 Approved 用例 + 风险分 + 覆盖项`)
     } catch {
       message.error('导出失败，请确认后端已启动 (port 8000)')
     }
@@ -62,16 +94,21 @@ export function Step4OptimizeExport() {
           <Title level={4} style={{ margin: 0, display: 'inline' }}>优化与导出 (FR6/7)</Title>
           <DataStatusTag isLive={optLive} pendingFrom={optPending} />
         </span>
-        <Space>
-          <Button loading={exporting} onClick={() => handleExport('csv')}>导出 Approved CSV</Button>
-          <Button loading={exporting} onClick={() => handleExport('json')}>导出 Approved JSON</Button>
+        <Space wrap>
+          <Button onClick={() => setPreviewOpen(true)}>导出预览</Button>
+          <Button loading={exporting} onClick={() => handleExport('csv')}>
+            导出 Approved CSV
+          </Button>
+          <Button loading={exporting} onClick={() => handleExport('json')}>
+            导出 Approved JSON
+          </Button>
         </Space>
       </div>
 
       <Alert
         type="info"
         showIcon
-        message={`将导出 ${approved.length} 条已批准用例（共 ${testCases.length} 条），并附带 ${revisions.length} 条修订记录。`}
+        message={`将导出 ${approved.length} 条已批准用例、${riskEntries.length} 条风险分、${coverageItems.length} 个覆盖项，并附带 ${revisions.length} 条修订记录（FR6.0）。`}
       />
 
       <Card title="套件优化 (FR7.0)">
@@ -113,7 +150,32 @@ export function Step4OptimizeExport() {
         </Space>
       </Card>
 
+      <ImprovementSummary />
       <RevisionPanel />
+
+      <Modal
+        title="导出包预览 (FR6.0)"
+        open={previewOpen}
+        onCancel={() => setPreviewOpen(false)}
+        footer={[
+          <Button key="close" onClick={() => setPreviewOpen(false)}>关闭</Button>,
+          <Button key="json" type="primary" loading={exporting} onClick={() => handleExport('json')}>
+            确认导出 JSON
+          </Button>,
+        ]}
+        width={720}
+      >
+        <Descriptions size="small" column={2} bordered>
+          <Descriptions.Item label="Approved 用例">{approved.length}</Descriptions.Item>
+          <Descriptions.Item label="风险分">{riskEntries.length}</Descriptions.Item>
+          <Descriptions.Item label="覆盖项">{coverageItems.length}</Descriptions.Item>
+          <Descriptions.Item label="修订记录">{revisions.length}</Descriptions.Item>
+        </Descriptions>
+        <pre className="export-preview-json">
+          {JSON.stringify(previewPayload, null, 2).slice(0, 4000)}
+          {JSON.stringify(previewPayload).length > 4000 ? '\n…' : ''}
+        </pre>
+      </Modal>
     </Space>
   )
 }

@@ -55,6 +55,11 @@ class ParseResponse(BaseModel):
     expected_action: str
     confidence: float
     missing_fields: list[str]
+    source_context_ids: list[str] = Field(default_factory=list)
+    prompt_template_id: str = ""
+    retrieved_context_ids: list[str] = Field(default_factory=list)
+    model_name: str = "reference-parser"
+    output_schema_version: str = "parse-v1"
 
 
 class FsmRequest(BaseModel):
@@ -83,9 +88,24 @@ class ExportRequest(BaseModel):
     format: Literal["json", "csv", "xlsx"] = "json"
     test_cases: list[dict[str, Any]] = Field(default_factory=list)
     revisions: list[dict[str, Any]] = Field(default_factory=list)
+    risk_scores: list[dict[str, Any]] = Field(default_factory=list)
+    coverage_items: list[dict[str, Any]] = Field(default_factory=list)
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
+
+
+def _coverage_id_for_req(req: dict) -> str:
+    area_slug = {
+        "Book CRUD": "BOOK",
+        "Member CRUD": "MEMBER",
+        "Borrowing": "BORROW",
+        "Return": "RETURN",
+        "Records": "RECORDS",
+        "Error Handling": "ERROR",
+    }.get(req.get("area", ""), "GEN")
+    suffix = req["id"].replace("REQ-AUT-", "")
+    return f"COV-AUT-{area_slug}-{suffix.zfill(3)}"
 
 
 def _priority_to_risk(priority: str) -> tuple[int, int, str]:
@@ -122,7 +142,7 @@ def _build_test_cases(requirement_ids: list[str]) -> list[dict[str, Any]]:
                     "risk_level": priority,
                     "standard_ref": f"ISO/IEC/IEEE 29119-4 ({tech})",
                     "status": "Draft",
-                    "coverage_item_id": f"CI-{rid}",
+                    "coverage_item_id": _coverage_id_for_req(req),
                 }
             )
     return cases
@@ -178,6 +198,7 @@ def parse(body: ParseRequest) -> ParseResponse:
         missing = []
         if not req.get("data_ranges"):
             missing.append("data_ranges")
+        fr_id = f"FR-AUT-{req.get('area', 'GEN').upper().replace(' ', '-')[:8]}-001"
         return ParseResponse(
             requirement_id=req["id"],
             input_fields=req.get("input_fields", []),
@@ -186,6 +207,9 @@ def parse(body: ParseRequest) -> ParseResponse:
             expected_action=req.get("expected_action", ""),
             confidence=0.88 if not missing else 0.72,
             missing_fields=missing,
+            source_context_ids=[f"AUT_SRS:{fr_id}"],
+            prompt_template_id="PROMPT-FR1-V1",
+            retrieved_context_ids=[f"AUT-SRS-001#{fr_id}"],
         )
     return ParseResponse(
         requirement_id=body.requirement_id,
@@ -226,7 +250,7 @@ def coverage(body: RiskRequest) -> list[dict[str, Any]]:
         reqs = [r for r in reqs if r["id"] in body.requirement_ids]
     return [
         {
-            "coverage_item_id": f"CI-{r['id']}",
+            "coverage_item_id": _coverage_id_for_req(r),
             "requirement_id": r["id"],
             "description": f"Cover: {r['title']}",
             "techniques": r.get("techniques", ["EP"]),
@@ -234,6 +258,26 @@ def coverage(body: RiskRequest) -> list[dict[str, Any]]:
         }
         for r in reqs
     ]
+
+
+@app.get("/dashboard")
+def dashboard() -> dict[str, Any]:
+    reqs = load_requirements()
+    cases = _build_test_cases([])
+    high = sum(1 for r in reqs if r.get("priority") == "High")
+    return {
+        "summary": {
+            "total_requirements": len(reqs),
+            "generated_tests": len(cases),
+            "high_risk_count": high,
+            "ci_status": "passing",
+        },
+        "ragas": {
+            "enabled": False,
+            "answer_relevancy": None,
+            "faithfulness": None,
+        },
+    }
 
 
 @app.post("/fsm")
@@ -307,6 +351,8 @@ def optimize(body: OptimizeRequest) -> dict[str, Any]:
 def _build_export_response(body: ExportRequest) -> Response:
     payload = {
         "test_cases": body.test_cases,
+        "risk_scores": body.risk_scores,
+        "coverage_items": body.coverage_items,
         "revisions": body.revisions,
         "exported_at": __import__("datetime").datetime.utcnow().isoformat() + "Z",
     }
