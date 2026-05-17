@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Button, Card, Col, List, Row, Select, Space, Table, Tag, Typography } from 'antd'
-import { useAppStore } from '../store/appStore'
+import { Button, Card, Col, Input, List, Row, Select, Space, Table, Tag, Typography } from 'antd'
+import { useAppStore, TECHNIQUE_OPTIONS } from '../store/appStore'
 import { getCoverageItems, getRiskData } from '../services/api'
-import type { RiskLevel } from '../types'
+import type { CoverageItem, RiskLevel, Technique } from '../types'
 import { DataStatusTag } from './shared'
 import { RevisionPanel } from './RevisionPanel'
+import { ImprovementSummary } from './ImprovementSummary'
 
 const { Title, Text } = Typography
 
@@ -42,6 +43,8 @@ export function Step2RiskAnalysis() {
   const updateRiskLevel = useAppStore((s) => s.updateRiskLevel)
   const coverageItems = useAppStore((s) => s.coverageItems)
   const setCoverageItems = useAppStore((s) => s.setCoverageItems)
+  const updateCoverageItem = useAppStore((s) => s.updateCoverageItem)
+  const addCoverageItem = useAppStore((s) => s.addCoverageItem)
   const setCurrentStep = useAppStore((s) => s.setCurrentStep)
 
   const reqIdsKey = requirements.map((r) => r.requirement_id).join(',')
@@ -57,9 +60,31 @@ export function Step2RiskAnalysis() {
   }, [reqIdsKey, setRiskEntries, setCoverageItems])
 
   const matrix = useMemo(() => buildHeatmapMatrix(riskEntries, cellFilter), [riskEntries, cellFilter])
+
+  const displayedRisk = useMemo(() => {
+    if (!cellFilter) return riskEntries
+    return riskEntries.filter(
+      (e) => e.impact === cellFilter.impact && e.likelihood === cellFilter.likelihood,
+    )
+  }, [riskEntries, cellFilter])
+
   const highCount = riskEntries.filter((e) => e.level === 'High').length
   const medCount = riskEntries.filter((e) => e.level === 'Medium').length
   const lowCount = riskEntries.filter((e) => e.level === 'Low').length
+
+  const handleAddCoverage = () => {
+    const baseReq = requirements[0]?.requirement_id ?? 'REQ-AUT-008'
+    const n = coverageItems.length + 1
+    const item: CoverageItem = {
+      coverage_item_id: `COV-AUT-DESIGN-${String(n).padStart(3, '0')}`,
+      requirement_id: baseReq,
+      description: 'Designer-added coverage item',
+      techniques: ['EP'],
+      strategy_rationale: 'Added during interactive review',
+      designer_added: true,
+    }
+    addCoverageItem(item)
+  }
 
   return (
     <Space direction="vertical" size={24} className="full-width">
@@ -116,21 +141,27 @@ export function Step2RiskAnalysis() {
             />
             <Table
               size="small"
-              pagination={false}
+              pagination={{ pageSize: 6 }}
               style={{ marginTop: 12 }}
               rowKey="requirement_id"
-              dataSource={riskEntries}
+              dataSource={displayedRisk}
               columns={[
-                { title: 'ID', dataIndex: 'requirement_id', ellipsis: true },
+                { title: 'ID', dataIndex: 'requirement_id', ellipsis: true, width: 110 },
+                { title: 'Score', dataIndex: 'score', width: 56 },
+                {
+                  title: 'I×L',
+                  width: 64,
+                  render: (_, r) => `${r.impact}×${r.likelihood}`,
+                },
                 {
                   title: 'Priority',
                   dataIndex: 'level',
-                  width: 120,
+                  width: 110,
                   render: (v: RiskLevel, record) => (
                     <Select
                       size="small"
                       value={v}
-                      style={{ width: 100 }}
+                      style={{ width: 96 }}
                       onChange={(level) => updateRiskLevel(record.requirement_id, level)}
                       options={[
                         { value: 'High', label: 'High' },
@@ -146,26 +177,83 @@ export function Step2RiskAnalysis() {
         </Col>
       </Row>
 
-      <Card title="Coverage Items · 覆盖项识别 (Mainly)">
+      <Card
+        title="Coverage Items · 覆盖项识别与策略 (Mainly)"
+        extra={
+          <Button size="small" onClick={handleAddCoverage}>
+            新增覆盖项
+          </Button>
+        }
+      >
         <Table
           size="small"
           rowKey="coverage_item_id"
-          pagination={false}
+          pagination={{ pageSize: 6 }}
           dataSource={coverageItems}
           columns={[
-            { title: 'Coverage ID', dataIndex: 'coverage_item_id', width: 140 },
-            { title: 'Requirement', dataIndex: 'requirement_id', width: 130 },
-            { title: 'Description', dataIndex: 'description', ellipsis: true },
+            {
+              title: 'Coverage ID',
+              dataIndex: 'coverage_item_id',
+              width: 150,
+              render: (v: string, record) => (
+                <Space size={4}>
+                  {v}
+                  {record.designer_added && <Tag color="blue">新增</Tag>}
+                </Space>
+              ),
+            },
+            { title: 'Requirement', dataIndex: 'requirement_id', width: 120 },
+            {
+              title: 'Description',
+              dataIndex: 'description',
+              render: (v, record) => (
+                <Input
+                  size="small"
+                  value={v}
+                  onChange={(e) =>
+                    updateCoverageItem(record.coverage_item_id, { description: e.target.value })
+                  }
+                />
+              ),
+            },
             {
               title: 'Techniques',
               dataIndex: 'techniques',
-              render: (t: string[]) => t.map((x) => <Tag key={x}>{x}</Tag>),
+              width: 160,
+              render: (t: Technique[], record) => (
+                <Select
+                  size="small"
+                  mode="multiple"
+                  value={t}
+                  style={{ width: '100%' }}
+                  onChange={(techniques) =>
+                    updateCoverageItem(record.coverage_item_id, { techniques })
+                  }
+                  options={TECHNIQUE_OPTIONS.map((x) => ({ value: x, label: x }))}
+                />
+              ),
             },
-            { title: 'Strategy', dataIndex: 'strategy_rationale', ellipsis: true },
+            {
+              title: 'Strategy',
+              dataIndex: 'strategy_rationale',
+              ellipsis: true,
+              render: (v, record) => (
+                <Input
+                  size="small"
+                  value={v ?? ''}
+                  onChange={(e) =>
+                    updateCoverageItem(record.coverage_item_id, {
+                      strategy_rationale: e.target.value,
+                    })
+                  }
+                />
+              ),
+            },
           ]}
         />
       </Card>
 
+      <ImprovementSummary />
       <RevisionPanel />
     </Space>
   )

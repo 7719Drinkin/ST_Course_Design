@@ -1,8 +1,10 @@
-import { Layout, Steps, Typography } from 'antd'
+import { Layout, Space, Steps, Tag, Typography } from 'antd'
+import { StepFooter } from './components/StepFooter'
 import { Step1InputParse } from './components/Step1InputParse'
 import { Step2RiskAnalysis } from './components/Step2RiskAnalysis'
 import { Step3GenerateEvaluate } from './components/Step3GenerateEvaluate'
 import { Step4OptimizeExport } from './components/Step4OptimizeExport'
+import { PipelineSummary } from './components/PipelineSummary'
 import { useAppStore } from './store/appStore'
 
 const { Header, Content, Sider } = Layout
@@ -42,9 +44,16 @@ function App() {
 
       <Layout>
         <Header className="app-header app-header-bar">
-          <Text style={{ fontWeight: 500 }}>AutoTest Pipeline</Text>
+          <Space size="middle">
+            <Text style={{ fontWeight: 500 }}>AutoTest Pipeline</Text>
+            <Tag color="processing">目标应用: Library Management AUT</Tag>
+          </Space>
+          <PipelineSummary />
         </Header>
-        <Content className="app-content">{content}</Content>
+        <Content className="app-content">
+          {content}
+          <StepFooter />
+        </Content>
       </Layout>
     </Layout>
   )

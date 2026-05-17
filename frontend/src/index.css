@@ -335,6 +335,52 @@ body::after {
   border-bottom: 1px solid var(--border);
   display: flex;
   align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.pipeline-summary {
+  flex-shrink: 0;
+}
+
+.step-footer {
+  margin-top: 32px;
+  padding-top: 20px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.step-footer-hint {
+  font-size: 12px;
+  color: var(--ink-soft);
+}
+
+.mermaid-wrap {
+  min-height: 120px;
+  overflow-x: auto;
+}
+
+.mermaid-render svg {
+  max-width: 100%;
+  height: auto;
+}
+
+.export-preview-json {
+  margin-top: 12px;
+  max-height: 320px;
+  overflow: auto;
+  font-size: 11px;
+  background: var(--surface-muted);
+  padding: 12px;
+  border-radius: 8px;
+}
+
+.trace-panel .ant-list-item {
+  padding-inline: 0;
 }
 
 .heatmap-cell-btn {
