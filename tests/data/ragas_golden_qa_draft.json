@@ -8,7 +8,7 @@
     "contexts": [
       "FR-AUT-BOOK-001 List Books: The system shall return all books when the API client sends GET /api/books. Acceptance criteria: response status is 200 OK and response body is a JSON array."
     ],
-    "source": "docs/AUT_SRS.md"
+    "source": "docs/AUT_SRS_IEEE830_v1.md"
   },
   {
     "id": "RAGAS-AUT-002",
@@ -19,7 +19,7 @@
     "contexts": [
       "FR-AUT-BOOK-003 Create Book: The system shall create a book when the API client sends POST /api/books with a valid Book payload. Acceptance criteria include 201 Created, submitted fields, and generated id."
     ],
-    "source": "docs/AUT_SRS.md"
+    "source": "docs/AUT_SRS_IEEE830_v1.md"
   },
   {
     "id": "RAGAS-AUT-003",
@@ -28,9 +28,9 @@
     "answer": "A valid member payload contains name, email, phoneNumber, startDate, and endDate.",
     "ground_truth": "The Member data model requires name, email, phoneNumber, startDate, and endDate for member creation.",
     "contexts": [
-      "Member fields in docs/AUT_SRS.md: name, email, phoneNumber, startDate, and endDate are required fields."
+      "Member fields in docs/AUT_SRS_IEEE830_v1.md: name, email, phoneNumber, startDate, and endDate are required fields."
     ],
-    "source": "docs/AUT_SRS.md"
+    "source": "docs/AUT_SRS_IEEE830_v1.md"
   },
   {
     "id": "RAGAS-AUT-004",
@@ -39,9 +39,9 @@
     "answer": "The API should return 201, create a borrowing record, set borrowDate and dueDate, keep returnDate null, and decrement availableCopies by 1.",
     "ground_truth": "For a valid borrow request, the response is 201 Created, a borrowing record id is generated, borrowDate is the current date, dueDate is current date plus 14 days, returnDate is null, and the book availableCopies decreases by 1.",
     "contexts": [
-      "FR-AUT-BORROW-002 Borrow Available Book acceptance criteria from docs/AUT_SRS.md."
+      "FR-AUT-BORROW-002 Borrow Available Book acceptance criteria from docs/AUT_SRS_IEEE830_v1.md."
     ],
-    "source": "docs/AUT_SRS.md"
+    "source": "docs/AUT_SRS_IEEE830_v1.md"
   },
   {
     "id": "RAGAS-AUT-005",
@@ -52,7 +52,7 @@
     "contexts": [
       "FR-AUT-BORROW-005 Reject Borrowing When No Copies Are Available: response status is 400 Bad Request; no borrowing record is created; availableCopies does not become negative."
     ],
-    "source": "docs/AUT_SRS.md"
+    "source": "docs/AUT_SRS_IEEE830_v1.md"
   },
   {
     "id": "RAGAS-AUT-006",
@@ -61,9 +61,9 @@
     "answer": "The return request should return 200 OK, set returnDate, and increase the related book's availableCopies by 1.",
     "ground_truth": "PUT /api/return/{recordId} for an existing unreturned borrowing record returns 200 OK, sets returnDate, and increments the related book availableCopies by 1.",
     "contexts": [
-      "FR-AUT-RETURN-001 Return Borrowed Book acceptance criteria from docs/AUT_SRS.md."
+      "FR-AUT-RETURN-001 Return Borrowed Book acceptance criteria from docs/AUT_SRS_IEEE830_v1.md."
     ],
-    "source": "docs/AUT_SRS.md"
+    "source": "docs/AUT_SRS_IEEE830_v1.md"
   },
   {
     "id": "RAGAS-AUT-007",
@@ -74,7 +74,7 @@
     "contexts": [
       "FR-AUT-RETURN-003 Reject Duplicate Return: first return returns 200 OK; second return for the same record returns 400 Bad Request."
     ],
-    "source": "docs/AUT_SRS.md"
+    "source": "docs/AUT_SRS_IEEE830_v1.md"
   },
   {
     "id": "RAGAS-AUT-008",
