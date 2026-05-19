@@ -1,20 +1,29 @@
-"""Load AUT requirement sample data for reference API implementation."""
+"""Load shared AUT requirement sample data."""
 
 from __future__ import annotations
 
 import json
+from functools import lru_cache
 from pathlib import Path
+from typing import Any
 
-DATA_PATH = Path(__file__).resolve().parent.parent / "tests" / "data" / "aut_15_requirements.json"
+from backend.config import Config
 
 
-def load_requirements() -> list[dict]:
-    with DATA_PATH.open(encoding="utf-8") as f:
+@lru_cache(maxsize=1)
+def load_requirements(path: Path | None = None) -> list[dict[str, Any]]:
+    data_path = path or Config.REQUIREMENTS_DATA_PATH
+    with data_path.open(encoding="utf-8") as f:
         return json.load(f)
 
 
-def get_by_id(requirement_id: str) -> dict | None:
-    for req in load_requirements():
-        if req["id"] == requirement_id:
-            return req
-    return None
+def get_requirement(requirement_id: str) -> dict[str, Any] | None:
+    return next((req for req in load_requirements() if req["id"] == requirement_id), None)
+
+
+def filter_requirements(requirement_ids: list[str] | None) -> list[dict[str, Any]]:
+    reqs = load_requirements()
+    if not requirement_ids:
+        return reqs
+    wanted = set(requirement_ids)
+    return [req for req in reqs if req["id"] in wanted]
