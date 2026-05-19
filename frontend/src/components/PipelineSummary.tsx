@@ -1,6 +1,5 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo } from 'react'
 import { Space, Tag, Typography } from 'antd'
-import { getDashboard } from '../services/api'
 import { useAppStore } from '../store/appStore'
 import type { DashboardSummary } from '../types'
 
@@ -23,28 +22,11 @@ export function PipelineSummary() {
   const requirements = useAppStore((s) => s.requirements)
   const testCases = useAppStore((s) => s.testCases)
   const riskEntries = useAppStore((s) => s.riskEntries)
-  const [remote, setRemote] = useState<DashboardSummary | null>(null)
 
-  useEffect(() => {
-    getDashboard().then((r) => setRemote(r.data.summary))
-  }, [])
-
-  const local = useMemo(
+  const s = useMemo(
     () => summaryFromStore(requirements, testCases, riskEntries),
     [requirements, testCases, riskEntries],
   )
-
-  const s =
-    requirements.length > 0 || testCases.length > 0
-      ? {
-          ...local,
-          total_requirements: requirements.length || local.total_requirements,
-          high_risk_count:
-            riskEntries.length > 0
-              ? riskEntries.filter((e) => e.level === 'High').length
-              : local.high_risk_count,
-        }
-      : remote ?? local
 
   return (
     <Space size="middle" wrap className="pipeline-summary">
