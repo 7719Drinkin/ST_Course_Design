@@ -1,5 +1,5 @@
 /**
- * API service — calls reference backend (backend/main.py) with mock fallback.
+ * API service — calls reference backend (backend/main.py) with empty fallback.
  */
 
 import type {
@@ -20,7 +20,7 @@ import type {
 const BASE: string =
   (import.meta.env.VITE_API_BASE as string | undefined) ?? 'http://localhost:8000'
 
-const DESIGN_SESSION_ID = 'DS-AUT-001'
+const DESIGN_SESSION_ID = 'DS-CURRENT-WORKSPACE'
 
 async function httpPost<T>(path: string, body: unknown, timeoutMs = 8000): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
@@ -97,78 +97,21 @@ export function mapRevisionsForExport(revisions: RevisionLog[]): ExportRevisionR
   }))
 }
 
-// ── Mock fallbacks ────────────────────────────────────────────────────────────
-
-const MOCK_REQUIREMENTS: DisplayRequirement[] = [
-  {
-    requirement_id: 'REQ-AUT-008',
-    raw_requirement:
-      'The system shall create a borrowing record when an existing member borrows an existing book with availableCopies greater than 0.',
-    source: 'aut_15_requirements',
-    input_fields: ['book.id', 'member.id', 'availableCopies'],
-    data_ranges: ['availableCopies: integer > 0'],
-    conditions: ['Book exists', 'Member exists', 'availableCopies > 0'],
-    expected_action: 'Return 201, create borrowing record, decrement availableCopies by 1',
-    confidence: 0.85,
-    missing_fields: [],
-    source_context_ids: ['AUT_SRS:FR-AUT-BORROW-001'],
-    prompt_template_id: 'PROMPT-FR1-V1',
-    retrieved_context_ids: ['AUT-SRS-001#FR-AUT-BORROW-001'],
-    model_name: 'reference-parser',
-    output_schema_version: 'parse-v1',
-  },
-]
-
-const MOCK_TEST_CASES: TestCase[] = [
-  {
-    test_id: 'TC-AUT-008-001',
-    requirement_id: 'REQ-AUT-008',
-    technique: 'DT',
-    title: 'Borrow existing available book',
-    preconditions: ['Book exists', 'Member exists', 'availableCopies > 0'],
-    input_data: { 'book.id': 1, 'member.id': 1 },
-    test_steps: ['POST /api/borrow'],
-    expected_result: '201 Created',
-    risk_level: 'High',
-    standard_ref: 'ISO/IEC/IEEE 29119-4 §6.4',
-    status: 'Draft',
-    coverage_item_id: 'COV-AUT-BORROW-008',
-  },
-]
-
-const MOCK_FSM: FSMResult = {
-  states: ['Available', 'Borrowed', 'Returned', 'Rejected'],
-  transitions: [],
-  coverage: { all_states: ['Available', 'Borrowed'], all_transitions: ['Available->Borrowed'] },
-  mermaid: 'stateDiagram-v2\n    [*] --> Available',
-}
-
-const MOCK_ORACLE: OracleResult[] = [
-  { test_id: 'TC-AUT-008-001', llm_verdict: 'Pass', rule_verdict: 'Pass', confidence: 0.95, needs_review: false },
-]
-
-const MOCK_RISK: RiskEntry[] = [
-  { requirement_id: 'REQ-AUT-008', impact: 5, likelihood: 5, score: 25, level: 'High' },
-]
-
-const MOCK_COVERAGE: CoverageItem[] = [
-  {
-    coverage_item_id: 'COV-AUT-BORROW-008',
-    requirement_id: 'REQ-AUT-008',
-    description: 'Cover: Borrow an available book',
-    techniques: ['DT', 'BVA', 'FSM'],
-    strategy_rationale: 'High-priority borrowing flow',
-  },
-]
-
-const MOCK_DASHBOARD: DashboardPayload = {
+const EMPTY_DASHBOARD: DashboardPayload = {
   summary: {
-    total_requirements: 15,
-    generated_tests: 25,
-    high_risk_count: 8,
-    ci_status: 'passing',
+    total_requirements: 0,
+    generated_tests: 0,
+    high_risk_count: 0,
+    ci_status: 'idle',
   },
   ragas: { enabled: false, answer_relevancy: null, faithfulness: null },
+}
+
+const EMPTY_FSM: FSMResult = {
+  states: [],
+  transitions: [],
+  coverage: { all_states: [], all_transitions: [] },
+  mermaid: '',
 }
 
 // ── API ───────────────────────────────────────────────────────────────────────
@@ -192,24 +135,19 @@ export async function ingestAndParse(content: string): Promise<ApiResult<Display
 
       return ingestRes.requirements.map((req, i) => mergeParseRow(req, parseResults[i]))
     },
-    MOCK_REQUIREMENTS,
+    [],
     'A: POST /ingest · B: POST /parse',
   )
 }
 
-/** 空 content 触发后端加载 aut_15_requirements.json 全部 15 条 */
-export async function loadAut15Sample(): Promise<ApiResult<DisplayRequirement[]>> {
-  return ingestAndParse('')
-}
-
 export async function getDashboard(): Promise<ApiResult<DashboardPayload>> {
-  return tryLive(() => httpGet<DashboardPayload>('/dashboard'), MOCK_DASHBOARD, 'GET /dashboard')
+  return tryLive(() => httpGet<DashboardPayload>('/dashboard'), EMPTY_DASHBOARD, 'GET /dashboard')
 }
 
 export async function getRiskData(requirementIds?: string[]): Promise<ApiResult<RiskEntry[]>> {
   return tryLive(
     () => httpPost<RiskEntry[]>('/risk', { requirement_ids: requirementIds ?? [] }),
-    MOCK_RISK,
+    [],
     'B: POST /risk',
   )
 }
@@ -217,7 +155,7 @@ export async function getRiskData(requirementIds?: string[]): Promise<ApiResult<
 export async function getCoverageItems(requirementIds?: string[]): Promise<ApiResult<CoverageItem[]>> {
   return tryLive(
     () => httpPost<CoverageItem[]>('/coverage', { requirement_ids: requirementIds ?? [] }),
-    MOCK_COVERAGE,
+    [],
     'B: POST /coverage',
   )
 }
@@ -225,7 +163,7 @@ export async function getCoverageItems(requirementIds?: string[]): Promise<ApiRe
 export async function generateFSM(requirementIds: string[]): Promise<ApiResult<FSMResult>> {
   return tryLive(
     () => httpPost<FSMResult>('/fsm', { requirement_ids: requirementIds }),
-    MOCK_FSM,
+    EMPTY_FSM,
     'A: POST /fsm',
   )
 }
@@ -236,7 +174,7 @@ export async function getTestCases(requirementIds?: string[]): Promise<ApiResult
       const cases = await httpPost<TestCase[]>('/generate', { requirement_ids: requirementIds ?? [] })
       return cases.map((c) => ({ ...c, status: c.status ?? 'Draft' }))
     },
-    MOCK_TEST_CASES,
+    [],
     'E: POST /generate',
   )
 }
@@ -244,7 +182,7 @@ export async function getTestCases(requirementIds?: string[]): Promise<ApiResult
 export async function getOracleResults(testIds?: string[]): Promise<ApiResult<OracleResult[]>> {
   return tryLive(
     () => httpPost<OracleResult[]>('/oracle', { test_ids: testIds ?? [] }),
-    MOCK_ORACLE,
+    [],
     'B: POST /oracle',
   )
 }
@@ -253,13 +191,14 @@ export async function getOptimizeResult(
   mode: OptimizeMode = 'risk_priority',
   testIds?: string[],
 ): Promise<ApiResult<OptimizeResult>> {
+  const beforeCount = testIds?.length ?? 0
   return tryLive(
     () =>
       httpPost<OptimizeResult>('/optimize', {
         mode,
         test_ids: testIds ?? [],
       }),
-    { before_count: 3, after_count: 2, mode, reduction_rate: 33, removed_test_ids: [] },
+    { before_count: beforeCount, after_count: beforeCount, mode, reduction_rate: 0, removed_test_ids: [] },
     'E: POST /optimize',
   )
 }
