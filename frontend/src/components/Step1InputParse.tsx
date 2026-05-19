@@ -14,9 +14,9 @@ import {
 } from 'antd'
 import type { UploadFile } from 'antd'
 import { useAppStore } from '../store/appStore'
-import { ingestAndParse, loadAut15Sample } from '../services/api'
+import { ingestAndParse } from '../services/api'
 import type { DisplayRequirement } from '../types'
-import { DataStatusTag } from './shared'
+import { DataStatusTag, WorkflowEmptyState } from './shared'
 import { RevisionPanel } from './RevisionPanel'
 import { ImprovementSummary } from './ImprovementSummary'
 
@@ -29,16 +29,27 @@ export function Step1InputParse() {
   const [loading, setLoading] = useState(false)
   const [isLive, setIsLive] = useState<boolean | undefined>()
   const [pendingFrom, setPendingFrom] = useState<string>()
+  const [inputError, setInputError] = useState<string>()
 
   const requirements = useAppStore((s) => s.requirements)
   const setRequirements = useAppStore((s) => s.setRequirements)
+  const setSourceName = useAppStore((s) => s.setSourceName)
   const updateRequirement = useAppStore((s) => s.updateRequirement)
   const setCurrentStep = useAppStore((s) => s.setCurrentStep)
+  const setRiskEntries = useAppStore((s) => s.setRiskEntries)
+  const setCoverageItems = useAppStore((s) => s.setCoverageItems)
+  const setTestCases = useAppStore((s) => s.setTestCases)
+  const setOracleResults = useAppStore((s) => s.setOracleResults)
+  const setFsm = useAppStore((s) => s.setFsm)
+  const setOptimizeResult = useAppStore((s) => s.setOptimizeResult)
+  const setHighlightedRequirementId = useAppStore((s) => s.setHighlightedRequirementId)
 
-  const runIngest = async (content: string) => {
+  const runIngest = async (content: string, sourceName: string) => {
     setLoading(true)
+    setInputError(undefined)
     const result = await ingestAndParse(content)
     setRequirements(result.data)
+    setSourceName(result.data.length > 0 ? sourceName : null)
     setIsLive(result.isLive)
     setPendingFrom(result.pendingFrom)
     setLoading(false)
@@ -46,19 +57,33 @@ export function Step1InputParse() {
 
   const handleParse = async () => {
     let content = pasteText.trim()
-    if (!content && fileList[0]?.originFileObj) {
-      content = await fileList[0].originFileObj.text()
+    const selectedFile = fileList[0]?.originFileObj
+    const sourceName = selectedFile ? fileList[0].name : '粘贴输入'
+    if (!content && selectedFile) {
+      content = await selectedFile.text()
     }
-    await runIngest(content)
+    if (!content) {
+      setInputError('请先粘贴需求文本，或上传 CSV / TXT / JSON 文件后再执行解析。')
+      return
+    }
+    await runIngest(content, sourceName)
   }
 
-  const handleLoadSample = async () => {
-    setLoading(true)
-    const result = await loadAut15Sample()
-    setRequirements(result.data)
-    setIsLive(result.isLive)
-    setPendingFrom(result.pendingFrom)
-    setLoading(false)
+  const handleReset = () => {
+    setPasteText('')
+    setFileList([])
+    setSourceName(null)
+    setRequirements([])
+    setRiskEntries([])
+    setCoverageItems([])
+    setTestCases([])
+    setOracleResults([])
+    setFsm(null)
+    setOptimizeResult(null)
+    setHighlightedRequirementId(null)
+    setIsLive(undefined)
+    setPendingFrom(undefined)
+    setInputError(undefined)
   }
 
   const promptPanel = (record: DisplayRequirement) => {
@@ -94,15 +119,18 @@ export function Step1InputParse() {
 
   return (
     <Space direction="vertical" size={24} className="full-width">
-      <Card title="需求输入 (FR1.0)">
+      <Card title="需求输入 (FR1.0)" className="workflow-card">
         <Space direction="vertical" size={16} className="full-width">
           <div>
             <Text type="secondary">直接粘贴需求文本</Text>
             <TextArea
               rows={4}
-              placeholder="粘贴 AUT SRS 需求描述，例如借书流程..."
+              placeholder="粘贴待测系统的需求描述，或上传需求文件后执行解析..."
               value={pasteText}
-              onChange={(e) => setPasteText(e.target.value)}
+              onChange={(e) => {
+                setPasteText(e.target.value)
+                setInputError(undefined)
+              }}
               className="top-gap"
             />
           </div>
@@ -111,30 +139,39 @@ export function Step1InputParse() {
             accept=".csv,.txt,.json"
             beforeUpload={() => false}
             fileList={fileList}
-            onChange={(info) => setFileList(info.fileList)}
+            onChange={(info) => {
+              setFileList(info.fileList)
+              setInputError(undefined)
+            }}
             className="upload-zone"
           >
             <p className="upload-title">或上传 CSV / TXT / JSON</p>
           </Upload.Dragger>
+          {inputError && <Alert type="warning" showIcon message={inputError} />}
+          {isLive === false && pendingFrom && requirements.length === 0 && (
+            <Alert
+              type="info"
+              showIcon
+              message={`已尝试请求接口，但当前未返回业务数据：${pendingFrom}`}
+            />
+          )}
           <Space wrap>
             <Button type="primary" onClick={handleParse} loading={loading}>
               执行解析
             </Button>
-            <Button onClick={handleLoadSample} loading={loading}>
-              加载 AUT 15 条样本
-            </Button>
-            <Button
-              onClick={() => {
-                setPasteText('')
-                setFileList([])
-                setRequirements([])
-              }}
-            >
+            <Button onClick={handleReset}>
               重置
             </Button>
           </Space>
         </Space>
       </Card>
+
+      {requirements.length === 0 && (
+        <WorkflowEmptyState
+          title="尚未载入需求数据"
+          description="上传或粘贴真实需求后，这里会展示结构化解析结果、缺失字段和人工确认入口。系统不会再用内置样例填充页面。"
+        />
+      )}
 
       {requirements.length > 0 && (
         <Card
@@ -163,6 +200,7 @@ export function Step1InputParse() {
               rowKey="requirement_id"
               size="small"
               pagination={{ pageSize: 8 }}
+              scroll={{ x: 1040 }}
               dataSource={requirements}
               columns={[
                 { title: 'ID', dataIndex: 'requirement_id', width: 120 },
