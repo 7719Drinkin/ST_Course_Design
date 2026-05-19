@@ -15,6 +15,8 @@ import type {
 type AppState = {
   currentStep: number
   setCurrentStep: (step: number) => void
+  sourceName: string | null
+  setSourceName: (name: string | null) => void
 
   requirements: DisplayRequirement[]
   setRequirements: (data: DisplayRequirement[]) => void
@@ -60,6 +62,8 @@ export { TECHNIQUE_OPTIONS }
 export const useAppStore = create<AppState>((set, get) => ({
   currentStep: 0,
   setCurrentStep: (step) => set({ currentStep: step }),
+  sourceName: null,
+  setSourceName: (name) => set({ sourceName: name }),
 
   requirements: [],
   setRequirements: (data) => set({ requirements: data }),

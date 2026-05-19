@@ -13,8 +13,9 @@ createRoot(document.getElementById('root')!).render(
         token: {
           colorPrimary: '#1f6feb',
           colorInfo: '#1f6feb',
-          borderRadius: 10,
-          fontFamily: 'Space Grotesk, IBM Plex Sans, sans-serif',
+          borderRadius: 8,
+          fontFamily:
+            'Inter, "Microsoft YaHei", "PingFang SC", "Hiragino Sans GB", "Segoe UI", sans-serif',
         },
       }}
     >
