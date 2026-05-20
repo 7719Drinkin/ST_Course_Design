@@ -239,3 +239,5 @@ external/
 
 # macOS
 .DS_Store
+
+/rag
