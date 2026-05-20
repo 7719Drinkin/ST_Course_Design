@@ -17,7 +17,7 @@ import {
 import { useAppStore } from '../store/appStore'
 import { generateFSM, getOracleResults, getTestCases } from '../services/api'
 import type { Technique, TestCaseStatus } from '../types'
-import { DataStatusTag } from './shared'
+import { DataStatusTag, WorkflowEmptyState } from './shared'
 import { RevisionPanel } from './RevisionPanel'
 import { MermaidView } from './MermaidView'
 import { TraceabilityPanel } from './TraceabilityPanel'
@@ -51,9 +51,16 @@ export function Step3GenerateEvaluate() {
   const setCurrentStep = useAppStore((s) => s.setCurrentStep)
 
   const reqIdsKey = requirements.map((r) => r.requirement_id).join(',')
+  const hasRequirements = requirements.length > 0
 
   useEffect(() => {
-    const ids = reqIdsKey ? reqIdsKey.split(',') : undefined
+    if (!reqIdsKey) {
+      setTestCases([])
+      setOracleResults([])
+      setFsm(null)
+      return
+    }
+    const ids = reqIdsKey.split(',')
     let active = true
     const slowTimer = window.setTimeout(() => {
       if (active) setSlowWarning(true)
@@ -68,6 +75,10 @@ export function Step3GenerateEvaluate() {
         setTestCases(cases)
         setTcLive(r.isLive)
         setTcPending(r.pendingFrom)
+        if (cases.length === 0) {
+          setOracleResults([])
+          return
+        }
         const o = await getOracleResults(cases.map((c) => c.test_id))
         if (active) setOracleResults(o.data)
       } finally {
@@ -81,8 +92,7 @@ export function Step3GenerateEvaluate() {
 
     void load()
 
-    const fsmIds = ids?.length ? ids : ['REQ-AUT-008']
-    generateFSM(fsmIds).then((r) => {
+    generateFSM(ids).then((r) => {
       if (active) {
         setFsm(r.data)
         setFsmLive(r.isLive)
@@ -121,10 +131,10 @@ export function Step3GenerateEvaluate() {
 
   return (
     <Space direction="vertical" size={24} className="full-width">
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
+      <div className="stage-toolbar stage-toolbar-wrap">
         <span>
           <Title level={4} style={{ margin: 0, display: 'inline' }}>生成与复核 (FR3/4/5)</Title>
-          <DataStatusTag isLive={tcLive} pendingFrom={tcPending} />
+          {hasRequirements && <DataStatusTag isLive={tcLive} pendingFrom={tcPending} />}
         </span>
         <Space wrap>
           {(['EP', 'BVA', 'DT', 'FSM'] as Technique[]).map((t) => (
@@ -153,19 +163,26 @@ export function Step3GenerateEvaluate() {
               { value: 'Rejected', label: 'Rejected' },
             ]}
           />
-          <Button type="primary" onClick={() => setCurrentStep(3)}>下一步: 优化与导出</Button>
+          <Button type="primary" disabled={!hasRequirements} onClick={() => setCurrentStep(3)}>
+            下一步: 优化与导出
+          </Button>
         </Space>
       </div>
 
-      {slowWarning && fetching && (
+      {!hasRequirements ? (
+        <WorkflowEmptyState
+          title="等待需求生成测试用例"
+          description="解析真实需求后，系统才会请求用例生成、Oracle 复核和 FSM 覆盖数据。当前不会展示任何示例用例。"
+        />
+      ) : slowWarning && fetching ? (
         <Alert
           type="warning"
           showIcon
           message="用例生成超过 2s（NFR 目标），请稍后；后端联调后可优化性能。"
         />
-      )}
+      ) : null}
 
-      <Row gutter={[16, 16]}>
+      {hasRequirements && <Row gutter={[16, 16]}>
         <Col xs={24} lg={16}>
           <Card title="测试用例池 · Designer Review (FR3.0)">
             <Spin spinning={fetching}>
@@ -287,7 +304,15 @@ export function Step3GenerateEvaluate() {
             <TraceabilityPanel />
             <Card title="FSM · All States (FR4.0)">
               <DataStatusTag isLive={fsmLive} />
-              {fsm ? <MermaidView chart={fsm.mermaid} /> : <Spin />}
+              {fsm?.mermaid?.trim() ? (
+                <MermaidView chart={fsm.mermaid} />
+              ) : fetching ? (
+                <Spin />
+              ) : (
+                <Text type="secondary" style={{ fontSize: 12 }}>
+                  暂无 FSM 数据
+                </Text>
+              )}
               {fsmPaths.length > 0 && (
                 <List
                   size="small"
@@ -318,9 +343,9 @@ export function Step3GenerateEvaluate() {
             </Card>
           </Space>
         </Col>
-      </Row>
+      </Row>}
 
-      <Card title="Oracle · Expected Result 合成 (FR5.0)">
+      {hasRequirements && <Card title="Oracle · Expected Result 合成 (FR5.0)">
         <Table
           size="small"
           rowKey="test_id"
@@ -372,9 +397,9 @@ export function Step3GenerateEvaluate() {
             message={`${needsReviewCases.length} 条用例需人工复核 Oracle 结果`}
           />
         )}
-      </Card>
+      </Card>}
 
-      {coverageItems.length > 0 && (
+      {hasRequirements && coverageItems.length > 0 && (
         <Alert
           type="info"
           showIcon
