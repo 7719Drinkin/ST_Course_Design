@@ -1,96 +1,93 @@
-"""Requirement ingest and parsing service.
+"""需求导入与解析服务。
 
-The current parser is a deterministic adapter over the project sample data.
-It keeps the same service boundary that a later RAG/LLM parser can replace.
+当前使用确定性规则和样例数据，后续可以在这里接入 RAG / LLM 解析。
 """
 
 from __future__ import annotations
 
 import json
+from functools import lru_cache
+from pathlib import Path
 from typing import Any
 
-from backend.data_loader import get_requirement, load_requirements
-from backend.services.traceability import fr_id_for_requirement
+from backend.models import ParsedRequirement, Requirement
+
+BACKEND_ROOT = Path(__file__).resolve().parents[1]
+SAMPLE_REQUIREMENTS_PATH = BACKEND_ROOT / "data" / "samples" / "aut_15_requirements.json"
+FALLBACK_REQUIREMENTS_PATH = BACKEND_ROOT.parent / "tests" / "data" / "aut_15_requirements.json"
 
 
-def ingest_requirements(source_type: str, content: Any) -> dict[str, Any]:
-    if source_type == "json" and isinstance(content, list):
-        return {
-            "requirements": [
-                {
-                    "requirement_id": item.get("id") or item.get("requirement_id", f"REQ-AUT-INPUT-{idx:03d}"),
-                    "raw_requirement": item.get("raw_requirement", ""),
-                    "source": item.get("source", "json_input"),
-                }
-                for idx, item in enumerate(content, start=1)
-            ],
-            "errors": [],
-        }
+@lru_cache(maxsize=1)
+def load_sample_requirements() -> list[dict[str, Any]]:
+    """读取 15 条 AUT 需求样例；backend/data 缺失时回退 tests/data。"""
+    data_path = SAMPLE_REQUIREMENTS_PATH if SAMPLE_REQUIREMENTS_PATH.exists() else FALLBACK_REQUIREMENTS_PATH
+    with data_path.open(encoding="utf-8") as file:
+        return json.load(file)
 
+
+def _sample_to_requirement(item: dict[str, Any]) -> Requirement:
+    """把旧样例 JSON 转成轻量 Requirement 模型。"""
+    return Requirement(
+        requirement_id=item["id"],
+        text=item.get("raw_requirement", ""),
+        source="aut_15_requirements",
+        module=item.get("area", "general"),
+    )
+
+
+def ingest_requirements(source_type: str = "text", content: Any = "") -> dict[str, Any]:
+    """导入需求；空输入时返回课程项目内置样例。"""
     if source_type == "json" and isinstance(content, str) and content.strip():
         try:
-            parsed = json.loads(content)
+            content = json.loads(content)
         except json.JSONDecodeError as exc:
-            return {"requirements": [], "errors": [f"Invalid JSON content: {exc.msg}"]}
-        return ingest_requirements("json", parsed)
+            return {"requirements": [], "errors": [f"JSON 解析失败：{exc.msg}"]}
+
+    if source_type == "json" and isinstance(content, list):
+        requirements = [
+            Requirement(
+                requirement_id=item.get("requirement_id") or item.get("id") or f"REQ-INPUT-{index:03d}",
+                text=item.get("text") or item.get("raw_requirement", ""),
+                source=item.get("source", "json_input"),
+                module=item.get("module") or item.get("area", "general"),
+            )
+            for index, item in enumerate(content, start=1)
+        ]
+        return {"requirements": requirements, "errors": []}
 
     if isinstance(content, str) and content.strip():
         return {
             "requirements": [
-                {
-                    "requirement_id": "REQ-AUT-PASTE-001",
-                    "raw_requirement": content.strip(),
-                    "source": "direct_input",
-                }
+                Requirement(
+                    requirement_id="REQ-MANUAL-001",
+                    text=content.strip(),
+                    source="manual_input",
+                    module="manual",
+                )
             ],
             "errors": [],
         }
 
-    return {
-        "requirements": [
-            {
-                "requirement_id": req["id"],
-                "raw_requirement": req["raw_requirement"],
-                "source": "aut_15_requirements",
-            }
-            for req in load_requirements()
-        ],
-        "errors": [],
-    }
+    return {"requirements": [_sample_to_requirement(item) for item in load_sample_requirements()], "errors": []}
 
 
-def parse_requirement(requirement_id: str, raw_requirement: str = "") -> dict[str, Any]:
-    req = get_requirement(requirement_id)
-    if req is None:
-        # Stub path for ad-hoc pasted requirements; RAG/LLM extraction should replace this.
-        return {
-            "requirement_id": requirement_id,
-            "input_fields": [],
-            "data_ranges": [],
-            "conditions": [],
-            "expected_action": "",
-            "confidence": 0.5,
-            "missing_fields": ["input_fields", "conditions", "expected_action"],
-            "source_context_ids": [],
-            "prompt_template_id": "PROMPT-FR1-V1",
-            "retrieved_context_ids": [],
-            "model_name": "stub-parser",
-            "output_schema_version": "parse-v1",
-        }
+def parse_requirement(requirement_id: str, text: str = "") -> ParsedRequirement:
+    """解析单条需求，返回稳定结构化字段。"""
+    sample = next((item for item in load_sample_requirements() if item["id"] == requirement_id), None)
+    source_text = text or (sample or {}).get("raw_requirement", "")
+    action = (sample or {}).get("expected_action") or source_text
+    constraints = list((sample or {}).get("conditions", [])) + list((sample or {}).get("data_ranges", []))
+    return ParsedRequirement(
+        requirement_id=requirement_id,
+        actor="API client",
+        action=action,
+        object=(sample or {}).get("title", "system behavior"),
+        constraints=constraints,
+        acceptance_criteria=[(sample or {}).get("expected_action", "满足需求描述中的可观察结果。")],
+    )
 
-    missing = [field for field in ("input_fields", "conditions", "expected_action") if not req.get(field)]
-    fr_id = fr_id_for_requirement(req)
-    return {
-        "requirement_id": req["id"],
-        "input_fields": req.get("input_fields", []),
-        "data_ranges": req.get("data_ranges", []),
-        "conditions": req.get("conditions", []),
-        "expected_action": req.get("expected_action", ""),
-        "confidence": 0.88 if not missing else 0.72,
-        "missing_fields": missing,
-        "source_context_ids": [f"AUT_SRS:{fr_id}"],
-        "prompt_template_id": "PROMPT-FR1-V1",
-        "retrieved_context_ids": [f"AUT-SRS-001#{fr_id}"],
-        "model_name": "reference-parser",
-        "output_schema_version": "parse-v1",
-    }
+
+def parse_many(requirement_ids: list[str] | None = None) -> list[ParsedRequirement]:
+    """批量解析需求；未传编号时解析全部样例。"""
+    ids = requirement_ids or [item["id"] for item in load_sample_requirements()]
+    return [parse_requirement(requirement_id) for requirement_id in ids]
