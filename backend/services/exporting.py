@@ -40,12 +40,15 @@ def build_csv_export(request: ExportRequest) -> str:
 
 
 def build_xlsx_export(request: ExportRequest) -> io.BytesIO:
-    """构造 XLSX 导出内容；缺少 openpyxl 时返回稳定占位内容。"""
+    """构造 XLSX 导出内容。
+
+    缺少 openpyxl 时抛出运行时错误，由路由层转换成明确 HTTP 错误，
+    避免把失败原因硬编码成一个“看似成功”的下载文件。
+    """
     try:
         from openpyxl import Workbook
-    except ImportError:
-        # 课程项目联调时可能尚未安装依赖，保持接口稳定比直接报错更友好。
-        return io.BytesIO("openpyxl 未安装，请执行 pip install -r backend/requirements.txt 后导出 XLSX。".encode("utf-8"))
+    except ImportError as exc:
+        raise RuntimeError("XLSX 导出依赖 openpyxl 未安装") from exc
 
     rows = _rows_from_request(request)
     workbook = Workbook()

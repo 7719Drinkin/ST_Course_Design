@@ -100,7 +100,11 @@ class DesignSession(BaseModel):
 
 
 class IngestRequest(BaseModel):
-    """需求输入请求；content 为空时加载样例需求。"""
+    """需求输入请求。
+
+    如需加载课程样例，请显式传入 source_type="sample"，
+    避免空输入被误认为真实需求。
+    """
 
     source_type: str = "text"
     content: Any = ""

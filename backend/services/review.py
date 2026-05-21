@@ -39,6 +39,6 @@ def regenerate_from_revision(request: RegenerateRequest) -> dict[str, object]:
         "revision_id": request.revision_id,
         "item_id": request.item_id,
         "mode": request.mode,
-        "status": "stub_pending_generation",
+        "status": "pending_generation",
         "generated_test_cases": [],
     }

@@ -29,7 +29,7 @@ router = APIRouter(tags=["design"])
 
 @router.post("/ingest")
 def ingest(request: IngestRequest) -> dict[str, list[Requirement] | list[str]]:
-    """导入需求；空输入时返回内置 15 条样例。"""
+    """导入需求；样例数据必须通过 source_type=sample 显式请求。"""
     return ingest_requirements(request.source_type, request.content)
 
 

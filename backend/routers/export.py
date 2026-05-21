@@ -5,7 +5,7 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from fastapi.responses import JSONResponse, Response, StreamingResponse
 
 from backend.models import ExportRequest
@@ -33,8 +33,13 @@ def export_csv(request: ExportRequest) -> Response:
 @router.post("/xlsx")
 def export_xlsx(request: ExportRequest) -> StreamingResponse:
     """导出 XLSX。"""
+    try:
+        stream = build_xlsx_export(request)
+    except RuntimeError as exc:
+        # 依赖缺失属于部署环境问题，返回明确错误，不返回伪造的 xlsx 内容。
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
     return StreamingResponse(
-        build_xlsx_export(request),
+        stream,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": "attachment; filename=autotestdesign.xlsx"},
     )

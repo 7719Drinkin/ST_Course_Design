@@ -94,6 +94,19 @@ Interactive Review：
 - Interactive Review 使用内存列表保存历史，重启后会清空。
 - RAG 已预留 ChromaDB 入库、检索和 Prompt 构建接口，但尚未接完整评测流程。
 
+## 样例需求加载
+
+`POST /ingest` 不会再因为空输入自动加载样例，避免误吞真实输入错误。
+
+需要加载 15 条课程样例时，请显式传入：
+
+```json
+{
+  "source_type": "sample",
+  "content": ""
+}
+```
+
 ## RAG 后续开发位置
 
 成员 B 后续从这里继续：
