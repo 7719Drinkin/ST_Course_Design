@@ -1,5 +1,1 @@
-"""AutoTestDesign Flask backend package."""
-
-from backend.app import create_app
-
-__all__ = ["create_app"]
+"""AutoTestDesign 轻量 FastAPI 后端包。"""
