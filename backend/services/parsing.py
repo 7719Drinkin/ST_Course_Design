@@ -36,7 +36,10 @@ def _sample_to_requirement(item: dict[str, Any]) -> Requirement:
 
 
 def ingest_requirements(source_type: str = "text", content: Any = "") -> dict[str, Any]:
-    """导入需求；空输入时返回课程项目内置样例。"""
+    """导入需求；样例数据需要通过 source_type=sample 显式加载。"""
+    if source_type == "sample":
+        return {"requirements": [_sample_to_requirement(item) for item in load_sample_requirements()], "errors": []}
+
     if source_type == "json" and isinstance(content, str) and content.strip():
         try:
             content = json.loads(content)
@@ -68,7 +71,7 @@ def ingest_requirements(source_type: str = "text", content: Any = "") -> dict[st
             "errors": [],
         }
 
-    return {"requirements": [_sample_to_requirement(item) for item in load_sample_requirements()], "errors": []}
+    return {"requirements": [], "errors": ["需求内容不能为空；如需加载样例，请设置 source_type 为 sample。"]}
 
 
 def parse_requirement(requirement_id: str, text: str = "") -> ParsedRequirement:
