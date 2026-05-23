@@ -9,19 +9,14 @@ from backend.app.models.test_design import OptimizeResultEntity
 class OptimizationService:
     def optimize(self, mode: OptimizeMode, test_ids: list[str] | None = None) -> OptimizeResultEntity:
         ids = test_ids or []
-        before = len(ids)
-        # TODO(Agent): Replace deterministic pruning with Agent algorithm optimization.
-        removed = ids[3::4] if mode == "risk_priority" and before > 3 else []
-        after = before - len(removed)
-        reduction_rate = round((len(removed) / before) * 100) if before else 0
+        # TODO(Agent): Connect the real suite optimization module.
         return OptimizeResultEntity(
-            before_count=before,
-            after_count=after,
+            before_count=len(ids),
+            after_count=len(ids),
             mode=mode,
-            reduction_rate=reduction_rate,
-            removed_test_ids=removed,
+            reduction_rate=0,
+            removed_test_ids=[],
         )
 
 
 optimization_service = OptimizationService()
-

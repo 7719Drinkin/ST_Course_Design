@@ -8,7 +8,6 @@ from datetime import datetime, timezone
 from typing import Any
 
 from backend.app.schemas.export import ExportRequest
-from backend.app.services.generation_service import generation_service
 
 
 class ExportService:
@@ -50,9 +49,8 @@ class ExportService:
         stream.seek(0)
         return stream
 
-    def demo_request(self, export_format: str) -> ExportRequest:
-        cases = [case.model_dump() for case in generation_service.generate(["REQ-AUT-008"])]
-        return ExportRequest(format=export_format, test_cases=cases)
+    def empty_request(self, export_format: str) -> ExportRequest:
+        return ExportRequest(format=export_format)
 
 
 def _cell_value(value: Any) -> str:
@@ -62,4 +60,3 @@ def _cell_value(value: Any) -> str:
 
 
 export_service = ExportService()
-
