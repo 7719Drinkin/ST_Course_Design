@@ -1,6 +1,3 @@
-"""Requirement ingest service."""
-
-import tempfile
 from pathlib import Path
 
 from ....common.ingest import ingest_manager
@@ -8,21 +5,9 @@ from ....common.ingest import ingest_manager
 
 class RequirementService:
 
-    def ingest(self, content: str, filename: str | None = None) -> str:
-        """Write *content* to a temp file, pipe through ingest, return parsed text."""
-        suffix = Path(filename).suffix if filename else ".txt"
-        with tempfile.NamedTemporaryFile(
-            mode="w",
-            suffix=suffix,
-            prefix="atd_upload_",
-            encoding="utf-8",
-            delete=False,
-        ) as f:
-            f.write(content)
-            tmp_path = f.name
+    def ingest_text(self, content: str) -> None:
+        ingest_manager.ingest(content.encode("utf-8"))
 
-        try:
-            ingest_manager.ingest(tmp_path)
-            return ingest_manager.load_text()
-        finally:
-            Path(tmp_path).unlink(missing_ok=True)
+    def ingest_file(self, raw: bytes, filename: str) -> None:
+        ext = Path(filename).suffix or ".txt"
+        ingest_manager.ingest(raw, ext)

@@ -1,12 +1,5 @@
-"""Requirement request / response schemas."""
-
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 
 class IngestRequest(BaseModel):
     content: str = ""
-
-
-class IngestResponse(BaseModel):
-    text: str
-    length: int

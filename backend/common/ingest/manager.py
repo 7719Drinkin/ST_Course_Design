@@ -23,7 +23,7 @@ class IngestManager:
     """Orchestrates document ingestion and global text retrieval.
     Usage::
         manager = IngestManager()
-        manager.ingest("doc.pdf")
+        manager.ingest(raw_bytes, ext=".pdf")
         text = manager.load_text()
     """
 
@@ -37,15 +37,9 @@ class IngestManager:
         atexit.register(self.reset)
 
     # -- public --------------------------------------------------
-    def ingest(self, source: str | Path) -> None:
-        """Convert *source* to raw bytes and persist to fixed file."""
-        path = Path(source)
-        if path.exists():
-            raw = path.read_bytes()
-            self._ext = path.suffix
-        else:
-            raw = source.encode("utf-8")
-            self._ext = ".txt"
+    def ingest(self, raw: bytes, ext: str = ".txt") -> None:
+        """Persist raw bytes with format hint."""
+        self._ext = ext
         _INGEST_FILE.write_bytes(raw)
 
     def load_text(self) -> str:
