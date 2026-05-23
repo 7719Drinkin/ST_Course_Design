@@ -1,2 +1,1 @@
-"""Core application configuration and bootstrap helpers."""
-
+"""Application core — configuration, exceptions, middleware, and dependencies."""
