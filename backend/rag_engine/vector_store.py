@@ -8,8 +8,7 @@ from __future__ import annotations
 from typing import Any
 from uuid import uuid4
 
-CHROMA_DB_DIR = Path(__file__).resolve().parents[1] / "chroma_db"
-DEFAULT_COLLECTION_NAME = "testing_standards"
+from backend.utils.config import CHROMA_DB_DIR, DEFAULT_COLLECTION_NAME
 
 
 def get_collection(collection_name: str = DEFAULT_COLLECTION_NAME) -> Any:
@@ -57,7 +56,7 @@ def _distance_to_score(distance: float | int | None) -> float | None:
     return 1 / (1 + float(distance))
 
 
-def similarity_search(
+def query_documents(
     query: str,
     top_k: int = 5,
     collection_name: str = DEFAULT_COLLECTION_NAME,
