@@ -1,4 +1,4 @@
-"""Global settings loaded once from .env files."""
+"""Centralised settings loaded from environment / .env files."""
 
 from __future__ import annotations
 
@@ -26,7 +26,7 @@ def _read_csv_env(name: str, default: tuple[str, ...]) -> tuple[str, ...]:
 @dataclass(frozen=True)
 class Settings:
     app_name: str = os.getenv("APP_NAME", "AutoTestDesign Backend")
-    app_version: str = os.getenv("APP_VERSION", "0.4.0")
+    app_version: str = os.getenv("APP_VERSION", "0.5.0")
     environment: str = os.getenv("APP_ENV", "local")
     api_host: str = os.getenv("API_HOST", "0.0.0.0")
     api_port: int = int(os.getenv("API_PORT", "8000"))
@@ -47,4 +47,3 @@ def get_settings() -> Settings:
 
 
 settings = get_settings()
-
