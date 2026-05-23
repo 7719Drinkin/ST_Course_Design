@@ -8,9 +8,11 @@ from __future__ import annotations
 from typing import Any
 from uuid import uuid4
 
-from backend.utils.config import CHROMA_DB_DIR, DEFAULT_COLLECTION_NAME
+CHROMA_DB_DIR = Path(__file__).resolve().parents[1] / "chroma_db"
+DEFAULT_COLLECTION_NAME = "testing_standards"
 
 
+def get_collection(collection_name: str = DEFAULT_COLLECTION_NAME) -> Any:
 def get_collection(collection_name: str = DEFAULT_COLLECTION_NAME) -> Any:
     """获取 ChromaDB collection。"""
     CHROMA_DB_DIR.mkdir(parents=True, exist_ok=True)
@@ -25,6 +27,7 @@ def add_documents(
     metadatas: list[dict[str, Any]] | None = None,
     ids: list[str] | None = None,
     collection_name: str = DEFAULT_COLLECTION_NAME,
+    collection_name: str = DEFAULT_COLLECTION_NAME,
 ) -> dict[str, int | str]:
     """向 ChromaDB 写入文档片段。"""
     if not documents:
@@ -32,6 +35,7 @@ def add_documents(
     collection = get_collection(collection_name)
     safe_ids = ids or [str(uuid4()) for _ in documents]
     safe_metadatas = metadatas or [{} for _ in documents]
+    collection.upsert(documents=documents, metadatas=safe_metadatas, ids=safe_ids)
     collection.upsert(documents=documents, metadatas=safe_metadatas, ids=safe_ids)
     return {"collection": collection_name, "added": len(documents)}
 
@@ -53,7 +57,7 @@ def _distance_to_score(distance: float | int | None) -> float | None:
     return 1 / (1 + float(distance))
 
 
-def query_documents(
+def similarity_search(
     query: str,
     top_k: int = 5,
     collection_name: str = DEFAULT_COLLECTION_NAME,
@@ -64,9 +68,24 @@ def query_documents(
         return []
     collection = get_collection(collection_name)
     result = collection.query(query_texts=[query], n_results=top_k, where=where)
+    result = collection.query(query_texts=[query], n_results=top_k, where=where)
     documents = (result.get("documents") or [[]])[0]
     metadatas = (result.get("metadatas") or [[]])[0]
     ids = (result.get("ids") or [[]])[0]
+    distances = (result.get("distances") or [[]])[0]
+    results: list[dict[str, Any]] = []
+    for index, document in enumerate(documents):
+        metadata = dict(metadatas[index] if index < len(metadatas) and metadatas[index] else {})
+        if index < len(ids) and ids[index]:
+            metadata.setdefault("chunk_id", ids[index])
+        results.append(
+            {
+                "content": document,
+                "score": _distance_to_score(distances[index] if index < len(distances) else None),
+                "metadata": metadata,
+            }
+        )
+    return results
     distances = (result.get("distances") or [[]])[0]
     results: list[dict[str, Any]] = []
     for index, document in enumerate(documents):
