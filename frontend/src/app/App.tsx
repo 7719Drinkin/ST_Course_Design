@@ -29,12 +29,9 @@ function App() {
     <Layout className="app-shell" hasSider>
       <Sider width={308} theme="light" className="app-sider">
         <div className="brand sider-brand">
-          <div className="brand-mark" aria-hidden="true">
-            AT
-          </div>
           <div>
             <Title level={4} className="brand-title" style={{ margin: 0 }}>
-              AutoTestDesign
+              DeepTest
             </Title>
             <Text className="brand-subtitle">需求驱动质量工作台</Text>
           </div>
@@ -90,7 +87,7 @@ function App() {
               <Paragraph>
                 {hasDataset
                   ? `${currentRoute.description}，保持需求、风险、覆盖项、用例与导出包在同一条可审计链路中。`
-                  : '当前没有载入任何需求数据。请粘贴需求文本或上传 CSV / TXT / JSON 文件，系统会在解析完成后动态展示项目源、风险、覆盖项和测试用例。'}
+                  : '当前没有载入任何需求数据。请粘贴需求文本或上传 TXT / MD / PDF / DOCX 文件，系统会在解析完成后动态展示项目源、风险、覆盖项和测试用例。'}
               </Paragraph>
               <div className="hero-stat-grid" aria-label="Pipeline statistics">
                 <div className="hero-stat">

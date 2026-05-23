@@ -4,11 +4,11 @@
 
 export type RiskLevel = 'High' | 'Medium' | 'Low'
 export type Technique = 'EP' | 'BVA' | 'DT' | 'FSM'
-export type Verdict = 'Pass' | 'Fail'
+type Verdict = 'Pass' | 'Fail'
 export type OptimizeMode = 'risk_priority' | 'normal'
 export type TestCaseStatus = 'Draft' | 'Approved' | 'Rejected'
 
-export interface ParseTransparency {
+interface ParseTransparency {
   source_context_ids: string[]
   prompt_template_id: string
   retrieved_context_ids: string[]
@@ -55,7 +55,7 @@ export interface TestCase {
   coverage_item_id?: string
 }
 
-export interface FSMTransition {
+interface FSMTransition {
   from: string
   to: string
   event: string

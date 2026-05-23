@@ -14,10 +14,10 @@ import {
 } from 'antd'
 import type { UploadFile } from 'antd'
 import { useAppStore } from '@/app/store/appStore'
-import { ingestAndParse } from '@/modules/requirements/api/requirementsApi'
+import { ingestFile, ingestText, isAllowedFileType } from '@/modules/requirements/api/requirementsApi'
 import { ImprovementSummary } from '@/shared/components/ImprovementSummary'
 import { RevisionPanel } from '@/shared/components/RevisionPanel'
-import { DataStatusTag, WorkflowEmptyState } from '@/shared/components/WorkflowFeedback'
+import { WorkflowEmptyState } from '@/shared/components/WorkflowFeedback'
 import type { DisplayRequirement } from '@/shared/types'
 
 const { TextArea } = Input
@@ -27,9 +27,8 @@ export function RequirementsPage() {
   const [fileList, setFileList] = useState<UploadFile[]>([])
   const [pasteText, setPasteText] = useState('')
   const [loading, setLoading] = useState(false)
-  const [isLive, setIsLive] = useState<boolean | undefined>()
-  const [pendingFrom, setPendingFrom] = useState<string>()
   const [inputError, setInputError] = useState<string>()
+  const [successMessage, setSuccessMessage] = useState<string>()
 
   const requirements = useAppStore((s) => s.requirements)
   const setRequirements = useAppStore((s) => s.setRequirements)
@@ -44,29 +43,37 @@ export function RequirementsPage() {
   const setOptimizeResult = useAppStore((s) => s.setOptimizeResult)
   const setHighlightedRequirementId = useAppStore((s) => s.setHighlightedRequirementId)
 
-  const runIngest = async (content: string, sourceName: string) => {
+  const handleIngest = async () => {
     setLoading(true)
     setInputError(undefined)
-    const result = await ingestAndParse(content)
-    setRequirements(result.data)
-    setSourceName(result.data.length > 0 ? sourceName : null)
-    setIsLive(result.isLive)
-    setPendingFrom(result.pendingFrom)
-    setLoading(false)
-  }
+    setSuccessMessage(undefined)
+    const selectedFile = fileList[0]?.originFileObj as File | undefined
 
-  const handleParse = async () => {
-    let content = pasteText.trim()
-    const selectedFile = fileList[0]?.originFileObj
-    const sourceName = selectedFile ? fileList[0].name : '粘贴输入'
-    if (!content && selectedFile) {
-      content = await selectedFile.text()
+    try {
+      if (selectedFile) {
+        if (!isAllowedFileType(selectedFile.name)) {
+          setInputError('不支持的文件类型，仅允许 .txt .md .pdf .docx .doc')
+          setLoading(false)
+          return
+        }
+        await ingestFile(selectedFile)
+        setSourceName(selectedFile.name)
+        setSuccessMessage(`"${selectedFile.name}" 上传成功`)
+      } else {
+        const content = pasteText.trim()
+        if (!content) {
+          setInputError('请先粘贴需求文本，或上传文件后再提交。')
+          setLoading(false)
+          return
+        }
+        await ingestText(content)
+        setSourceName('粘贴输入')
+        setSuccessMessage('文本上传成功')
+      }
+    } catch {
+      setInputError('上传失败，请检查后端服务是否启动。')
     }
-    if (!content) {
-      setInputError('请先粘贴需求文本，或上传 CSV / TXT / JSON 文件后再执行解析。')
-      return
-    }
-    await runIngest(content, sourceName)
+    setLoading(false)
   }
 
   const handleReset = () => {
@@ -81,9 +88,8 @@ export function RequirementsPage() {
     setFsm(null)
     setOptimizeResult(null)
     setHighlightedRequirementId(null)
-    setIsLive(undefined)
-    setPendingFrom(undefined)
     setInputError(undefined)
+    setSuccessMessage(undefined)
   }
 
   const promptPanel = (record: DisplayRequirement) => {
@@ -119,7 +125,7 @@ export function RequirementsPage() {
 
   return (
     <Space direction="vertical" size={24} className="full-width">
-      <Card title="需求输入 (FR1.0)" className="workflow-card">
+      <Card title="需求输入" className="workflow-card">
         <Space direction="vertical" size={16} className="full-width">
           <div>
             <Text type="secondary">直接粘贴需求文本</Text>
@@ -136,28 +142,29 @@ export function RequirementsPage() {
           </div>
           <Upload.Dragger
             multiple={false}
-            accept=".csv,.txt,.json"
-            beforeUpload={() => false}
+            accept=".txt,.md,.pdf,.docx,.doc"
+            beforeUpload={(file) => {
+              if (!isAllowedFileType(file.name)) {
+                setInputError('不支持的文件类型，仅允许 .txt .md .pdf .docx .doc')
+                return Upload.LIST_IGNORE
+              }
+              setInputError(undefined)
+              return false
+            }}
             fileList={fileList}
             onChange={(info) => {
               setFileList(info.fileList)
-              setInputError(undefined)
+              setSuccessMessage(undefined)
             }}
             className="upload-zone"
           >
-            <p className="upload-title">或上传 CSV / TXT / JSON</p>
+            <p className="upload-title">或上传需求文档 (TXT / MD / PDF / DOCX / DOC)</p>
           </Upload.Dragger>
           {inputError && <Alert type="warning" showIcon message={inputError} />}
-          {isLive === false && pendingFrom && requirements.length === 0 && (
-            <Alert
-              type="info"
-              showIcon
-              message={`已尝试请求接口，但当前未返回业务数据：${pendingFrom}`}
-            />
-          )}
+          {successMessage && <Alert type="success" showIcon message={successMessage} />}
           <Space wrap>
-            <Button type="primary" onClick={handleParse} loading={loading}>
-              执行解析
+            <Button type="primary" onClick={handleIngest} loading={loading}>
+              提交
             </Button>
             <Button onClick={handleReset}>
               重置
@@ -177,8 +184,7 @@ export function RequirementsPage() {
         <Card
           title={
             <span>
-              解析结果 · Designer Review (FR1.1)
-              <DataStatusTag isLive={isLive} pendingFrom={pendingFrom} />
+              解析结果 · Designer Review
             </span>
           }
           extra={

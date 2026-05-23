@@ -98,7 +98,7 @@ export function RiskAnalysisPage() {
     <Space direction="vertical" size={24} className="full-width">
       <div className="stage-toolbar">
         <span>
-          <Title level={4} style={{ margin: 0, display: 'inline' }}>风险矩阵 (FR2.0)</Title>
+          <Title level={4} style={{ margin: 0, display: 'inline' }}>风险矩阵</Title>
           {hasRequirements && <DataStatusTag isLive={riskLive} pendingFrom={riskPending} />}
         </span>
         <Button type="primary" disabled={!hasRequirements} onClick={() => setCurrentStep(2)}>

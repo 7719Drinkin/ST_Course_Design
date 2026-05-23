@@ -135,7 +135,7 @@ export function TestDesignPage() {
     <Space direction="vertical" size={24} className="full-width">
       <div className="stage-toolbar stage-toolbar-wrap">
         <span>
-          <Title level={4} style={{ margin: 0, display: 'inline' }}>生成与复核 (FR3/4/5)</Title>
+          <Title level={4} style={{ margin: 0, display: 'inline' }}>生成与复核</Title>
           {hasRequirements && <DataStatusTag isLive={tcLive} pendingFrom={tcPending} />}
         </span>
         <Space wrap>
@@ -186,7 +186,7 @@ export function TestDesignPage() {
 
       {hasRequirements && <Row gutter={[16, 16]}>
         <Col xs={24} lg={16}>
-          <Card title="测试用例池 · Designer Review (FR3.0)">
+          <Card title="测试用例池 · Designer Review">
             <Spin spinning={fetching}>
               <Table
                 rowKey="test_id"
@@ -304,7 +304,7 @@ export function TestDesignPage() {
         <Col xs={24} lg={8}>
           <Space direction="vertical" size={16} className="full-width">
             <TraceabilityPanel />
-            <Card title="FSM · All States (FR4.0)">
+            <Card title="FSM · All States">
               <DataStatusTag isLive={fsmLive} />
               {fsm?.mermaid?.trim() ? (
                 <MermaidView chart={fsm.mermaid} />
@@ -347,7 +347,7 @@ export function TestDesignPage() {
         </Col>
       </Row>}
 
-      {hasRequirements && <Card title="Oracle · Expected Result 合成 (FR5.0)">
+      {hasRequirements && <Card title="Oracle · Expected Result 合成">
         <Table
           size="small"
           rowKey="test_id"

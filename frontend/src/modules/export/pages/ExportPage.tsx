@@ -97,7 +97,7 @@ export function ExportPage() {
     <Space direction="vertical" size={24} className="full-width">
       <div className="stage-toolbar stage-toolbar-wrap">
         <span>
-          <Title level={4} style={{ margin: 0, display: 'inline' }}>优化与导出 (FR6/7)</Title>
+          <Title level={4} style={{ margin: 0, display: 'inline' }}>优化与导出</Title>
           {hasTestCases && <DataStatusTag isLive={optLive} pendingFrom={optPending} />}
         </span>
         <Space wrap>
@@ -121,10 +121,10 @@ export function ExportPage() {
           <Alert
             type="info"
             showIcon
-            message={`将导出 ${approved.length} 条已批准用例、${riskEntries.length} 条风险分、${coverageItems.length} 个覆盖项，并附带 ${revisions.length} 条修订记录（FR6.0）。`}
+            message={`将导出 ${approved.length} 条已批准用例、${riskEntries.length} 条风险分、${coverageItems.length} 个覆盖项，并附带 ${revisions.length} 条修订记录。`}
           />
 
-          <Card title="套件优化 (FR7.0)">
+          <Card title="套件优化">
             <Space direction="vertical" size={16} className="full-width">
               <Segmented
                 value={mode}
@@ -169,7 +169,7 @@ export function ExportPage() {
       <RevisionPanel />
 
       <Modal
-        title="导出包预览 (FR6.0)"
+        title="导出包预览"
         open={previewOpen}
         onCancel={() => setPreviewOpen(false)}
         footer={[
