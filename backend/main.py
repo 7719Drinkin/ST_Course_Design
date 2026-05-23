@@ -1,9 +1,7 @@
-"""FastAPI entrypoint."""
-
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from backend.app.core.config import settings
+from app.core.config import settings
 
 
 def create_app() -> FastAPI:
@@ -19,7 +17,9 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
-    # Routes will be registered here
+    from app.modules.requirements.router import router as requirements_router
+
+    app.include_router(requirements_router)
     return app
 
 
