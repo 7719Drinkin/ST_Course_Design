@@ -1,6 +1,6 @@
 """测试用例生成服务。
 
-当前是确定性 stub，后续 E 成员可以把 EP / BVA / DT / FSM 算法接到这里。
+当前是确定性占位实现，后续 E 成员可以把 EP / BVA / DT / FSM 算法接到这里。
 """
 
 from __future__ import annotations

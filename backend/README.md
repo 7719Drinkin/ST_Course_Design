@@ -9,8 +9,8 @@
 - 风险分析
 - 覆盖项生成
 - 测试用例生成
-- Interactive Review 修改记录
-- RAG 标准文档检索预留
+- 交互式评审修改记录
+- RAG 标准文档检索与调试
 - JSON / CSV / XLSX 导出
 
 LibraryManagementSystem 是被测对象（AUT），它的 `books / members / borrow / return` 业务接口不属于本工具后端。
@@ -24,21 +24,22 @@ backend/
 ├─ README.md
 ├─ models.py                # 当前所有 Pydantic 模型集中放这里
 ├─ routers/
-│  ├─ design.py             # ingest / parse / risk / coverage / generate
-│  ├─ review.py             # Interactive Review 修改记录
-│  └─ export.py             # json / csv / xlsx 导出
+│  ├─ design.py             # 需求导入 / 解析 / 风险 / 覆盖项 / 用例生成
+│  ├─ review.py             # 交互式评审修改记录
+│  ├─ export.py             # json / csv / xlsx 导出
+│  └─ retrieval.py          # RAG 检索调试接口
 ├─ services/
 │  ├─ parsing.py            # 需求导入与解析
 │  ├─ risk.py               # 风险分析
 │  ├─ coverage.py           # 覆盖项生成
 │  ├─ generation.py         # 测试用例生成
 │  ├─ review.py             # 修改记录管理
-│  └─ exporting.py          # 导出逻辑
+│  ├─ exporting.py          # 导出逻辑
+│  └─ retrieval.py          # RAG 检索服务
 ├─ rag_engine/
 │  ├─ ingest.py             # 标准文档入库
-│  ├─ retrieve.py           # 检索测试标准片段
 │  ├─ vector_store.py       # ChromaDB 封装
-│  └─ prompt_builder.py     # 拼接 Prompt
+│  └─ prompt_builder.py     # 拼接提示词
 ├─ data/
 │  ├─ standards/            # ISTQB / ISO 29119 等测试标准文档
 │  └─ samples/              # AUT SRS / 15 条需求样例
@@ -74,7 +75,7 @@ GET http://localhost:8000/health
 - `POST /coverage`
 - `POST /generate`
 
-Interactive Review：
+交互式评审：
 
 - `GET /review/history`
 - `POST /review/revise`
@@ -86,13 +87,17 @@ Interactive Review：
 - `POST /export/csv`
 - `POST /export/xlsx`
 
-## 当前 stub 状态
+RAG 检索调试：
+
+- `POST /retrieve`
+
+## 当前占位实现状态
 
 - 需求解析是确定性规则，尚未接真实 LLM。
 - 风险分析基于样例优先级，尚未接 RAG 风险依据。
-- 覆盖项和测试用例生成是稳定 stub，后续可接 EP / BVA / DT / FSM 算法。
-- Interactive Review 使用内存列表保存历史，重启后会清空。
-- RAG 已预留 ChromaDB 入库、检索和 Prompt 构建接口，但尚未接完整评测流程。
+- 覆盖项和测试用例生成是稳定占位实现，后续可接 EP / BVA / DT / FSM 算法。
+- 交互式评审使用内存列表保存历史，重启后会清空。
+- RAG 已具备 ChromaDB 入库、metadata 写入、结构化检索和 `/retrieve` 调试接口，但尚未接完整评测流程。
 
 ## 样例需求加载
 
@@ -119,9 +124,10 @@ backend/rag_engine/
 
 1. 把测试标准文档放入 `backend/data/standards/`
 2. 调用 `backend/rag_engine/ingest.py` 入库
-3. 在 `backend/rag_engine/retrieve.py` 中调优检索
-4. 在 `backend/rag_engine/prompt_builder.py` 中维护 parse / risk / generate / oracle prompt
-5. 由 `backend/services/parsing.py`、`backend/services/risk.py`、`backend/services/generation.py` 调用 RAG 能力
+3. 在 `backend/services/retrieval.py` 中调优检索
+4. 在 `backend/routers/retrieval.py` 中维护 `/retrieve` 调试接口
+5. 在 `backend/rag_engine/prompt_builder.py` 中维护解析、风险分析、用例生成和测试 oracle 相关提示词
+6. 由 `backend/services/parsing.py`、`backend/services/risk.py`、`backend/services/generation.py` 调用 RAG 能力
 
 ## 标准文档放置方式
 

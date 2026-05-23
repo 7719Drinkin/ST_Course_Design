@@ -10,7 +10,10 @@ from __future__ import annotations
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from backend.routers import design, export, review
+from backend.routers import design, export, retrieval, review
+from backend.utils.logging import configure_logging
+
+configure_logging()
 
 app = FastAPI(
     title="AutoTestDesign Backend",
@@ -31,6 +34,7 @@ app.add_middleware(
 app.include_router(design.router)
 app.include_router(review.router)
 app.include_router(export.router)
+app.include_router(retrieval.router)
 
 
 @app.get("/health")

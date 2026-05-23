@@ -57,7 +57,7 @@ class CoverageItem(BaseModel):
 
 
 class TestCase(BaseModel):
-    """生成后的测试用例，保留 coverage_item_id 方便 Interactive Review 回溯。"""
+    """生成后的测试用例，保留 coverage_item_id 方便交互式评审回溯。"""
 
     test_id: str
     requirement_id: str
@@ -163,3 +163,26 @@ class ExportRequest(BaseModel):
     coverage_items: list[CoverageItem] = Field(default_factory=list)
     test_cases: list[TestCase] = Field(default_factory=list)
     revisions: list[RevisionRecord] = Field(default_factory=list)
+
+
+class RetrieveRequest(BaseModel):
+    """RAG 检索调试请求。"""
+
+    query: str = Field(..., min_length=1)
+    top_k: int = Field(default=5, ge=1, le=20)
+    where: dict[str, Any] | None = None
+
+
+class RetrieveResult(BaseModel):
+    """单条检索结果，包含片段内容、相似度分数和 metadata。"""
+
+    content: str
+    score: float | None = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class RetrieveResponse(BaseModel):
+    """面向前端调试的结构化检索响应。"""
+
+    query: str
+    results: list[RetrieveResult] = Field(default_factory=list)

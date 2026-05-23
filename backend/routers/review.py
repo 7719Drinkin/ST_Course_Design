@@ -1,4 +1,4 @@
-"""Interactive Review 接口。
+"""交互式评审接口。
 
 用于记录人工修改、查看历史，并为后续增量再生成预留稳定入口。
 """
@@ -27,5 +27,5 @@ def revise(request: ReviseRequest) -> RevisionRecord:
 
 @router.post("/regenerate")
 def regenerate(request: RegenerateRequest) -> dict[str, object]:
-    """根据修改记录触发再生成；当前为稳定 stub。"""
+    """根据修改记录触发再生成；当前为稳定占位实现。"""
     return regenerate_from_revision(request)
