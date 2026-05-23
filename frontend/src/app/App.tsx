@@ -29,12 +29,9 @@ function App() {
     <Layout className="app-shell" hasSider>
       <Sider width={308} theme="light" className="app-sider">
         <div className="brand sider-brand">
-          <div className="brand-mark" aria-hidden="true">
-            AT
-          </div>
           <div>
             <Title level={4} className="brand-title" style={{ margin: 0 }}>
-              AutoTestDesign
+              DeepTest
             </Title>
             <Text className="brand-subtitle">需求驱动质量工作台</Text>
           </div>
