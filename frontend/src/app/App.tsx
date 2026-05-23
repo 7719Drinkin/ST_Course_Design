@@ -87,7 +87,7 @@ function App() {
               <Paragraph>
                 {hasDataset
                   ? `${currentRoute.description}，保持需求、风险、覆盖项、用例与导出包在同一条可审计链路中。`
-                  : '当前没有载入任何需求数据。请粘贴需求文本或上传 CSV / TXT / JSON 文件，系统会在解析完成后动态展示项目源、风险、覆盖项和测试用例。'}
+                  : '当前没有载入任何需求数据。请粘贴需求文本或上传 TXT / MD / PDF / DOCX 文件，系统会在解析完成后动态展示项目源、风险、覆盖项和测试用例。'}
               </Paragraph>
               <div className="hero-stat-grid" aria-label="Pipeline statistics">
                 <div className="hero-stat">
