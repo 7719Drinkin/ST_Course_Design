@@ -17,33 +17,62 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          persist-credentials: true
-
       - name: Enforce main receives only develop
         if: github.event_name == 'pull_request' && github.base_ref == 'main'
         run: |
+          set -euo pipefail
+
           if [ "${{ github.head_ref }}" != "develop" ]; then
             echo "PRs to main must come from develop."
+            echo "Current head branch: ${{ github.head_ref }}"
             exit 1
           fi
+
+          if [ "${{ github.event.pull_request.head.repo.full_name }}" != "${{ github.repository }}" ]; then
+            echo "PRs to main must come from develop in the same repository."
+            echo "Head repo: ${{ github.event.pull_request.head.repo.full_name }}"
+            echo "Base repo: ${{ github.repository }}"
+            exit 1
+          fi
+
+      - name: Manual checkout with authenticated git fetch
+        if: github.event_name == 'pull_request'
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          set -euo pipefail
+
+          git init .
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+          AUTH_HEADER="$(printf 'x-access-token:%s' "$GITHUB_TOKEN" | base64 -w0)"
+
+          echo "Fetching PR head..."
+          git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic ${AUTH_HEADER}" \
+            fetch --no-tags --prune --depth=50 \
+            "https://github.com/${GITHUB_REPOSITORY}.git" \
+            "+refs/pull/${PR_NUMBER}/head:refs/remotes/pull/${PR_NUMBER}/head"
+
+          echo "Checking out PR head..."
+          git checkout --force "refs/remotes/pull/${PR_NUMBER}/head"
+
+          echo "Fetching base branch: ${BASE_REF}"
+          git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic ${AUTH_HEADER}" \
+            fetch --no-tags --prune --depth=50 \
+            "https://github.com/${GITHUB_REPOSITORY}.git" \
+            "+refs/heads/${BASE_REF}:refs/remotes/origin/${BASE_REF}"
+
+          unset AUTH_HEADER
 
       - name: Block local-only directories
         if: github.event_name == 'pull_request'
         env:
           BASE_REF: ${{ github.base_ref }}
-          GITHUB_TOKEN: ${{ github.token }}
-          GITHUB_REPOSITORY: ${{ github.repository }}
         run: |
           set -euo pipefail
-
-          git remote set-url origin "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
-
-          git fetch --no-tags --prune --depth=1 origin \
-            "+refs/heads/${BASE_REF}:refs/remotes/origin/${BASE_REF}"
 
           changed_files="$(git diff --name-only "origin/${BASE_REF}...HEAD")"
 
