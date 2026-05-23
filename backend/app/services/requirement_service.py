@@ -8,10 +8,9 @@ import json
 import re
 from typing import Any
 
-from backend.app.schemas.requirements import ParseResponse, RequirementResponse
 from backend.app.models.common import Technique
 from backend.app.models.requirement import RequirementEntity
-from backend.app.repositories.sample_repository import get_sample_by_id, load_sample_requirements
+from backend.app.schemas.requirements import ParseResponse, RequirementResponse
 
 REQUIRED_PARSE_FIELDS = ("input_fields", "data_ranges", "conditions", "expected_action")
 
@@ -103,15 +102,12 @@ def _parse_text_content(content: str) -> list[RequirementEntity]:
 
 class RequirementService:
     def ingest(self, source_type: str, content: Any) -> tuple[list[RequirementResponse], list[str]]:
-        if source_type == "sample":
-            return [_requirement_response(item) for item in load_sample_requirements()], []
-
         if isinstance(content, list):
             entities = [_entity_from_external(item, index) for index, item in enumerate(content, start=1)]
             return [_requirement_response(item) for item in entities], []
 
         if not isinstance(content, str) or not content.strip():
-            return [], ["requirement content is empty; use source_type=sample to load bundled samples"]
+            return [], ["requirement content is empty"]
 
         json_entities = _try_parse_json_content(content)
         if json_entities is not None:
@@ -125,8 +121,7 @@ class RequirementService:
         return [_requirement_response(item) for item in text_entities], []
 
     def parse(self, requirement_id: str, raw_requirement: str = "") -> ParseResponse:
-        sample = get_sample_by_id(requirement_id)
-        source = sample or RequirementEntity(
+        source = RequirementEntity(
             requirement_id=requirement_id,
             raw_requirement=raw_requirement,
             source="runtime_request",
@@ -135,20 +130,20 @@ class RequirementService:
             input_fields=_infer_input_fields(raw_requirement),
             conditions=_infer_conditions(raw_requirement),
         )
-        missing_fields = [] if sample else [field for field in REQUIRED_PARSE_FIELDS if getattr(source, field) in ("", [])]
-        # TODO(RAG): Replace deterministic parsing with retrieved context and LLM parser output.
+        missing_fields = [field for field in REQUIRED_PARSE_FIELDS if getattr(source, field) in ("", [])]
+        # TODO(RAG): Replace local parsing with retrieved context and LLM parser output.
         return ParseResponse(
             requirement_id=source.requirement_id,
             input_fields=source.input_fields,
             data_ranges=source.data_ranges,
             conditions=source.conditions,
             expected_action=source.expected_action or source.raw_requirement,
-            confidence=0.92 if sample else 0.62,
+            confidence=0.0,
             missing_fields=missing_fields,
-            source_context_ids=[f"AUT_SAMPLE:{source.requirement_id}"] if sample else [],
-            prompt_template_id="PROMPT-FR1-STUB",
+            source_context_ids=[],
+            prompt_template_id="",
             retrieved_context_ids=[],
-            model_name="deterministic-parser-stub",
+            model_name="",
             output_schema_version="parse-v1",
         )
 

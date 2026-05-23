@@ -17,10 +17,10 @@ def export(request: ExportRequest) -> JSONResponse | Response | StreamingRespons
 
 
 @router.get("/export/{export_format}")
-def export_demo(export_format: str) -> JSONResponse | Response | StreamingResponse:
+def export_empty(export_format: str) -> JSONResponse | Response | StreamingResponse:
     if export_format not in {"json", "csv", "xlsx"}:
         raise HTTPException(status_code=400, detail="Unsupported export format")
-    request = export_service.demo_request(export_format)
+    request = export_service.empty_request(export_format)
     return _export_response(request)
 
 
@@ -40,4 +40,3 @@ def _export_response(request: ExportRequest) -> JSONResponse | Response | Stream
             headers={"Content-Disposition": "attachment; filename=autotest_export.xlsx"},
         )
     raise HTTPException(status_code=400, detail="Unsupported export format")
-

@@ -14,8 +14,7 @@ backend/
 |   |-- core/                    # Global config and bootstrap helpers
 |   |-- schemas/                 # Request/response Pydantic models
 |   |-- models/                  # Internal domain models
-|   |-- repositories/            # Data access / sample loading
-|   `-- services/                # Application services and deterministic stubs
+|   `-- services/                # Application services
 |-- rag/                         # RAG owner boundary, placeholder only for now
 `-- agent_algorithm/             # Agent/algorithm owner boundary, placeholder only for now
 ```
@@ -68,4 +67,4 @@ http://localhost:8000/docs
 - `POST /review/revise`
 - `POST /review/regenerate`
 
-All frontend endpoints are implemented with deterministic behavior so the React flow can run before RAG and Agent modules are connected.
+All frontend endpoints are registered. Endpoints whose owners are RAG or Agent return empty or no-op results until those modules are connected.
