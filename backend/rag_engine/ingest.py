@@ -12,7 +12,8 @@ from pathlib import Path
 import re
 from typing import Any
 
-from backend.rag_engine.vector_store import DEFAULT_COLLECTION_NAME, add_documents, delete_documents
+from backend.utils.config import DEFAULT_COLLECTION_NAME
+from backend.rag_engine.vector_store import add_documents, delete_documents
 
 
 # MinerU 输出目录

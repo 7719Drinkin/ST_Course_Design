@@ -1,4 +1,4 @@
-"""后端日志工具。"""
+"""统一日志配置。"""
 
 from __future__ import annotations
 

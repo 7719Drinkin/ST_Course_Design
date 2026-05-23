@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from fastapi import APIRouter
 
-from backend.models import RetrieveRequest, RetrieveResponse
-from backend.services.retrieval import retrieve_chunks
+from backend.schemas.retrieval import RetrieveRequest, RetrieveResponse
+from backend.services.retrieval_service import retrieve_chunks
 
 router = APIRouter(tags=["retrieval"])
 
@@ -16,7 +16,6 @@ def retrieve(request: RetrieveRequest) -> RetrieveResponse:
     results = retrieve_chunks(
         query=request.query,
         top_k=request.top_k,
-        where=request.where,
         debug=True,
     )
     return RetrieveResponse(query=request.query, results=results)
