@@ -1,6 +1,5 @@
 """Optimize & export routes (/optimize, /export)."""
 
-from __future__ import annotations
 
 from fastapi import APIRouter
 
