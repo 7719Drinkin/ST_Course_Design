@@ -15,8 +15,14 @@ jobs:
   validate-pr:
     name: PR Policy Gate
     runs-on: ubuntu-latest
+
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: true
+
       - name: Enforce main receives only develop
         if: github.event_name == 'pull_request' && github.base_ref == 'main'
         run: |
@@ -24,12 +30,30 @@ jobs:
             echo "PRs to main must come from develop."
             exit 1
           fi
+
       - name: Block local-only directories
         if: github.event_name == 'pull_request'
+        env:
+          BASE_REF: ${{ github.base_ref }}
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
         run: |
-          git fetch --no-tags --prune --depth=1 origin "${{ github.base_ref }}:refs/remotes/origin/${{ github.base_ref }}"
-          if git diff --name-only origin/${{ github.base_ref }}...HEAD | grep -E '^(localDocs|external)/'; then
+          set -euo pipefail
+
+          git remote set-url origin "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+
+          git fetch --no-tags --prune --depth=1 origin \
+            "+refs/heads/${BASE_REF}:refs/remotes/origin/${BASE_REF}"
+
+          changed_files="$(git diff --name-only "origin/${BASE_REF}...HEAD")"
+
+          echo "Changed files in this PR:"
+          echo "${changed_files}"
+
+          if echo "${changed_files}" | grep -E '^(localDocs|external)/' > /dev/null; then
             echo "localDocs/ and external/ must not be included in pull requests."
+            echo "Blocked files:"
+            echo "${changed_files}" | grep -E '^(localDocs|external)/'
             exit 1
           fi
       - name: Explain optional issue policy
