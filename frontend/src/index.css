@@ -575,18 +575,6 @@ body::before {
   font-weight: 800;
 }
 
-.upload-hint {
-  color: var(--ink-soft);
-  margin: 0;
-}
-
-.upload-meta {
-  margin-top: 16px;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
 .heatmap {
   display: grid;
   grid-template-columns: repeat(5, minmax(44px, 1fr));
@@ -625,40 +613,6 @@ body::before {
   outline: 2px solid rgba(31, 111, 235, 0.55);
   outline-offset: 2px;
   box-shadow: 0 10px 16px rgba(21, 31, 46, 0.12);
-}
-
-.heatmap-legend {
-  display: flex;
-  justify-content: space-between;
-  margin-top: 12px;
-  color: var(--ink-soft);
-  font-size: 12px;
-}
-
-.oracle-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.opt-meta {
-  margin-top: 12px;
-}
-
-.module-grid {
-  margin-top: 24px;
-}
-
-.module-card {
-  min-height: 200px;
-}
-
-.module-tag {
-  align-self: flex-start;
-}
-
-.module-status {
-  color: var(--ink-soft);
 }
 
 .mermaid-wrap {
@@ -700,11 +654,6 @@ body::before {
   border-color: rgba(15, 118, 110, 0.22);
   background:
     linear-gradient(180deg, #f7fffc, #eefaf5);
-}
-
-.error-list {
-  margin: 0;
-  padding-left: 18px;
 }
 
 .step-footer {
@@ -829,19 +778,12 @@ body::before {
   margin-top: 14px;
 }
 
-.app-footer {
-  background: transparent;
-  text-align: center;
-  padding: 24px 40px;
-  color: var(--ink-soft);
-}
-
 @keyframes ambient-shift {
   0% {
-    background-position: 0% 0%, 0 0;
+    background-position: 0 0, 0 0;
   }
   100% {
-    background-position: 220% 0%, 0 0;
+    background-position: 220% 0, 0 0;
   }
 }
 
