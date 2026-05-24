@@ -6,11 +6,11 @@ import json
 from .schemas import GenerateMetadata, GenerateRequest, GenerateResponse
 
 try:  # Supports tests importing from project root.
-    from backend.agent import generate_blackbox_tests
+    import backend.agent as agent_module
     from backend.agent.tools.blackbox_algorithms import generate_deterministic_blackbox_tests
     from backend.agent.tools.blackbox_algorithms.models import standard_ref_for
 except ModuleNotFoundError:  # Supports uvicorn launched from backend/.
-    from agent import generate_blackbox_tests
+    import agent as agent_module
     from agent.tools.blackbox_algorithms import generate_deterministic_blackbox_tests
     from agent.tools.blackbox_algorithms.models import standard_ref_for
 
@@ -109,7 +109,7 @@ class GenerationService:
         request: GenerateRequest,
     ) -> tuple[dict[str, list[dict[str, Any]]] | None, str | None, list[str]]:
         try:
-            raw = await generate_blackbox_tests(
+            raw = await agent_module.generate_blackbox_tests(
                 request.requirement_text,
                 rag_context=self._rag_context(request),
             )

@@ -28,7 +28,7 @@ def test_deterministic_mode_does_not_call_agent():
     )
 
     with patch.object(
-        generation_service,
+        generation_service.agent_module,
         "generate_blackbox_tests",
         new=AsyncMock(side_effect=AssertionError("Agent should not be called")),
     ):
@@ -49,7 +49,7 @@ def test_agent_mode_does_not_call_deterministic_when_agent_is_valid():
     )
 
     with patch.object(
-        generation_service,
+        generation_service.agent_module,
         "generate_blackbox_tests",
         new=AsyncMock(return_value=_agent_result("REQ-GEN-AGT", "EP")),
     ), patch.object(
@@ -75,7 +75,7 @@ def test_agent_first_uses_agent_when_result_is_valid():
     )
 
     with patch.object(
-        generation_service,
+        generation_service.agent_module,
         "generate_blackbox_tests",
         new=AsyncMock(return_value=_agent_result("REQ-GEN-FIRST", "EP")),
     ), patch.object(
@@ -101,7 +101,7 @@ def test_agent_first_falls_back_when_agent_returns_success_false():
     )
 
     with patch.object(
-        generation_service,
+        generation_service.agent_module,
         "generate_blackbox_tests",
         new=AsyncMock(return_value={"success": False, "error": "agent unavailable"}),
     ):
@@ -124,7 +124,7 @@ def test_agent_mode_rejects_agent_technique_outside_request():
     )
 
     with patch.object(
-        generation_service,
+        generation_service.agent_module,
         "generate_blackbox_tests",
         new=AsyncMock(return_value=_agent_result("REQ-GEN-FILTER", "BVA")),
     ):
@@ -144,7 +144,7 @@ def test_hybrid_merges_agent_and_deterministic_cases():
     )
 
     with patch.object(
-        generation_service,
+        generation_service.agent_module,
         "generate_blackbox_tests",
         new=AsyncMock(return_value=_agent_result("REQ-GEN-HYBRID", "EP")),
     ):

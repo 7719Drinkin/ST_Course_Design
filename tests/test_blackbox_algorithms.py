@@ -176,6 +176,62 @@ def test_orchestrator_filters_techniques_and_uses_unified_output_contract():
     assert {case["technique"] for case in result["data"]["test_cases"]} == {"BVA"}
 
 
+def test_ep_deterministic_algorithm_for_borrow_requirement():
+    result = generate_deterministic_blackbox_tests(
+        requirement_id="REQ-AUT-EP",
+        requirement_text=(
+            "The system shall allow a registered user to borrow a book only if "
+            "the book exists and availableCopies > 0."
+        ),
+        techniques=["EP"],
+    )
+
+    cases = result["data"]["test_cases"]
+    assert cases
+    assert {case["technique"] for case in cases} == {"EP"}
+    assert any(case["input_data"].get("equivalence_class") == "valid" for case in cases)
+    assert any(case["input_data"].get("equivalence_class") == "invalid" for case in cases)
+    assert all(case["coverage_item_id"] for case in cases)
+    assert all(case["standard_ref"] for case in cases)
+
+
+def test_bva_deterministic_algorithm_for_password_length_requirement():
+    result = generate_deterministic_blackbox_tests(
+        requirement_id="REQ-AUT-BVA",
+        requirement_text="The system shall accept password length between 8 and 20 characters.",
+        techniques=["BVA"],
+    )
+
+    cases = result["data"]["test_cases"]
+    assert cases
+    assert {case["technique"] for case in cases} == {"BVA"}
+    assert [
+        case["input_data"]["password.length"]
+        for case in cases
+    ] == [7, 8, 9, 19, 20, 21]
+    assert all(case["expected_result"] for case in cases)
+    assert all(case["standard_ref"] for case in cases)
+
+
+def test_dt_deterministic_algorithm_for_loan_approval_requirement():
+    result = generate_deterministic_blackbox_tests(
+        requirement_id="REQ-AUT-DT",
+        requirement_text=(
+            "The system shall approve a loan only if the user is registered, "
+            "credit score is valid, and requested amount is within limit."
+        ),
+        techniques=["DT"],
+    )
+
+    cases = result["data"]["test_cases"]
+    expected_results = [case["expected_result"].lower() for case in cases]
+    assert cases
+    assert {case["technique"] for case in cases} == {"DT"}
+    assert len(cases) >= 2
+    assert any("approve" in expected_result or "success" in expected_result for expected_result in expected_results)
+    assert any("reject" in expected_result or "failure" in expected_result for expected_result in expected_results)
+
+
 def test_deterministic_output_is_stable_for_same_input():
     first = generate_deterministic_blackbox_tests(
         requirement_id="REQ-STABLE",
