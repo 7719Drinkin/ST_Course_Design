@@ -1,7 +1,8 @@
-"""RAG (Retrieval-Augmented Generation) module — document ingestion, embedding,
-vector storage, and semantic retrieval.
+"""Backend 内部 RAG 模块。
 
-This package is intentionally isolated from `app/`. It can be tested, deployed,
-or replaced independently. `app/` modules consume it through interfaces defined
-here, never depending on its internal implementation.
+agent 层只应从这里导入 RagService，不直接访问 loader/chunker/vector_store。
 """
+
+from backend.rag.rag_service import RagService
+
+__all__ = ["RagService"]
