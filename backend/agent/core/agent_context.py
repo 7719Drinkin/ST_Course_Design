@@ -11,6 +11,7 @@ class AgentContext:
     requirement_text: str | None = None
     requirements: list[dict[str, Any]] = field(default_factory=list)
     analyzed_requirements: list[dict[str, Any]] = field(default_factory=list)
+    risk_analysis: list[dict[str, Any]] = field(default_factory=list)
     coverage_goals: list[dict[str, Any]] = field(default_factory=list)
     coverage_items: list[dict[str, Any]] = field(default_factory=list)
     test_design_specs: list[dict[str, Any]] = field(default_factory=list)

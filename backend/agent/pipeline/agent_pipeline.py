@@ -1,16 +1,19 @@
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
 from typing import Any
 
 from ..core.agent_context import AgentContext
 from ..core.base_agent import BaseAgent
 from ..prompts.prompt_builder import PromptBuilder
 from ..roles.coverage_identification_agent import CoverageIdentificationAgent
+from ..roles.risk_analysis_agent import RiskAnalysisAgent
 from ..roles.requirement_analysis_agent import RequirementAnalysisAgent
 from ..roles.requirement_parse_agent import RequirementParseAgent
 from ..roles.technique_assignment_agent import TechniqueAssignmentAgent
 from ..roles.test_case_draft_agent import TestCaseDraftAgent
 from ..roles.test_design_spec_agent import TestDesignSpecAgent
+from ..tools.final_quality_gate import run_final_quality_gate
 from ..tools.id_normalizer import normalize_all_ids
 from ..tools.llm_client import LLMClient
 from ..tools.rag_client import RAGClient
@@ -18,11 +21,22 @@ from ..tools.traceability_checker import check_traceability
 from .pipeline_state import PipelineState
 
 
+STAGE_TITLES = {
+    "requirement_parse": "\u9700\u6c42\u62c6\u89e3",
+    "requirement_analysis": "\u9700\u6c42\u5206\u6790",
+    "risk_analysis": "\u98ce\u9669\u5206\u6790",
+    "coverage_identification": "\u8986\u76d6\u9879\u8bc6\u522b",
+    "technique_assignment": "\u6d4b\u8bd5\u6280\u672f\u5206\u914d",
+    "test_design_spec": "\u6d4b\u8bd5\u8bbe\u8ba1\u89c4\u683c",
+    "test_case_draft": "\u6d4b\u8bd5\u7528\u4f8b\u8349\u7a3f",
+}
+
+
 class AgentPipeline:
     """黑盒测试设计的内部编排器。
 
     该类保留给 runner 和测试使用；对外推荐使用 generate_blackbox_tests。
-    执行顺序固定为 6 个 Agent，并在设计规格生成前按需获取 RAG 上下文。
+    执行顺序固定为 7 个 Agent，并在设计规格生成前按需获取 RAG 上下文。
     """
 
     def __init__(
@@ -39,6 +53,7 @@ class AgentPipeline:
         self.steps: list[tuple[str, BaseAgent]] = [
             ("requirement_parse", RequirementParseAgent(shared_llm_client, shared_prompt_builder)),
             ("requirement_analysis", RequirementAnalysisAgent(shared_llm_client, shared_prompt_builder)),
+            ("risk_analysis", RiskAnalysisAgent(shared_llm_client, shared_prompt_builder)),
             ("coverage_identification", CoverageIdentificationAgent(shared_llm_client, shared_prompt_builder)),
             ("technique_assignment", TechniqueAssignmentAgent(shared_llm_client, shared_prompt_builder)),
             ("test_design_spec", TestDesignSpecAgent(shared_llm_client, shared_prompt_builder)),
@@ -86,6 +101,62 @@ class AgentPipeline:
             }
 
         return {"success": True, **self._build_result(context)}
+
+    async def run_stream(
+        self,
+        requirement_text: str,
+        rag_context: str | None = None,
+    ) -> AsyncIterator[dict[str, Any]]:
+        """运行完整 pipeline，并在每个阶段完成后产出一条事件字典。"""
+
+        context = AgentContext(requirement_text=requirement_text, rag_context=rag_context)
+        state = PipelineState(context=context)
+
+        for step_name, agent in self.steps:
+            state.current_step = step_name
+            if step_name == "test_design_spec" and not context.rag_context:
+                rag_result = await self._retrieve_rag_context(context, state)
+                if rag_result is not None:
+                    yield self._stage_error_event(
+                        "rag_retrieval",
+                        str(rag_result.get("error", "RAG retrieval failed.")),
+                    )
+                    return
+
+            result = await agent.run(context)
+            if not result.success:
+                state.errors.append({"step": step_name, "error": result.error})
+                yield self._stage_error_event(step_name, str(result.error or "Agent stage failed."))
+                return
+
+            yield {
+                "event": "stage",
+                "data": {
+                    "stage": step_name,
+                    "title": STAGE_TITLES.get(step_name, step_name),
+                    "status": "completed",
+                    "output": result.data,
+                },
+            }
+
+        try:
+            normalize_all_ids(context)
+            check_traceability(context)
+            run_final_quality_gate(self._build_result(context))
+        except Exception as exc:
+            state.errors.append({"step": "post_process", "error": str(exc)})
+            yield self._stage_error_event("post_process", str(exc))
+            return
+
+        yield {
+            "event": "final",
+            "data": {
+                "status": "completed",
+                "final_output": {
+                    "test_cases": context.test_cases,
+                },
+            },
+        }
 
     async def _retrieve_rag_context(
         self,
@@ -157,9 +228,22 @@ class AgentPipeline:
         return {
             "requirements": context.requirements,
             "analyzed_requirements": context.analyzed_requirements,
+            "risk_analysis": context.risk_analysis,
             "coverage_goals": context.coverage_goals,
             "coverage_items": context.coverage_items,
             "test_design_specs": context.test_design_specs,
             "test_cases": context.test_cases,
             "prompts_used": context.prompts_used,
+        }
+
+    def _stage_error_event(self, stage: str, error: str) -> dict[str, Any]:
+        """构造流式 runner 使用的 stage_error 事件载荷。"""
+
+        return {
+            "event": "stage_error",
+            "data": {
+                "stage": stage,
+                "status": "failed",
+                "error": error,
+            },
         }

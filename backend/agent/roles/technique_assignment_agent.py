@@ -17,12 +17,15 @@ class TechniqueAssignmentAgent(BaseAgent):
                 raise ValueError("coverage_goals are required.")
             if not context.analyzed_requirements:
                 raise ValueError("analyzed_requirements are required.")
+            if not context.risk_analysis:
+                raise ValueError("risk_analysis are required.")
 
             result = await self._run_json_prompt(
                 "technique_assignment",
                 {
                     "coverage_goals": context.coverage_goals,
                     "analyzed_requirements": context.analyzed_requirements,
+                    "risk_analysis": context.risk_analysis,
                 },
                 context,
             )

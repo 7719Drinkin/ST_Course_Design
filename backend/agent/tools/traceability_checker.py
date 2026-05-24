@@ -19,6 +19,13 @@ def check_traceability(context: AgentContext) -> None:
             "analyzed_requirement.requirement_id not found in requirements",
         )
 
+    for item in context.risk_analysis:
+        _require_link(
+            item.get("requirement_id"),
+            analyzed_requirement_ids,
+            "risk_analysis.requirement_id not found in analyzed_requirements",
+        )
+
     for item in context.coverage_goals:
         _require_link(
             item.get("requirement_id"),

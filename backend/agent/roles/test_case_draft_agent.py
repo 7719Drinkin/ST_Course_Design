@@ -22,11 +22,16 @@ class TestCaseDraftAgent(BaseAgent):
                     str(test_design_spec.get("coverage_item_id", "")),
                     context.coverage_items,
                 )
+                risk_item = self._find_risk_item(
+                    str(test_design_spec.get("requirement_id", "")),
+                    context.risk_analysis,
+                )
                 result = await self._run_json_prompt(
                     "test_case_draft",
                     {
                         "test_design_spec": test_design_spec,
                         "coverage_item": coverage_item,
+                        "risk_item": risk_item,
                     },
                     context,
                 )
@@ -52,4 +57,12 @@ class TestCaseDraftAgent(BaseAgent):
                 and coverage_item.get("coverage_item_id") == coverage_item_id
             ):
                 return coverage_item
+        return {}
+
+    def _find_risk_item(self, requirement_id: str, risk_analysis: list) -> dict:
+        """根据 requirement_id 查找当前测试设计规格对应的风险优先级。"""
+
+        for risk_item in risk_analysis:
+            if isinstance(risk_item, dict) and risk_item.get("requirement_id") == requirement_id:
+                return risk_item
         return {}

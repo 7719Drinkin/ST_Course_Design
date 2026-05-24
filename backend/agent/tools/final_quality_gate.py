@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from .output_validator import ALLOWED_TECHNIQUES, require_fields
+from .output_validator import ALLOWED_PRIORITIES, ALLOWED_TECHNIQUES, require_fields
 
 
 REQUIRED_TEST_CASE_FIELDS = [
@@ -10,10 +10,12 @@ REQUIRED_TEST_CASE_FIELDS = [
     "spec_id",
     "technique",
     "title",
+    "preconditions",
     "input_data",
     "test_steps",
     "expected_result",
     "standard_ref",
+    "priority",
     "status",
 ]
 
@@ -66,6 +68,8 @@ def run_final_quality_gate(result: dict) -> None:
             raise ValueError(f"test_cases[{index}].status must be Draft.")
         if test_case.get("technique") not in ALLOWED_TECHNIQUES:
             raise ValueError(f"test_cases[{index}].technique must be EP, BVA, or DT.")
+        if test_case.get("priority") not in ALLOWED_PRIORITIES:
+            raise ValueError(f"test_cases[{index}].priority must be P1, P2, or P3.")
         if str(test_case.get("coverage_item_id", "")) not in coverage_item_ids:
             raise ValueError(
                 f"test_cases[{index}].coverage_item_id does not exist in coverage_items."

@@ -4,6 +4,8 @@ from typing import Any
 
 
 ALLOWED_TECHNIQUES = {"EP", "BVA", "DT"}
+ALLOWED_RISK_LEVELS = {"High", "Medium", "Low"}
+ALLOWED_PRIORITIES = {"P1", "P2", "P3"}
 
 
 def require_fields(item: dict, fields: list[str], item_name: str) -> None:
@@ -77,6 +79,44 @@ def validate_coverage_goals(items: list[dict]) -> None:
     )
 
 
+def validate_risk_analysis(items: list[dict]) -> None:
+    """校验 RiskAnalysisAgent 输出的 risk_analysis。"""
+
+    validate_items(
+        items,
+        [
+            "requirement_id",
+            "impact",
+            "likelihood",
+            "risk_score",
+            "risk_level",
+            "test_priority",
+            "risk_reason",
+        ],
+        "risk_analysis",
+    )
+    for index, item in enumerate(items):
+        impact = item.get("impact")
+        likelihood = item.get("likelihood")
+        risk_score = item.get("risk_score")
+        if not isinstance(impact, int) or not 1 <= impact <= 5:
+            raise ValueError(f"risk_analysis[{index}] impact must be an integer from 1 to 5.")
+        if not isinstance(likelihood, int) or not 1 <= likelihood <= 5:
+            raise ValueError(f"risk_analysis[{index}] likelihood must be an integer from 1 to 5.")
+        if risk_score != impact * likelihood:
+            raise ValueError(f"risk_analysis[{index}] risk_score must equal impact * likelihood.")
+        expected_level = "High" if risk_score >= 15 else "Medium" if risk_score >= 8 else "Low"
+        expected_priority = {"High": "P1", "Medium": "P2", "Low": "P3"}[expected_level]
+        if item.get("risk_level") not in ALLOWED_RISK_LEVELS:
+            raise ValueError(f"risk_analysis[{index}] risk_level must be High, Medium, or Low.")
+        if item.get("risk_level") != expected_level:
+            raise ValueError(f"risk_analysis[{index}] risk_level does not match risk_score.")
+        if item.get("test_priority") not in ALLOWED_PRIORITIES:
+            raise ValueError(f"risk_analysis[{index}] test_priority must be P1, P2, or P3.")
+        if item.get("test_priority") != expected_priority:
+            raise ValueError(f"risk_analysis[{index}] test_priority does not match risk_level.")
+
+
 def validate_coverage_items(items: list[dict]) -> None:
     """校验 TechniqueAssignmentAgent 输出的 coverage_items。"""
 
@@ -93,6 +133,7 @@ def validate_coverage_items(items: list[dict]) -> None:
             "input_fields",
             "expected_action",
             "strategy_rationale",
+            "technique_reason",
         ],
         "coverage_items",
     )
@@ -142,6 +183,7 @@ def validate_test_cases(items: list[dict]) -> None:
             "test_steps",
             "expected_result",
             "standard_ref",
+            "priority",
             "status",
         ],
         "test_cases",
@@ -158,6 +200,12 @@ def validate_test_cases(items: list[dict]) -> None:
             preview = repr(item)[:300]
             raise ValueError(
                 f"test_cases[{index}] status must be Draft. Item preview: {preview}"
+            )
+        if item.get("priority") not in ALLOWED_PRIORITIES:
+            preview = repr(item)[:300]
+            raise ValueError(
+                f"test_cases[{index}] priority must be P1, P2, or P3. "
+                f"Item preview: {preview}"
             )
 
 

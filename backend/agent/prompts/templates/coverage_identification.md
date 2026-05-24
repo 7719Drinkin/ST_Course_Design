@@ -8,6 +8,7 @@ Rules:
 - Do not assign test techniques.
 - Do not generate concrete test data.
 - Do not generate test design specifications or test cases.
+- Use risk_analysis to add abnormal paths, boundary situations, and core business scenarios for High risk requirements.
 - Do not invent unsupported behavior.
 - Preserve traceability IDs.
 - Use the input IDs exactly when provided.
@@ -25,6 +26,9 @@ Rules:
 
 Analyzed requirements:
 {analyzed_requirements}
+
+Risk analysis:
+{risk_analysis}
 
 Required JSON structure:
 {

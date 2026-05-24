@@ -6,6 +6,7 @@ from typing import Any
 DATA_KEYS = [
     "requirements",
     "analyzed_requirements",
+    "risk_analysis",
     "coverage_goals",
     "coverage_items",
     "test_design_specs",

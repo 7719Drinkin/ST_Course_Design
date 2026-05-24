@@ -7,6 +7,7 @@ from .output_validator import (
     validate_coverage_goals,
     validate_coverage_items,
     validate_requirements,
+    validate_risk_analysis,
     validate_test_cases,
     validate_test_design_specs,
 )
@@ -27,6 +28,7 @@ __all__ = [
     "validate_coverage_goals",
     "validate_coverage_items",
     "validate_requirements",
+    "validate_risk_analysis",
     "validate_test_cases",
     "validate_test_design_specs",
 ]
