@@ -9,6 +9,7 @@ Rules:
 - Do not re-select technique.
 - Do not re-generate coverage goals.
 - Each test case must preserve requirement_id, coverage_item_id, and spec_id.
+- Set priority from risk_item.test_priority. If it is missing, use P3.
 - expected_result must not be empty.
 - status must always be Draft.
 - Do not invent unsupported behavior.
@@ -32,6 +33,9 @@ Input test design specification:
 Related coverage item:
 {coverage_item}
 
+Related risk item:
+{risk_item}
+
 Required JSON structure:
 {
   "test_cases": [
@@ -47,6 +51,7 @@ Required JSON structure:
       "test_steps": ["Submit a borrow request with availableCopies = 0."],
       "expected_result": "Borrow request is rejected.",
       "standard_ref": "ISO/IEC/IEEE 29119-4 boundary value analysis",
+      "priority": "P1",
       "status": "Draft"
     }
   ]

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+from collections.abc import AsyncIterator
 from typing import Any
 
 from .pipeline.agent_pipeline import AgentPipeline
@@ -40,3 +42,45 @@ async def generate_blackbox_tests(
         return format_success_result(raw_result, rag_context=rag_context)
     except Exception as exc:
         return format_error_result(str(exc), {"failed_step": "agent_runner"})
+
+
+async def generate_blackbox_tests_stream(
+    requirement_text: str,
+    rag_context: str | None = None,
+) -> AsyncIterator[str]:
+    """以 SSE 文本片段流式返回完整 pipeline 的阶段进度。
+
+    调用方仍然只提交一次 requirement_text；后端会连续执行完整流程，
+    并在每个阶段完成后立即产出一条 SSE 事件。
+    """
+
+    if not requirement_text or not requirement_text.strip():
+        yield _format_sse(
+            "stage_error",
+            {
+                "stage": "input_validation",
+                "status": "failed",
+                "error": "requirement_text is required.",
+            },
+        )
+        return
+
+    try:
+        pipeline = AgentPipeline()
+        async for event in pipeline.run_stream(requirement_text, rag_context=rag_context):
+            yield _format_sse(str(event.get("event", "stage")), event.get("data", {}))
+    except Exception as exc:
+        yield _format_sse(
+            "stage_error",
+            {
+                "stage": "agent_runner",
+                "status": "failed",
+                "error": str(exc),
+            },
+        )
+
+
+def _format_sse(event: str, data: dict[str, Any]) -> str:
+    """把单个事件和 JSON 数据格式化为标准 SSE 消息。"""
+
+    return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"

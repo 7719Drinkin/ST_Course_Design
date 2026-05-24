@@ -18,11 +18,16 @@ class TestDesignSpecAgent(BaseAgent):
 
             all_specs = []
             for coverage_item in context.coverage_items:
+                risk_item = self._find_risk_item(
+                    str(coverage_item.get("requirement_id", "")),
+                    context.risk_analysis,
+                )
                 result = await self._run_json_prompt(
                     "test_design_spec",
                     {
                         "coverage_item": coverage_item,
                         "rag_context": context.rag_context or "",
+                        "risk_item": risk_item,
                     },
                     context,
                 )
@@ -37,3 +42,11 @@ class TestDesignSpecAgent(BaseAgent):
             )
         except Exception as exc:
             return AgentResult(success=False, data={}, error=str(exc))
+
+    def _find_risk_item(self, requirement_id: str, risk_analysis: list) -> dict:
+        """根据 requirement_id 查找当前需求对应的风险分析结果。"""
+
+        for risk_item in risk_analysis:
+            if isinstance(risk_item, dict) and risk_item.get("requirement_id") == requirement_id:
+                return risk_item
+        return {}

@@ -15,10 +15,15 @@ class CoverageIdentificationAgent(BaseAgent):
         try:
             if not context.analyzed_requirements:
                 raise ValueError("analyzed_requirements are required.")
+            if not context.risk_analysis:
+                raise ValueError("risk_analysis are required.")
 
             result = await self._run_json_prompt(
                 "coverage_identification",
-                {"analyzed_requirements": context.analyzed_requirements},
+                {
+                    "analyzed_requirements": context.analyzed_requirements,
+                    "risk_analysis": context.risk_analysis,
+                },
                 context,
             )
             coverage_goals = result.get("coverage_goals", [])

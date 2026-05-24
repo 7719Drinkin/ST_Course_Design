@@ -74,6 +74,7 @@ def normalize_all_ids(context: AgentContext) -> None:
 
     req_map = _rewrite_requirement_ids(context.requirements)
     _apply_map(context.analyzed_requirements, "requirement_id", req_map)
+    _apply_map(context.risk_analysis, "requirement_id", req_map)
     _apply_map(context.coverage_goals, "requirement_id", req_map)
     _apply_map(context.coverage_items, "requirement_id", req_map)
     _apply_map(context.test_design_specs, "requirement_id", req_map)

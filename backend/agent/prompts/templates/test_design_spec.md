@@ -10,6 +10,7 @@ Rules:
 - For EP, expand valid and invalid partitions with representative values.
 - For BVA, expand boundary points.
 - For DT, expand decision table rules.
+- If the related risk_item is High, make the design_points more complete while staying within the coverage_item.
 - Do not generate final test cases.
 - Preserve requirement_id and coverage_item_id exactly.
 - Use the input IDs exactly when provided.
@@ -28,6 +29,9 @@ Rules:
 
 Input coverage item:
 {coverage_item}
+
+Related risk item:
+{risk_item}
 
 Reference context:
 {rag_context}
