@@ -51,7 +51,7 @@ Main AUT API areas:
 The AUT requirements and test design baseline are documented in:
 
 ```text
-docs/AUT_SRS_IEEE830_v1.md
+docs/srs/AUT_SRS_IEEE830_v1.md
 tests/data/aut_15_requirements.json
 ```
 
@@ -84,11 +84,11 @@ tests/data/aut_15_requirements.json
 
 | Role | Responsibility |
 |---|---|
-| A | Backend lead: FastAPI gateway, input API, FSM, export, and NFR hardening |
+| A | Backend lead: FastAPI gateway, input API, export, integration wrappers, and NFR hardening |
 | B | AI/RAG lead: knowledge base, retrieval, prompts, risk engine, and oracle support |
 | C | Frontend/UX lead: UI workflow, heatmap, test case table, FSM visualization, and UX polish |
 | D | Test/Integration/Documentation lead: pytest, AUT SRS, requirement samples, RAGAS, A/B evaluation, README, and submission QA |
-| E | Algorithm/backend engineer: EP/BVA/DT generators and suite optimization |
+| E | Algorithm/backend engineer: EP/BVA/DT generators, FSM modeling, path coverage, and suite optimization |
 
 ## Quality Gate
 
@@ -161,8 +161,8 @@ Key shared documents:
 
 | File | Purpose |
 |---|---|
-| `docs/AUT_SRS_IEEE830_v1.md` | AUT Software Requirements Specification |
-| `docs/integration_interfaces.md` | Cross-role integration contracts |
-| `docs/testing_framework_rationale.md` | Testing framework rationale |
-| `docs/ragas_evaluation_plan.md` | RAGAS evaluation plan |
+| `docs/srs/AUT_SRS_IEEE830_v1.md` | AUT Software Requirements Specification |
+| `docs/小组分工_更新版.md` | Role boundaries and cross-role integration ownership |
+| `docs/test/testing_framework_rationale.md` | Testing framework rationale |
+| `docs/RAGAS/ragas_evaluation_plan.md` | RAGAS evaluation plan |
 | `docs/branch_policy.md` | Branch and CI gate policy |

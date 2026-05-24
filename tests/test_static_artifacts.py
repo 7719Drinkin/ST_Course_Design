@@ -9,8 +9,16 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def _first_existing(*relative_paths: str) -> Path:
+    for relative_path in relative_paths:
+        candidate = ROOT / relative_path
+        if candidate.exists():
+            return candidate
+    raise AssertionError(f"None of these paths exist: {relative_paths}")
+
+
 def test_aut_srs_ieee830_exists_and_contains_required_sections():
-    srs_path = ROOT / "docs" / "AUT_SRS_IEEE830_v1.md"
+    srs_path = _first_existing("docs/srs/AUT_SRS_IEEE830_v1.md", "docs/AUT_SRS_IEEE830_v1.md")
 
     assert srs_path.exists()
     content = srs_path.read_text(encoding="utf-8")
@@ -27,7 +35,8 @@ def test_aut_srs_ieee830_exists_and_contains_required_sections():
 
 
 def test_aut_srs_covers_required_aut_modules():
-    content = (ROOT / "docs" / "AUT_SRS_IEEE830_v1.md").read_text(encoding="utf-8")
+    srs_path = _first_existing("docs/srs/AUT_SRS_IEEE830_v1.md", "docs/AUT_SRS_IEEE830_v1.md")
+    content = srs_path.read_text(encoding="utf-8")
 
     for requirement_id in [
         "FR-AUT-BOOK-001",
@@ -56,36 +65,61 @@ def test_15_requirement_samples_cover_teacher_required_techniques():
     assert {"Book CRUD", "Member CRUD", "Borrowing", "Return", "Records", "Error Handling"}.issubset(areas)
 
 
-def test_day3_day7_shared_documents_exist():
+def test_shared_documents_exist():
     required_docs = [
-        "fr1_parse_evaluation_plan.md",
-        "testing_framework_rationale.md",
-        "ragas_evaluation_plan.md",
-        "risk_mitigation_strategy_draft.md",
-        "week1_integration_runbook.md",
-        "day7_document_qa_checklist.md",
-        "integration_interfaces.md",
         "branch_policy.md",
+        "小组分工_更新版.md",
+        "srs/AUT_SRS_IEEE830_v1.md",
+        "srs/fr1_parse_evaluation_plan.md",
+        "test/testing_framework_rationale.md",
+        "RAGAS/ragas_evaluation_plan.md",
     ]
 
     for doc_name in required_docs:
         assert (ROOT / "docs" / doc_name).exists()
 
 
-def test_integration_interface_document_covers_day3_day7_contracts():
-    content = (ROOT / "docs" / "integration_interfaces.md").read_text(encoding="utf-8")
+def test_role_boundary_document_covers_cross_role_contracts():
+    content = (ROOT / "docs" / "小组分工_更新版.md").read_text(encoding="utf-8")
 
     for required_text in [
-        "# Integration Interfaces for Day3-Day7",
+        "# 小组分工（功能边界版）",
+        "交互式测试设计强制链路",
+        "多源需求输入与归一化",
+        "需求结构化解析",
+        "风险评分与测试优先级",
+        "概念",
+        "覆盖项识别",
+        "覆盖策略与方法",
+        "测试用例及其设计的可追溯性",
+        "提示设计",
+        "结果分析",
+        "基于证据的改进",
+        "输出与导出",
+        "NFR（非功能需求）保障",
+        "接口边界总览",
+        "/ingest",
+        "/parse",
+        "/risk",
+        "/coverage",
+        "/strategy",
+        "/generate",
+        "/fsm",
+        "/revisions",
+        "/regenerate",
+        "/analysis",
+        "/export",
         "coverage_item_id",
         "revision_id",
-        "Interactive Review",
-        "Prompt Transparency",
-        "A 后端接口预留",
-        "B RAG / LLM 输出接口预留",
-        "E 测试生成器输出接口预留",
-        "C 前端展示接口预留",
-        "D 验收规则",
+        "设计者",
+        "F11 交互式审查与修订",
+        "F14 基于证据的改进",
+        "A — 后端与接口负责人",
+        "B — RAG（检索增强生成）、LLM（大语言模型）与 Prompt（提示词）负责人",
+        "C — 前端交互与设计者参与负责人",
+        "D — 测试、集成与文档证据负责人",
+        "E — 测试设计算法负责人",
+        "功能点对接总表",
     ]:
         assert required_text in content
 
