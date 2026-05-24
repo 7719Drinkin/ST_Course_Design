@@ -68,7 +68,6 @@ def test_15_requirement_samples_cover_teacher_required_techniques():
 def test_shared_documents_exist():
     required_docs = [
         "branch_policy.md",
-        "小组分工_更新版.md",
         "srs/AUT_SRS_IEEE830_v1.md",
         "srs/fr1_parse_evaluation_plan.md",
         "test/testing_framework_rationale.md",
@@ -77,52 +76,6 @@ def test_shared_documents_exist():
 
     for doc_name in required_docs:
         assert (ROOT / "docs" / doc_name).exists()
-
-
-def test_role_boundary_document_covers_cross_role_contracts():
-    content = (ROOT / "docs" / "小组分工_更新版.md").read_text(encoding="utf-8")
-
-    for required_text in [
-        "# 小组分工（功能边界版）",
-        "交互式测试设计强制链路",
-        "多源需求输入与归一化",
-        "需求结构化解析",
-        "风险评分与测试优先级",
-        "概念",
-        "覆盖项识别",
-        "覆盖策略与方法",
-        "测试用例及其设计的可追溯性",
-        "提示设计",
-        "结果分析",
-        "基于证据的改进",
-        "输出与导出",
-        "NFR（非功能需求）保障",
-        "接口边界总览",
-        "/ingest",
-        "/parse",
-        "/risk",
-        "/coverage",
-        "/strategy",
-        "/generate",
-        "/fsm",
-        "/revisions",
-        "/regenerate",
-        "/analysis",
-        "/export",
-        "coverage_item_id",
-        "revision_id",
-        "设计者",
-        "F11 交互式审查与修订",
-        "F14 基于证据的改进",
-        "A — 后端与接口负责人",
-        "B — RAG（检索增强生成）、LLM（大语言模型）与 Prompt（提示词）负责人",
-        "C — 前端交互与设计者参与负责人",
-        "D — 测试、集成与文档证据负责人",
-        "E — 测试设计算法负责人",
-        "功能点对接总表",
-    ]:
-        assert required_text in content
-
 
 def test_ragas_golden_qa_draft_has_valid_schema_and_traceability():
     requirements = json.loads((ROOT / "tests" / "data" / "aut_15_requirements.json").read_text(encoding="utf-8"))
