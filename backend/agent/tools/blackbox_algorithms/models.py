@@ -8,6 +8,11 @@ import re
 ALLOWED_TECHNIQUES = {"EP", "BVA", "DT"}
 DEFAULT_STANDARD_REF = "ISO/IEC/IEEE 29119-4 / ISTQB Black-box Test Design Techniques"
 DEFAULT_RISK_LEVEL = 3
+STANDARD_REFS = {
+    "EP": "ISO/IEC/IEEE 29119-4 equivalence partitioning",
+    "BVA": "ISO/IEC/IEEE 29119-4 boundary value analysis",
+    "DT": "ISO/IEC/IEEE 29119-4 decision table testing",
+}
 
 
 def safe_id_part(value: str) -> str:
@@ -46,12 +51,21 @@ def make_coverage_item_id(requirement_id: str, technique: str) -> str:
     return f"COV-DET-{safe_id_part(requirement_id)}-{technique}-001"
 
 
-def make_spec_id(requirement_id: str, technique: str) -> str:
-    return f"SPEC-DET-{safe_id_part(requirement_id)}-{technique}-001"
+def make_indexed_coverage_item_id(requirement_id: str, technique: str, index: int) -> str:
+    return f"COV-DET-{safe_id_part(requirement_id)}-{technique}-{index:03d}"
 
 
-def make_test_id(requirement_id: str, index: int) -> str:
-    return f"TC-DET-{safe_id_part(requirement_id)}-{index:03d}"
+def make_spec_id(requirement_id: str, technique: str, index: int = 1) -> str:
+    return f"SPEC-DET-{safe_id_part(requirement_id)}-{technique}-{index:03d}"
+
+
+def make_test_id(requirement_id: str, index: int, technique: str | None = None) -> str:
+    technique_part = f"-{safe_id_part(technique)}" if technique else ""
+    return f"TC-DET-{safe_id_part(requirement_id)}{technique_part}-{index:03d}"
+
+
+def standard_ref_for(technique: str) -> str:
+    return STANDARD_REFS.get(technique, DEFAULT_STANDARD_REF)
 
 
 @dataclass(frozen=True)
@@ -112,7 +126,9 @@ class ParsedRequirement:
     text: str
     input_fields: list[str] = field(default_factory=list)
     data_ranges: list[DataRange] = field(default_factory=list)
+    enum_values: dict[str, list[str]] = field(default_factory=dict)
     conditions: list[str] = field(default_factory=list)
+    business_rules: list[str] = field(default_factory=list)
     expected_action: str = "The system follows the requirement's expected behavior."
     risk_level: int = DEFAULT_RISK_LEVEL
     standard_ref: str = DEFAULT_STANDARD_REF
@@ -144,7 +160,8 @@ class ParsedRequirement:
                 for item in self.data_ranges
             ],
             "conditions": list(self.conditions),
-            "business_rules": list(self.conditions),
+            "business_rules": list(self.business_rules),
+            "enum_values": dict(self.enum_values),
             "expected_action": self.expected_action,
         }
 
@@ -161,6 +178,7 @@ class CoverageItem:
     input_fields: list[str]
     expected_action: str
     strategy_rationale: str
+    standard_ref: str = DEFAULT_STANDARD_REF
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -184,6 +202,7 @@ class CoverageItem:
             "input_fields": list(self.input_fields),
             "expected_action": self.expected_action,
             "strategy_rationale": self.strategy_rationale,
+            "standard_ref": self.standard_ref,
         }
 
 
@@ -219,3 +238,60 @@ class GeneratedTestCase:
             "standard_ref": self.standard_ref,
             "status": self.status,
         }
+
+
+def build_test_design_specs(
+    coverage_items: list[CoverageItem],
+    test_cases: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    specs: list[dict[str, Any]] = []
+    for item in coverage_items:
+        related_cases = [
+            case
+            for case in test_cases
+            if case["coverage_item_id"] == item.coverage_item_id
+        ]
+        if not related_cases:
+            continue
+        specs.append(
+            {
+                "spec_id": related_cases[0]["spec_id"],
+                "coverage_item_id": item.coverage_item_id,
+                "requirement_id": item.requirement_id,
+                "technique": item.technique,
+                "design_points": [
+                    {
+                        "test_id": case["test_id"],
+                        "title": case["title"],
+                        "input_data": case["input_data"],
+                        "expected_result": case["expected_result"],
+                    }
+                    for case in related_cases
+                ],
+                "standard_ref": standard_ref_for(item.technique),
+            }
+        )
+    return specs
+
+
+def build_algorithm_output(
+    coverage_items: list[CoverageItem],
+    test_cases: list[GeneratedTestCase],
+    techniques: list[str],
+    errors: list[str] | None = None,
+) -> dict[str, Any]:
+    case_dicts = [item.to_dict() for item in test_cases]
+    return {
+        "success": True,
+        "data": {
+            "coverage_items": [item.to_dict() for item in coverage_items],
+            "test_design_specs": build_test_design_specs(coverage_items, case_dicts),
+            "test_cases": case_dicts,
+        },
+        "metadata": {
+            "deterministic": True,
+            "techniques": list(techniques),
+            "case_count": len(case_dicts),
+        },
+        "errors": errors or [],
+    }
