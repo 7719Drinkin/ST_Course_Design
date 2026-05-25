@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from backend.rag.chunker import MarkdownChunk
+from .chunker import MarkdownChunk
 
 
 RAG_ROOT = Path(__file__).resolve().parent

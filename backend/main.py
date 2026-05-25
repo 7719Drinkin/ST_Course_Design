@@ -17,11 +17,19 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
-    from app.modules.generation.router import router as generation_router
-    from app.modules.requirements.router import router as requirements_router
+    from app.modules.concept_risk.router import router as concept_risk_router
+    from app.modules.coverage_strategy.router import router as coverage_strategy_router
+    from app.modules.evidence_improve.router import router as evidence_improve_router
+    from app.modules.intake_parse.router import router as intake_parse_router
+    from app.modules.optimize_export.router import router as optimize_export_router
+    from app.modules.test_design.router import router as test_design_router
 
-    app.include_router(generation_router)
-    app.include_router(requirements_router)
+    app.include_router(intake_parse_router)
+    app.include_router(concept_risk_router)
+    app.include_router(coverage_strategy_router)
+    app.include_router(test_design_router)
+    app.include_router(evidence_improve_router)
+    app.include_router(optimize_export_router)
     return app
 
 

@@ -9,7 +9,7 @@ export const workflowRoutes = [
   {
     id: 'intake-parse',
     title: '输入与结构化解析',
-    description: '接收 CSV、TXT、直接输入或需求文档，完成需求整理和结构化解析。',
+    description: '直接输入或需求文档(TXT, MarkDown, PDF, DOCX)，完成需求整理和结构化解析。',
     short: '输入',
     accent: '输入',
     render: () => <RequirementsPage />,

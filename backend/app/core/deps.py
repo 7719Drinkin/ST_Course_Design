@@ -1,12 +1,5 @@
-"""FastAPI dependency injection — single source for all Depends() callables."""
+"""Shared FastAPI dependency placeholders.
 
-from ..modules.generation.service import GenerationService
-from ..modules.requirements.service import RequirementService
-
-
-def get_generation_service() -> GenerationService:
-    return GenerationService()
-
-
-def get_requirement_service() -> RequirementService:
-    return RequirementService()
+Concrete dependencies should live with the six frontend-aligned app modules
+until shared dependencies are actually needed.
+"""
