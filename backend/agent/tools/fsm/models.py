@@ -61,6 +61,9 @@ class FSMCoverageItem:
     coverage_item_id: str
     requirement_id: str
     description: str
+    strategy: str = "ALL_TRANSITIONS"
+    target_type: str = "transition"
+    target_id: str = ""
     covered_states: list[str] = field(default_factory=list)
     covered_transitions: list[str] = field(default_factory=list)
     coverage_type: str = "transition"
@@ -71,6 +74,9 @@ class FSMCoverageItem:
         return {
             "coverage_item_id": self.coverage_item_id,
             "requirement_id": self.requirement_id,
+            "strategy": self.strategy,
+            "target_type": self.target_type,
+            "target_id": self.target_id,
             "description": self.description,
             "covered_states": list(self.covered_states),
             "covered_transitions": list(self.covered_transitions),
