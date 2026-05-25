@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field, validator
 
 
 ALLOWED_GENERATION_MODES = {"agent_first", "agent", "deterministic", "hybrid"}
-ALLOWED_TECHNIQUES = {"EP", "BVA", "DT"}
+ALLOWED_TECHNIQUES = {"EP", "BVA", "DT", "FSM"}
 
 
 class GenerateRequest(BaseModel):
@@ -39,10 +39,16 @@ class GenerateRequest(BaseModel):
             "BOUNDARY_VALUE_ANALYSIS": "BVA",
             "DECISION TABLE": "DT",
             "DECISION_TABLE": "DT",
+            "FINITE STATE MACHINE": "FSM",
+            "FINITE_STATE_MACHINE": "FSM",
+            "STATE TRANSITION": "FSM",
+            "STATE_TRANSITION": "FSM",
         }
         for item in value:
             technique = aliases.get(str(item).strip().upper(), str(item).strip().upper())
-            if technique in ALLOWED_TECHNIQUES and technique not in normalized:
+            if technique not in ALLOWED_TECHNIQUES:
+                raise ValueError("techniques must contain only EP, BVA, DT, or FSM")
+            if technique not in normalized:
                 normalized.append(technique)
         return normalized or ["EP", "BVA", "DT"]
 
@@ -59,11 +65,12 @@ class GenerateMetadata(BaseModel):
 
 class GenerateResponse(BaseModel):
     success: bool
-    data: dict[str, list[dict[str, Any]]] = Field(
+    data: dict[str, Any] = Field(
         default_factory=lambda: {
             "coverage_items": [],
             "test_design_specs": [],
             "test_cases": [],
+            "metadata": {},
         }
     )
     metadata: GenerateMetadata

@@ -40,6 +40,51 @@ def test_deterministic_mode_does_not_call_agent():
     assert {case["technique"] for case in response.data["test_cases"]} == {"BVA"}
 
 
+def test_deterministic_mode_generates_fsm_without_agent():
+    request = GenerateRequest(
+        requirement_id="REQ-GEN-FSM",
+        requirement_text="The system shall create a borrowing record when a member borrows an available book.",
+        generation_mode="deterministic",
+        techniques=["FSM"],
+    )
+
+    with patch.object(
+        generation_service.agent_module,
+        "generate_blackbox_tests",
+        new=AsyncMock(side_effect=AssertionError("Agent should not be called")),
+    ):
+        response = asyncio.run(generation_service.generate_test_cases(request))
+
+    assert response.success is True
+    assert response.metadata.agent_used is False
+    assert response.metadata.deterministic_used is True
+    assert response.data["fsm_model"]["initial_state"] == "FSM-STATE-001"
+    assert {case["technique"] for case in response.data["test_cases"]} == {"FSM"}
+    assert any(case["test_id"].startswith("TC-AUT-FSM-") for case in response.data["test_cases"])
+
+
+def test_deterministic_mode_merges_ep_bva_dt_and_fsm():
+    request = GenerateRequest(
+        requirement_id="REQ-GEN-ALL",
+        requirement_text=(
+            "The system shall allow a registered member to borrow a book when "
+            "age between 18 and 60, book exists, member exists, and availableCopies > 0."
+        ),
+        context={"business_rules": ["Book exists", "Member exists", "availableCopies > 0"]},
+        generation_mode="deterministic",
+        techniques=["EP", "BVA", "DT", "FSM"],
+    )
+
+    response = asyncio.run(generation_service.generate_test_cases(request))
+
+    assert response.success is True
+    assert {"EP", "BVA", "DT", "FSM"}.issubset(
+        {case["technique"] for case in response.data["test_cases"]}
+    )
+    assert response.data["fsm_model"]["transitions"]
+    assert any(item["coverage_item_id"].startswith("COV-AUT-FSM-") for item in response.data["coverage_items"])
+
+
 def test_agent_mode_does_not_call_deterministic_when_agent_is_valid():
     request = GenerateRequest(
         requirement_id="REQ-GEN-AGT",
@@ -90,6 +135,33 @@ def test_agent_first_uses_agent_when_result_is_valid():
     assert response.metadata.deterministic_used is False
     assert response.metadata.fallback_used is False
     assert response.metadata.case_count == 1
+
+
+def test_agent_first_supplements_fsm_when_agent_has_no_fsm_result():
+    request = GenerateRequest(
+        requirement_id="REQ-GEN-FIRST-FSM",
+        requirement_text="The system shall create a borrowing record when a member borrows an available book.",
+        generation_mode="agent_first",
+        techniques=["EP", "FSM"],
+    )
+
+    with patch.object(
+        generation_service.agent_module,
+        "generate_blackbox_tests",
+        new=AsyncMock(return_value=_agent_result("REQ-GEN-FIRST-FSM", "EP")),
+    ), patch.object(
+        generation_service,
+        "generate_deterministic_blackbox_tests",
+        new=Mock(side_effect=AssertionError("Black-box deterministic should not be called")),
+    ):
+        response = asyncio.run(generation_service.generate_test_cases(request))
+
+    assert response.success is True
+    assert response.metadata.agent_used is True
+    assert response.metadata.deterministic_used is True
+    assert response.metadata.fallback_used is False
+    assert {"EP", "FSM"}.issubset({case["technique"] for case in response.data["test_cases"]})
+    assert response.data["fsm_model"]["model_id"] == "FSM-MODEL-001"
 
 
 def test_agent_first_falls_back_when_agent_returns_success_false():
@@ -155,6 +227,45 @@ def test_hybrid_merges_agent_and_deterministic_cases():
     assert response.metadata.deterministic_used is True
     assert response.metadata.fallback_used is False
     assert {"EP", "BVA"}.issubset({case["technique"] for case in response.data["test_cases"]})
+
+
+def test_hybrid_merges_all_blackbox_and_fsm_cases():
+    request = GenerateRequest(
+        requirement_id="REQ-GEN-HYBRID-FSM",
+        requirement_text=(
+            "The system shall allow a registered member to borrow a book when "
+            "age between 18 and 60, book exists, member exists, and availableCopies > 0."
+        ),
+        context={"business_rules": ["Book exists", "Member exists", "availableCopies > 0"]},
+        generation_mode="hybrid",
+        techniques=["EP", "BVA", "DT", "FSM"],
+    )
+
+    with patch.object(
+        generation_service.agent_module,
+        "generate_blackbox_tests",
+        new=AsyncMock(return_value=_agent_result("REQ-GEN-HYBRID-FSM", "EP")),
+    ):
+        response = asyncio.run(generation_service.generate_test_cases(request))
+
+    assert response.success is True
+    assert {"EP", "BVA", "DT", "FSM"}.issubset(
+        {case["technique"] for case in response.data["test_cases"]}
+    )
+    assert response.data["fsm_model"]["model_id"] == "FSM-MODEL-001"
+
+
+def test_generate_request_rejects_invalid_technique():
+    try:
+        GenerateRequest(
+            requirement_id="REQ-GEN-BAD",
+            requirement_text="The system shall do something.",
+            techniques=["EP", "NOPE"],
+        )
+    except ValueError as exc:
+        assert "techniques" in str(exc)
+    else:
+        raise AssertionError("Invalid technique should fail validation.")
 
 
 def _agent_result(requirement_id: str, technique: str) -> dict:

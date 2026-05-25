@@ -148,6 +148,45 @@ def test_generate_deterministic_mode_does_not_call_agent(client: TestClient, mon
     assert {7, 8, 9, 19, 20, 21}.issubset(_numeric_values(payload["data"]["test_cases"]))
 
 
+def test_generate_deterministic_fsm_returns_state_model(client: TestClient, monkeypatch: pytest.MonkeyPatch):
+    async def fake_generate_blackbox_tests(requirement_text: str, rag_context: str | None = None) -> dict:
+        raise AssertionError("Agent must not be called in deterministic mode")
+
+    monkeypatch.setattr(backend_agent, "generate_blackbox_tests", fake_generate_blackbox_tests)
+
+    response = client.post(
+        "/generate",
+        json={
+            "requirement_id": "REQ-AUT-FSM",
+            "requirement_text": "The system shall create a borrowing record when a member borrows an available book.",
+            "techniques": ["FSM"],
+            "generation_mode": "deterministic",
+        },
+    )
+
+    payload = response.json()
+    assert response.status_code == 200
+    assert payload["success"] is True
+    assert payload["metadata"]["agent_used"] is False
+    assert payload["metadata"]["deterministic_used"] is True
+    assert payload["data"]["fsm_model"]["initial_state"] == "FSM-STATE-001"
+    assert {case["technique"] for case in payload["data"]["test_cases"]} == {"FSM"}
+
+
+def test_generate_rejects_invalid_technique(client: TestClient):
+    response = client.post(
+        "/generate",
+        json={
+            "requirement_id": "REQ-AUT-BAD",
+            "requirement_text": "The system shall do something.",
+            "techniques": ["EP", "NOT_A_TECHNIQUE"],
+            "generation_mode": "deterministic",
+        },
+    )
+
+    assert response.status_code == 422
+
+
 def _agent_result(requirement_id: str, technique: str) -> dict:
     return {
         "success": True,
