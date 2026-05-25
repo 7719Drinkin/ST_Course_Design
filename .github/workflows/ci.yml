@@ -118,13 +118,17 @@ jobs:
       - name: Install test dependencies
         run: |
           python -m pip install --upgrade pip
-          if [ -f requirements-dev.txt ]; then
+          if [ -f Testing/requirements-dev.txt ]; then
+            pip install -r Testing/requirements-dev.txt
+          elif [ -f requirements-dev.txt ]; then
             pip install -r requirements-dev.txt
           else
             pip install pytest requests
           fi
-      - name: Run non-live tests
-        run: pytest -m "not aut_api and not ragas and not llm" -q
+      - name: Run non-live tests from Testing directory
+        run: |
+          cd Testing
+          pytest -m "not aut_api and not ragas and not llm" -q
 
   ragas-gate:
     name: RAGAS Gate
@@ -136,9 +140,10 @@ jobs:
           python-version: "3.12"
       - name: Run RAGAS tests only when present
         run: |
-          if find tests -type f -name 'test_*.py' -print0 | xargs -0 grep -E '@pytest\.mark\.ragas|pytestmark.*ragas' >/dev/null; then
+          if find Testing/tests -type f -name 'test_*.py' -print0 | xargs -0 grep -E '@pytest\.mark\.ragas|pytestmark.*ragas' >/dev/null 2>&1; then
             python -m pip install --upgrade pip
-            [ -f requirements-dev.txt ] && pip install -r requirements-dev.txt
+            [ -f Testing/requirements-dev.txt ] && pip install -r Testing/requirements-dev.txt
+            cd Testing
             pytest -m ragas
           else
             echo "No pytest tests marked ragas found; skipping RAGAS gate."
