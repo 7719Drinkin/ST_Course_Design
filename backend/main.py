@@ -17,9 +17,11 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+    from app.modules.fsm.router import router as fsm_router
     from app.modules.generation.router import router as generation_router
     from app.modules.requirements.router import router as requirements_router
 
+    app.include_router(fsm_router)
     app.include_router(generation_router)
     app.include_router(requirements_router)
     return app

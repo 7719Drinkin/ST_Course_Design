@@ -11,6 +11,7 @@ from .coverage import (
     generate_fsm_coverage_items,
 )
 from .models import FSMCoverageItem, FSMModel, FSMTestCase
+from .mermaid import render_mermaid
 from .parser import parse_fsm_from_requirement
 from .path_generator import generate_transition_paths
 from .test_case_generator import generate_fsm_test_cases
@@ -36,6 +37,9 @@ def generate_fsm_tests(
     uncovered_states = find_uncovered_states(model, paths)
     uncovered_transitions = find_uncovered_transitions(model, paths)
     test_design_specs = _build_test_design_specs(model, coverage_items, test_cases)
+    fsm_model = model.to_dict()
+    mermaid = render_mermaid(model)
+    fsm_model["mermaid"] = mermaid
 
     metadata = {
         "deterministic": True,
@@ -53,7 +57,8 @@ def generate_fsm_tests(
     return {
         "success": True,
         "data": {
-            "fsm_model": model.to_dict(),
+            "fsm_model": fsm_model,
+            "mermaid": mermaid,
             "coverage_items": [item.to_dict() for item in coverage_items],
             "test_design_specs": test_design_specs,
             "test_cases": [test_case.to_dict() for test_case in test_cases],

@@ -24,6 +24,22 @@ def test_parse_library_borrowing_requirement_returns_default_lifecycle():
     assert {transition.requirement_id for transition in model.transitions} == {"REQ-AUT-008"}
 
 
+def test_parse_library_flow_contains_success_and_failure_transitions():
+    model = parse_fsm_from_requirement(
+        "REQ-AUT-008",
+        "Borrow succeeds for existing book and member, and fails when the book or member is missing.",
+    )
+
+    transitions = {transition.transition_id: transition for transition in model.transitions}
+
+    assert transitions["FSM-TRANS-001"].source_state == "FSM-STATE-001"
+    assert transitions["FSM-TRANS-001"].target_state == "FSM-STATE-002"
+    assert "availableCopies > 0" in transitions["FSM-TRANS-001"].condition
+    assert "book.id is missing or not found" in transitions["FSM-TRANS-005"].condition
+    assert "member.id is missing or not found" in transitions["FSM-TRANS-006"].condition
+    assert "recordId is not found" in transitions["FSM-TRANS-008"].condition
+
+
 def test_parse_chinese_library_keywords_is_deterministic():
     text = "用户借书成功后，图书状态从可借变为已借；还书后变为已还。"
 
@@ -33,6 +49,16 @@ def test_parse_chinese_library_keywords_is_deterministic():
     assert first.to_dict() == second.to_dict()
     assert [state.name for state in first.states][:3] == ["AVAILABLE", "BORROWED", "RETURNED"]
     assert first.initial_state == "FSM-STATE-001"
+
+
+def test_parse_overdue_keyword_adds_overdue_state_deterministically():
+    model = parse_fsm_from_requirement(
+        "REQ-AUT-OVERDUE",
+        "The borrowing record becomes overdue when the due date passes before return.",
+    )
+
+    assert "OVERDUE" in [state.name for state in model.states]
+    assert any(transition.target_state == "FSM-STATE-004" for transition in model.transitions)
 
 
 def test_parse_unknown_requirement_returns_fallback_fsm():

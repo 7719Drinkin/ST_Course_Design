@@ -18,6 +18,7 @@ from .parser import parse_fsm_from_requirement
 from .path_generator import generate_transition_paths
 from .orchestrator import generate_fsm_tests
 from .test_case_generator import generate_fsm_test_cases
+from .mermaid import render_mermaid
 
 __all__ = [
     "ALL_STATES",
@@ -36,4 +37,5 @@ __all__ = [
     "generate_fsm_coverage_items",
     "generate_transition_paths",
     "parse_fsm_from_requirement",
+    "render_mermaid",
 ]
