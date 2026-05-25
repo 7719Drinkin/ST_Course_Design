@@ -123,21 +123,27 @@ class FSMTestCase:
     expected_results: list[str]
     covered_states: list[str]
     covered_transitions: list[str]
+    traceability: dict[str, Any] = field(default_factory=dict)
     technique: str = field(default=FSM_TECHNIQUE, init=False)
     status: str = "Draft"
     standard_ref: str = FSM_STANDARD_REF
 
     def to_dict(self) -> dict[str, Any]:
+        expected_result = " ".join(self.expected_results)
         return {
             "test_id": self.test_id,
             "requirement_id": self.requirement_id,
+            "coverage_item_id": self.coverage_item_ids[0] if self.coverage_item_ids else "",
             "coverage_item_ids": list(self.coverage_item_ids),
             "title": self.title,
             "preconditions": list(self.preconditions),
             "steps": list(self.steps),
+            "test_steps": list(self.steps),
+            "expected_result": expected_result,
             "expected_results": list(self.expected_results),
             "covered_states": list(self.covered_states),
             "covered_transitions": list(self.covered_transitions),
+            "traceability": dict(self.traceability),
             "technique": self.technique,
             "status": self.status,
             "standard_ref": self.standard_ref,
