@@ -5,17 +5,15 @@ const { Paragraph, Title } = Typography
 
 export function DataStatusTag({
   isLive,
-  pendingFrom,
 }: {
   isLive?: boolean
-  pendingFrom?: string
 }) {
   if (isLive === undefined) return null
-  if (isLive) return <Tag color="green" style={{ marginLeft: 8 }}>Live</Tag>
+  if (isLive) return <Tag color="green" style={{ marginLeft: 8 }}>已连接</Tag>
   return (
-    <Tooltip title={`待对接：${pendingFrom}`}>
+    <Tooltip title="部分服务暂未接入，当前结果可能为空或等待生成。">
       <Tag color="orange" style={{ marginLeft: 8, cursor: 'help' }}>
-        接口待接入
+        服务待接入
       </Tag>
     </Tooltip>
   )

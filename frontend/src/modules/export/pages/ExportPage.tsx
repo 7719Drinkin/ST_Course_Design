@@ -28,7 +28,6 @@ const { Title, Text } = Typography
 export function ExportPage() {
   const [mode, setMode] = useState<OptimizeMode>('risk_priority')
   const [optLive, setOptLive] = useState<boolean>()
-  const [optPending, setOptPending] = useState<string>()
   const [exporting, setExporting] = useState(false)
   const [previewOpen, setPreviewOpen] = useState(false)
 
@@ -53,7 +52,6 @@ export function ExportPage() {
     getOptimizeResult(mode, ids).then((r) => {
       setOptimizeResult(r.data)
       setOptLive(r.isLive)
-      setOptPending(r.pendingFrom)
     })
   }, [mode, approvedIdsKey, allIdsKey, setOptimizeResult])
 
@@ -69,7 +67,7 @@ export function ExportPage() {
 
   const handleExport = async (format: 'json' | 'csv' | 'xlsx') => {
     if (approved.length === 0) {
-      message.warning('请先于 Step 3 批准至少一条测试用例')
+      message.warning('请先批准至少一条测试用例')
       return
     }
     setExporting(true)
@@ -84,9 +82,9 @@ export function ExportPage() {
       a.download = `autotest_export.${format === 'xlsx' ? 'csv' : format}`
       a.click()
       URL.revokeObjectURL(url)
-      message.success(`已导出 ${approved.length} 条 Approved 用例 + 风险分 + 覆盖项`)
+      message.success(`已导出 ${approved.length} 条已通过用例、风险分和覆盖项`)
     } catch {
-      message.error('导出失败，请确认后端已启动 (port 8000)')
+      message.error('导出失败，请稍后重试或检查服务状态。')
     }
     setExporting(false)
   }
@@ -98,15 +96,15 @@ export function ExportPage() {
       <div className="stage-toolbar stage-toolbar-wrap">
         <span>
           <Title level={4} style={{ margin: 0, display: 'inline' }}>优化与导出</Title>
-          {hasTestCases && <DataStatusTag isLive={optLive} pendingFrom={optPending} />}
+          {hasTestCases && <DataStatusTag isLive={optLive} />}
         </span>
         <Space wrap>
           <Button disabled={!hasTestCases} onClick={() => setPreviewOpen(true)}>导出预览</Button>
           <Button disabled={approved.length === 0} loading={exporting} onClick={() => handleExport('csv')}>
-            导出 Approved CSV
+            导出已通过 CSV
           </Button>
           <Button disabled={approved.length === 0} loading={exporting} onClick={() => handleExport('json')}>
-            导出 Approved JSON
+            导出已通过 JSON
           </Button>
         </Space>
       </div>
@@ -131,7 +129,7 @@ export function ExportPage() {
                 onChange={(v) => setMode(v as OptimizeMode)}
                 options={[
                   { label: '风险优先', value: 'risk_priority' },
-                  { label: '标准模式', value: 'normal' },
+                  { label: '集合覆盖', value: 'set_cover' },
                 ]}
               />
               <Spin spinning={!opt}>
@@ -181,7 +179,7 @@ export function ExportPage() {
         width={720}
       >
         <Descriptions size="small" column={2} bordered>
-          <Descriptions.Item label="Approved 用例">{approved.length}</Descriptions.Item>
+            <Descriptions.Item label="已通过用例">{approved.length}</Descriptions.Item>
           <Descriptions.Item label="风险分">{riskEntries.length}</Descriptions.Item>
           <Descriptions.Item label="覆盖项">{coverageItems.length}</Descriptions.Item>
           <Descriptions.Item label="修订记录">{revisions.length}</Descriptions.Item>

@@ -12,12 +12,12 @@ export function ImprovementSummary() {
   const designerAddedCov = coverageItems.filter((c) => c.designer_added).length
   const approved = testCases.filter((t) => t.status === 'Approved').length
   const confirmedReq = requirements.filter((r) => r.designer_confirmed).length
-  const byStep = [0, 1, 2].map((s) => revisions.filter((r) => r.step === s).length)
+  const byStep = [0, 1, 2, 3, 4].map((s) => revisions.filter((r) => r.step === s).length)
 
   if (revisions.length === 0 && designerAddedCov === 0) return null
 
   return (
-    <Card title="改进证据 · Improvement with Evidence (Mainly)" size="small">
+    <Card title="基于证据的改进" size="small">
       <Row gutter={16}>
         <Col xs={12} sm={6}>
           <Statistic title="人工修订" value={revisions.length} />
@@ -33,7 +33,7 @@ export function ImprovementSummary() {
         </Col>
       </Row>
       <Text type="secondary" style={{ fontSize: 12, marginTop: 8, display: 'block' }}>
-        修订分布 — Step1: {byStep[0]} · Step2: {byStep[1]} · Step3: {byStep[2]}
+        修订分布 — 输入 {byStep[0]} · 风险 {byStep[1]} · 覆盖 {byStep[2]} · 用例 {byStep[3]} · 证据 {byStep[4]}
       </Text>
     </Card>
   )

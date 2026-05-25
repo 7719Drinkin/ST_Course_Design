@@ -30,7 +30,6 @@ const GENERATE_SLOW_MS = 2000
 
 export function TestDesignPage() {
   const [tcLive, setTcLive] = useState<boolean>()
-  const [tcPending, setTcPending] = useState<string>()
   const [fsmLive, setFsmLive] = useState<boolean>()
   const [fetching, setFetching] = useState(false)
   const [slowWarning, setSlowWarning] = useState(false)
@@ -76,7 +75,6 @@ export function TestDesignPage() {
         const cases = r.data.map((c) => ({ ...c, status: c.status ?? 'Draft' }))
         setTestCases(cases)
         setTcLive(r.isLive)
-        setTcPending(r.pendingFrom)
         if (cases.length === 0) {
           setOracleResults([])
           return
@@ -118,7 +116,7 @@ export function TestDesignPage() {
   const filteredCases = testCases.filter((tc) => {
     if (statusFilter !== 'all' && tc.status !== statusFilter) return false
     if (techniqueFilter !== 'all' && tc.technique !== techniqueFilter) return false
-    return !(highlightedRequirementId && tc.requirement_id !== highlightedRequirementId);
+    return !(highlightedRequirementId && tc.requirement_id !== highlightedRequirementId)
 
   })
 
@@ -136,7 +134,7 @@ export function TestDesignPage() {
       <div className="stage-toolbar stage-toolbar-wrap">
         <span>
           <Title level={4} style={{ margin: 0, display: 'inline' }}>生成与复核</Title>
-          {hasRequirements && <DataStatusTag isLive={tcLive} pendingFrom={tcPending} />}
+          {hasRequirements && <DataStatusTag isLive={tcLive} />}
         </span>
         <Space wrap>
           {(['EP', 'BVA', 'DT', 'FSM'] as Technique[]).map((t) => (
@@ -160,13 +158,13 @@ export function TestDesignPage() {
             onChange={setStatusFilter}
             options={[
               { value: 'all', label: '全部状态' },
-              { value: 'Draft', label: 'Draft' },
-              { value: 'Approved', label: 'Approved' },
-              { value: 'Rejected', label: 'Rejected' },
+              { value: 'Draft', label: '草稿' },
+              { value: 'Approved', label: '通过' },
+              { value: 'Rejected', label: '驳回' },
             ]}
           />
-          <Button type="primary" disabled={!hasRequirements} onClick={() => setCurrentStep(3)}>
-            下一步: 优化与导出
+          <Button type="primary" disabled={!hasRequirements} onClick={() => setCurrentStep(4)}>
+            下一步: 证据改进
           </Button>
         </Space>
       </div>
@@ -186,7 +184,7 @@ export function TestDesignPage() {
 
       {hasRequirements && <Row gutter={[16, 16]}>
         <Col xs={24} lg={16}>
-          <Card title="测试用例池 · Designer Review">
+          <Card title="测试用例池 · 人工审查">
             <Spin spinning={fetching}>
               <Table
                 rowKey="test_id"
@@ -198,9 +196,9 @@ export function TestDesignPage() {
                   record.requirement_id === highlightedRequirementId ? 'row-highlight' : ''
                 }
                 columns={[
-                  { title: 'ID', dataIndex: 'test_id', width: 120, ellipsis: true },
+                  { title: '用例编号', dataIndex: 'test_id', width: 120, ellipsis: true },
                   {
-                    title: 'Req',
+                    title: '需求',
                     dataIndex: 'requirement_id',
                     width: 108,
                     render: (id: string) => (
@@ -209,9 +207,9 @@ export function TestDesignPage() {
                       </Button>
                     ),
                   },
-                  { title: 'Tech', dataIndex: 'technique', width: 64, render: (v) => <Tag>{v}</Tag> },
+                  { title: '方法', dataIndex: 'technique', width: 64, render: (v) => <Tag>{v}</Tag> },
                   {
-                    title: 'Title',
+                    title: '标题',
                     dataIndex: 'title',
                     width: 140,
                     render: (v, record) => (
@@ -223,7 +221,7 @@ export function TestDesignPage() {
                     ),
                   },
                   {
-                    title: 'Steps',
+                    title: '步骤',
                     dataIndex: 'test_steps',
                     width: 120,
                     render: (steps: string[], record) => (
@@ -239,7 +237,7 @@ export function TestDesignPage() {
                     ),
                   },
                   {
-                    title: 'Expected',
+                    title: '期望结果',
                     dataIndex: 'expected_result',
                     width: 120,
                     render: (v, record) => (
@@ -253,13 +251,13 @@ export function TestDesignPage() {
                     ),
                   },
                   {
-                    title: 'COV',
+                    title: '覆盖项',
                     dataIndex: 'coverage_item_id',
                     width: 130,
                     ellipsis: true,
                   },
                   {
-                    title: 'Std Ref',
+                    title: '依据',
                     dataIndex: 'standard_ref',
                     width: 100,
                     ellipsis: true,
@@ -270,19 +268,23 @@ export function TestDesignPage() {
                     ),
                   },
                   {
-                    title: 'Status',
+                    title: '状态',
                     width: 180,
                     render: (_, record) => (
                       <Space size={4} wrap>
-                        {(['Approved', 'Rejected', 'Draft'] as TestCaseStatus[]).map((s) => (
+                        {[
+                          { value: 'Approved' as TestCaseStatus, label: '通过' },
+                          { value: 'Rejected' as TestCaseStatus, label: '驳回' },
+                          { value: 'Draft' as TestCaseStatus, label: '草稿' },
+                        ].map((statusOption) => (
                           <Button
-                            key={s}
+                            key={statusOption.value}
                             size="small"
-                            type={record.status === s ? 'primary' : 'default'}
-                            danger={s === 'Rejected'}
-                            onClick={() => updateTestCase(record.test_id, { status: s })}
+                            type={record.status === statusOption.value ? 'primary' : 'default'}
+                            danger={statusOption.value === 'Rejected'}
+                            onClick={() => updateTestCase(record.test_id, { status: statusOption.value })}
                           >
-                            {s}
+                            {statusOption.label}
                           </Button>
                         ))}
                       </Space>
@@ -347,26 +349,30 @@ export function TestDesignPage() {
         </Col>
       </Row>}
 
-      {hasRequirements && <Card title="Oracle · Expected Result 合成">
+      {hasRequirements && <Card title="期望结果复核">
         <Table
           size="small"
           rowKey="test_id"
           pagination={false}
           dataSource={oracleResults}
           columns={[
-            { title: 'Test ID', dataIndex: 'test_id', width: 130 },
+            { title: '用例编号', dataIndex: 'test_id', width: 130 },
             {
-              title: 'LLM',
+              title: '智能判断',
               dataIndex: 'llm_verdict',
-              render: (v) => <Tag color={v === 'Pass' ? 'green' : 'red'}>{v}</Tag>,
+              render: (v) => (
+                <Tag color={v === 'Pass' ? 'green' : v === 'Fail' ? 'red' : 'default'}>
+                  {v ?? '—'}
+                </Tag>
+              ),
             },
             {
-              title: 'Rule',
+              title: '规则判断',
               dataIndex: 'rule_verdict',
-              render: (v) => <Tag>{v}</Tag>,
+              render: (v) => <Tag>{v ?? '—'}</Tag>,
             },
             {
-              title: 'Confidence',
+              title: '置信度',
               dataIndex: 'confidence',
               render: (v: number) => (
                 <Tag color={v >= 0.85 ? 'green' : v >= 0.7 ? 'gold' : 'volcano'}>
@@ -375,7 +381,7 @@ export function TestDesignPage() {
               ),
             },
             {
-              title: 'Review',
+              title: '审查',
               render: (_, record) =>
                 record.needs_review ? (
                   <Button
