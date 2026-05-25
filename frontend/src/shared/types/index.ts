@@ -1,25 +1,34 @@
 /**
- * Shared types aligned with docs/integration_interfaces.md (Day3–Day7)
+ * Shared frontend types aligned with docs/前端展示对接文档.md.
  */
 
+export type SourceType = 'csv' | 'txt' | 'direct' | 'srs'
 export type RiskLevel = 'High' | 'Medium' | 'Low'
+export type TestPriority = 'P1' | 'P2' | 'P3'
 export type Technique = 'EP' | 'BVA' | 'DT' | 'FSM'
-type Verdict = 'Pass' | 'Fail'
-export type OptimizeMode = 'risk_priority' | 'normal'
+export type CoverageStatus = 'ai_generated' | 'human_revised' | 'human_added' | 'rejected'
+export type ConceptType = 'object' | 'operation' | 'state' | 'constraint'
 export type TestCaseStatus = 'Draft' | 'Approved' | 'Rejected'
+export type OptimizeMode = 'set_cover' | 'risk_priority'
+export type FsmPathCoverage = 'covered' | 'uncovered' | 'pending'
+export type AnalysisStatus = 'covered' | 'missing' | 'improved' | 'needs_review'
+type Verdict = 'Pass' | 'Fail'
 
-interface ParseTransparency {
-  source_context_ids: string[]
+export interface PromptEvidence {
   prompt_template_id: string
-  retrieved_context_ids: string[]
+  prompt_inputs: Record<string, unknown>
+  source_context_ids: string[]
+  retrieved_context_ids?: string[]
   model_name: string
   output_schema_version: string
+  output_summary?: string
 }
 
-export interface DisplayRequirement extends Partial<ParseTransparency> {
+export interface DisplayRequirement extends Partial<PromptEvidence> {
   requirement_id: string
   raw_requirement: string
   source: string
+  source_type: SourceType
   input_fields: string[]
   data_ranges: string[]
   conditions: string[]
@@ -29,20 +38,57 @@ export interface DisplayRequirement extends Partial<ParseTransparency> {
   designer_confirmed?: boolean
 }
 
+export interface ConceptItem {
+  concept_id: string
+  requirement_id: string
+  name: string
+  type: ConceptType
+  evidence: string
+  designer_validated?: boolean
+}
+
+export interface RiskEntry {
+  requirement_id: string
+  target_id?: string
+  target_type?: 'requirement' | 'coverage_item'
+  impact: number
+  likelihood: number
+  score: number
+  risk_score?: number
+  level: RiskLevel
+  risk_level?: RiskLevel
+  test_priority?: TestPriority
+  reason?: string
+}
+
 export interface CoverageItem {
   coverage_item_id: string
   requirement_id: string
   description: string
+  technique?: Technique
   techniques: Technique[]
+  strategy?: string
   strategy_rationale?: string
+  status: CoverageStatus
+  source?: 'llm' | 'algorithm' | 'designer'
   designer_added?: boolean
 }
 
-export type FsmPathCoverage = 'covered' | 'uncovered' | 'pending'
+export interface StrategyItem {
+  strategy_id: string
+  coverage_item_id: string
+  technique: Technique
+  standard_ref: string
+  reason: string
+  algorithm_params: Record<string, unknown>
+  designer_confirmed?: boolean
+}
 
 export interface TestCase {
   test_id: string
   requirement_id: string
+  coverage_item_id?: string
+  strategy_id?: string
   technique: Technique
   title: string
   preconditions: string[]
@@ -51,8 +97,7 @@ export interface TestCase {
   expected_result: string
   risk_level: RiskLevel
   standard_ref: string
-  status?: TestCaseStatus
-  coverage_item_id?: string
+  status: TestCaseStatus
 }
 
 interface FSMTransition {
@@ -60,6 +105,7 @@ interface FSMTransition {
   to: string
   event: string
   condition: string
+  action?: string
 }
 
 export interface FSMResult {
@@ -74,36 +120,59 @@ export interface FSMResult {
 
 export interface OracleResult {
   test_id: string
-  llm_verdict: Verdict
-  rule_verdict: Verdict
+  expected_result_suggestion?: string
+  explanation?: string
+  llm_verdict?: Verdict
+  rule_verdict?: Verdict
   confidence: number
   needs_review: boolean
 }
 
-export interface RiskEntry {
+export interface RegenerateResult {
+  created: TestCase[]
+  updated: TestCase[]
+  unchanged: string[]
+  deprecated: string[]
+}
+
+export interface AnalysisResult {
   requirement_id: string
-  impact: number
-  likelihood: number
-  score: number
-  level: RiskLevel
+  coverage_item_id: string
+  test_id: string
+  status: AnalysisStatus
+  gap: string
+  improvement: string
 }
 
 export interface OptimizeResult {
   before_count: number
   after_count: number
   mode: OptimizeMode
+  objective?: OptimizeMode
   reduction_rate: number
+  kept_test_ids?: string[]
   removed_test_ids?: string[]
+  coverage_preservation?: number
+  warnings?: string[]
 }
 
 export interface RevisionLog {
   id: string
   step: number
-  entity_type: 'requirement' | 'risk' | 'coverage' | 'test_case'
+  entity_type:
+    | 'requirement'
+    | 'concept'
+    | 'risk'
+    | 'coverage'
+    | 'strategy'
+    | 'test_case'
+    | 'fsm'
+    | 'analysis'
   entity_id: string
   field: string
   old_value: string
   new_value: string
+  reason?: string
   timestamp: string
 }
 
@@ -121,6 +190,8 @@ export interface DashboardSummary {
   total_requirements: number
   generated_tests: number
   high_risk_count: number
+  revision_count: number
+  approved_count: number
   ci_status: string
 }
 

@@ -9,8 +9,16 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def _first_existing(*relative_paths: str) -> Path:
+    for relative_path in relative_paths:
+        candidate = ROOT / relative_path
+        if candidate.exists():
+            return candidate
+    raise AssertionError(f"None of these paths exist: {relative_paths}")
+
+
 def test_aut_srs_ieee830_exists_and_contains_required_sections():
-    srs_path = ROOT / "docs" / "AUT_SRS_IEEE830_v1.md"
+    srs_path = _first_existing("docs/srs/AUT_SRS_IEEE830_v1.md", "docs/AUT_SRS_IEEE830_v1.md")
 
     assert srs_path.exists()
     content = srs_path.read_text(encoding="utf-8")
@@ -27,7 +35,8 @@ def test_aut_srs_ieee830_exists_and_contains_required_sections():
 
 
 def test_aut_srs_covers_required_aut_modules():
-    content = (ROOT / "docs" / "AUT_SRS_IEEE830_v1.md").read_text(encoding="utf-8")
+    srs_path = _first_existing("docs/srs/AUT_SRS_IEEE830_v1.md", "docs/AUT_SRS_IEEE830_v1.md")
+    content = srs_path.read_text(encoding="utf-8")
 
     for requirement_id in [
         "FR-AUT-BOOK-001",
@@ -56,39 +65,17 @@ def test_15_requirement_samples_cover_teacher_required_techniques():
     assert {"Book CRUD", "Member CRUD", "Borrowing", "Return", "Records", "Error Handling"}.issubset(areas)
 
 
-def test_day3_day7_shared_documents_exist():
+def test_shared_documents_exist():
     required_docs = [
-        "fr1_parse_evaluation_plan.md",
-        "testing_framework_rationale.md",
-        "ragas_evaluation_plan.md",
-        "risk_mitigation_strategy_draft.md",
-        "week1_integration_runbook.md",
-        "day7_document_qa_checklist.md",
-        "integration_interfaces.md",
         "branch_policy.md",
+        "srs/AUT_SRS_IEEE830_v1.md",
+        "srs/fr1_parse_evaluation_plan.md",
+        "test/testing_framework_rationale.md",
+        "RAGAS/ragas_evaluation_plan.md",
     ]
 
     for doc_name in required_docs:
         assert (ROOT / "docs" / doc_name).exists()
-
-
-def test_integration_interface_document_covers_day3_day7_contracts():
-    content = (ROOT / "docs" / "integration_interfaces.md").read_text(encoding="utf-8")
-
-    for required_text in [
-        "# Integration Interfaces for Day3-Day7",
-        "coverage_item_id",
-        "revision_id",
-        "Interactive Review",
-        "Prompt Transparency",
-        "A 后端接口预留",
-        "B RAG / LLM 输出接口预留",
-        "E 测试生成器输出接口预留",
-        "C 前端展示接口预留",
-        "D 验收规则",
-    ]:
-        assert required_text in content
-
 
 def test_ragas_golden_qa_draft_has_valid_schema_and_traceability():
     requirements = json.loads((ROOT / "tests" / "data" / "aut_15_requirements.json").read_text(encoding="utf-8"))

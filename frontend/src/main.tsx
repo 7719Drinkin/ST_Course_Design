@@ -15,7 +15,7 @@ createRoot(document.getElementById('root')!).render(
           colorInfo: '#1f6feb',
           borderRadius: 8,
           fontFamily:
-            'Inter, "Microsoft YaHei", "PingFang SC", "Hiragino Sans GB", "Segoe UI", sans-serif',
+            '"IBM Plex Sans", "Noto Sans SC", "Microsoft YaHei", "PingFang SC", "Hiragino Sans GB", sans-serif',
         },
       }}
     >
