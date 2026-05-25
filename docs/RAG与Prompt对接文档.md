@@ -6,6 +6,8 @@
 
 B 的职责是语义理解、知识检索、Prompt 设计、风险评分、Oracle 和 Prompt 透明化。B 不负责前端展示，不负责后端 endpoint 实现，也不负责确定性算法。
 
+`POST /ingest` 与 `POST /ingest/file` 不触发 RAG 或 Prompt。它们只把原始需求文本或文件写入后端暂存区；B 从 `/parse`、`/concepts`、`/risk` 等需要语义理解的阶段开始提供能力。
+
 ## 2. RAG 知识来源
 
 RAG 至少应支持以下知识来源：
@@ -39,14 +41,14 @@ RAG 输出不应直接作为最终测试用例。最终测试用例由 E 的算�
 
 | Prompt 模板 | 触发接口 | 输入 | 输出 | 消费方 |
 |---|---|---|---|---|
-| requirement_parse | `/parse` | Requirement、RAG 上下文 | ParsedRequirement | A、C、D、E |
-| concept_identification | `/concepts` | Requirement、ParsedRequirement、RAG 上下文 | Concept | A、C、D、E |
-| risk_scoring | `/risk` | Requirement 或 CoverageItem、风险矩阵、RAG 证据 | RiskResult | A、C、D、E |
-| coverage_identification | `/coverage` | ParsedRequirement、Concept、RiskResult | 候选 CoverageItem | A、E、C、D |
-| strategy_assignment | `/strategy` | CoverageItem、RiskResult、测试标准上下文 | Strategy 建议 | A、E、C、D |
-| test_case_draft | `/generate` | CoverageItem、Strategy、ParsedRequirement | 测试用例草案和解释 | A、E |
-| oracle_review | `/oracle` | TestCase、Requirement、RAG 上下文 | expected_result 建议 | A、C、D |
-| revision_regeneration | `/regenerate` | RevisionRecord、当前设计状态 | 受影响项说明和再生成建议 | A、E、C、D |
+| requirement_parse | `/parse` | `requirements: array<Requirement>`、RAG 上下文 | `parsed_requirements: array<ParsedRequirement>`、`prompt_evidence: array<PromptEvidence>` | A、C、D、E |
+| concept_identification | `/concepts` | `requirements: array<Requirement>`、`parsed_requirements: array<ParsedRequirement>`、RAG 上下文 | `concepts: array<Concept>`、`prompt_evidence: array<PromptEvidence>` | A、C、D、E |
+| risk_scoring | `/risk` | `targets: array<RiskTarget>`、风险矩阵、RAG 证据 | `risk_results: array<RiskResult>`、`prompt_evidence: array<PromptEvidence>` | A、C、D、E |
+| coverage_identification | `/coverage` | `parsed_requirements`、`concepts`、`risk_results` | 候选 CoverageItem、`prompt_evidence: array<PromptEvidence>` | A、E、C、D |
+| strategy_assignment | `/strategy` | `coverage_items: array<CoverageItem>`、`risk_results: array<RiskResult>`、测试标准上下文 | Strategy 建议、`prompt_evidence: array<PromptEvidence>` | A、E、C、D |
+| test_case_draft | `/generate` | `coverage_items`、`strategies`、`parsed_requirements` | 测试用例草案和解释、可选 `prompt_evidence` | A、E |
+| oracle_review | `/oracle` | `test_cases: array<TestCase>`、`requirements: array<Requirement>`、RAG 上下文 | `oracle_results: array<OracleResult>`、`prompt_evidence: array<PromptEvidence>` | A、C、D |
+| revision_regeneration | `/regenerate` | `revision_id: string`、`current_state: object` | 修改影响说明、`prompt_evidence: array<PromptEvidence>` | A、E、C、D |
 
 每个 Prompt 模板都必须要求模型输出 JSON，不允许只输出自然语言段落。
 
@@ -61,7 +63,8 @@ RAG 输出不应直接作为最终测试用例。最终测试用例由 E 的算�
   "data_ranges": [],
   "conditions": [],
   "expected_action": "",
-  "confidence": 0.0
+  "confidence": 0.0,
+  "missing_fields": []
 }
 ```
 
@@ -79,7 +82,16 @@ RAG 输出不应直接作为最终测试用例。最终测试用例由 E 的算�
 - 状态迁移；
 - 高风险需求。
 
-候选覆盖项由 E 进行去重、编号和结构化，B 不负责最终 `coverage_item_id` 分配。
+候选覆盖项由 E 进行去重、编号和结构化，B 不负责最终 `coverage_item_id` 分配。B 输出的候选覆盖项至少包含：
+
+| 字段 | 类型 | 说明 |
+|---|---|---|
+| `requirement_id` | `string` | 来源需求 |
+| `description` | `string` | 覆盖项描述 |
+| `recommended_technique` | `enum<EP, BVA, DT, FSM>` | 推荐测试技术 |
+| `strategy` | `string` | 覆盖策略建议 |
+| `reason` | `string` | 生成理由 |
+| `evidence` | `array<string>` | RAG 或需求证据 |
 
 ## 7. 覆盖策略建议任务
 
@@ -92,7 +104,15 @@ RAG 输出不应直接作为最终测试用例。最终测试用例由 E 的算�
 | 多条件业务规则 | DT |
 | 借阅、归还等状态变化 | FSM |
 
-输出必须包含 `standard_ref` 和选择理由，供 D 验证策略合理性。
+输出必须包含 `technique`、`standard_ref` 和选择理由，供 D 验证策略合理性。
+
+| 字段 | 类型 | 说明 |
+|---|---|---|
+| `coverage_item_id` | `string` | 覆盖项 ID |
+| `technique` | `enum<EP, BVA, DT, FSM>` | 推荐技术 |
+| `standard_ref` | `string` | 标准依据 |
+| `reason` | `string` | 策略理由 |
+| `algorithm_hint` | `object` | 给 E 的参数提示，后端交给 E 转换为 `algorithm_params` |
 
 ## 8. 风险评估任务
 
@@ -108,7 +128,7 @@ RAG 输出不应直接作为最终测试用例。最终测试用例由 E 的算�
 
 ```json
 {
-  "target_id": "REQ-AUT-*",
+  "target_id": "REQ-AUT-* | FR-AUT-* | COV-AUT-*",
   "target_type": "requirement | coverage_item",
   "impact": 1,
   "likelihood": 1,
@@ -160,7 +180,19 @@ B 输出语义候选
 | 期望结果解释 | `oracle_review` 输出 |
 | 修订影响说明 | `revision_regeneration` 输出 |
 
-## 10. PromptEvidence 要求
+## 10. Oracle 输出字段
+
+`oracle_review` 的输出必须与 `/oracle` 的 `OracleResult` 对齐：
+
+| 字段 | 类型 | 说明 |
+|---|---|---|
+| `test_id` | `string` | 测试用例 ID |
+| `expected_result_suggestion` | `string` | 建议期望结果 |
+| `confidence` | `number` | 0 到 1 |
+| `explanation` | `string` | 判断理由 |
+| `needs_review` | `boolean` | 是否需要人工复核 |
+
+## 11. PromptEvidence 要求
 
 每次 LLM 参与都必须保存：
 
@@ -178,7 +210,7 @@ B 输出语义候选
 
 前端需要展示 PromptEvidence，D 需要用它证明 Prompt 设计和结果分析真实发生。
 
-## 11. RAGAS 与 A/B 对比
+## 12. RAGAS 与 A/B 对比
 
 B 需要提供给 D：
 
@@ -190,4 +222,3 @@ B 需要提供给 D：
 - invalid `standard_ref` 列表。
 
 D 负责运行或汇总 RAGAS 和 A/B 结果，B 负责根据结果调整 RAG 和 Prompt。
-

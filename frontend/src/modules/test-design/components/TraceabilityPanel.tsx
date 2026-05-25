@@ -11,7 +11,7 @@ export function TraceabilityPanel() {
 
   if (!highlightedRequirementId) {
     return (
-      <Card title="可追溯性 (Mainly)" size="small">
+      <Card title="可追溯性" size="small">
         <Text type="secondary" style={{ fontSize: 12 }}>
           在用例表中点击 Req ID，查看需求 → 覆盖项 → 用例链路。
         </Text>
