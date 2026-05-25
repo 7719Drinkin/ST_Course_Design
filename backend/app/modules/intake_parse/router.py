@@ -1,9 +1,9 @@
-"""Step 1 routes: requirement ingest only for now."""
+"""Step 1 routes: requirement ingest and structural parsing."""
 
 from fastapi import APIRouter, Depends, UploadFile
 from fastapi.responses import Response
 
-from .schemas import IngestRequest
+from .schemas import IngestRequest, ParseRequest, ParseResponse
 from .service import IntakeParseService
 
 router = APIRouter(tags=["01 intake-parse"])
@@ -30,3 +30,11 @@ async def ingest_file(
     raw = await file.read()
     svc.ingest_file(raw, file.filename or "upload")
     return Response(status_code=204)
+
+
+@router.post("/parse", response_model=ParseResponse)
+async def parse_requirements(
+    req: ParseRequest,
+    svc: IntakeParseService = Depends(get_intake_parse_service),
+) -> ParseResponse:
+    return svc.parse(req)
