@@ -112,9 +112,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+
       - name: Install test dependencies
         run: |
           python -m pip install --upgrade pip
@@ -125,19 +127,58 @@ jobs:
           else
             pip install pytest requests
           fi
+
+      - name: Link root docs into Testing workspace
+        run: |
+          if [ ! -d docs ]; then
+            echo "Root docs/ directory is missing."
+            exit 1
+          fi
+
+          if [ -e Testing/docs ] && [ ! -L Testing/docs ]; then
+            echo "Testing/docs already exists and is not a symlink; refusing to overwrite."
+            exit 1
+          fi
+
+          rm -f Testing/docs
+          ln -s ../docs Testing/docs
+
+          echo "Testing/docs now points to root docs/:"
+          ls -la Testing/docs
+
       - name: Run non-live tests from Testing directory
         run: |
           cd Testing
           pytest -m "not aut_api and not ragas and not llm" -q
-
+          
   ragas-gate:
     name: RAGAS Gate
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+
+      - name: Link root docs into Testing workspace
+        run: |
+          if [ ! -d docs ]; then
+            echo "Root docs/ directory is missing."
+            exit 1
+          fi
+
+          if [ -e Testing/docs ] && [ ! -L Testing/docs ]; then
+            echo "Testing/docs already exists and is not a symlink; refusing to overwrite."
+            exit 1
+          fi
+
+          rm -f Testing/docs
+          ln -s ../docs Testing/docs
+
+          echo "Testing/docs now points to root docs/:"
+          ls -la Testing/docs
+
       - name: Run RAGAS tests only when present
         run: |
           if find Testing/tests -type f -name 'test_*.py' -print0 | xargs -0 grep -E '@pytest\.mark\.ragas|pytestmark.*ragas' >/dev/null 2>&1; then
