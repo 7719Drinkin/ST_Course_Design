@@ -1,10 +1,9 @@
 from pathlib import Path
 
-from ....common.ingest import ingest_manager
+from common.ingest import ingest_manager
 
 
-class RequirementService:
-
+class IntakeParseService:
     def ingest_text(self, content: str) -> None:
         ingest_manager.ingest(content.encode("utf-8"))
 
