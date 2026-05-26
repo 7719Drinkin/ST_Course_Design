@@ -36,7 +36,7 @@ Related risk item:
 Reference context:
 {rag_context}
 
-Required JSON structure:
+Required JSON structure (each item is a TestDesignSpec):
 {
   "test_design_specs": [
     {

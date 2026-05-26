@@ -4,6 +4,8 @@ import json
 import re
 from typing import Any
 
+from pydantic import BaseModel
+
 from .prompt_registry import PromptRegistry
 
 
@@ -42,8 +44,24 @@ class PromptBuilder:
     def _format_value(self, value: Any) -> str:
         """把 prompt 变量转成适合嵌入 markdown 的字符串。"""
 
+        if isinstance(value, BaseModel):
+            return json.dumps(value.model_dump(), ensure_ascii=False, indent=2)
         if isinstance(value, (dict, list)):
-            return json.dumps(value, ensure_ascii=False, indent=2)
+            return json.dumps(_jsonable(value), ensure_ascii=False, indent=2)
         if value is None:
             return ""
         return str(value)
+
+
+def _jsonable(value: Any) -> Any:
+    """Prompt 边界专用序列化：只把强类型模型显式转成 JSON 数据。"""
+
+    if isinstance(value, BaseModel):
+        return value.model_dump()
+    if isinstance(value, list):
+        return [_jsonable(item) for item in value]
+    if isinstance(value, tuple):
+        return [_jsonable(item) for item in value]
+    if isinstance(value, dict):
+        return {key: _jsonable(item) for key, item in value.items()}
+    return value

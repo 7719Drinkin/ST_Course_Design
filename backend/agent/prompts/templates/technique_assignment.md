@@ -9,6 +9,7 @@ Rules:
 - Use BVA when numeric ranges or boundary conditions are clear.
 - Use DT when multiple boolean conditions or combinations determine the outcome.
 - For High risk goals, create separate EP, BVA, or DT coverage items when multiple techniques are justified.
+- Include strategy_rationale for every coverage item.
 - Include technique_reason for every coverage item.
 - Do not generate FSM.
 - Do not generate concrete test data.
@@ -37,7 +38,7 @@ Analyzed requirements:
 Risk analysis:
 {risk_analysis}
 
-Required JSON structure:
+Required JSON structure (each item is a CoverageItem):
 {
   "coverage_items": [
     {

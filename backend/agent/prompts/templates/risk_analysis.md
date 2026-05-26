@@ -25,7 +25,7 @@ Analyzed requirements:
 Reference context:
 {rag_context}
 
-Required JSON structure:
+Required JSON structure (each item is a RiskAnalysisItem):
 {
   "risk_analysis": [
     {

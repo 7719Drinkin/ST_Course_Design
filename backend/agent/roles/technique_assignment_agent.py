@@ -3,7 +3,7 @@ from __future__ import annotations
 from ..core.agent_context import AgentContext
 from ..core.agent_result import AgentResult
 from ..core.base_agent import BaseAgent
-from ..tools.output_validator import validate_coverage_items
+from ..tools.validation.output_validator import validate_coverage_items
 
 
 class TechniqueAssignmentAgent(BaseAgent):
@@ -20,7 +20,7 @@ class TechniqueAssignmentAgent(BaseAgent):
             if not context.risk_analysis:
                 raise ValueError("risk_analysis are required.")
 
-            result = await self._run_json_prompt(
+            coverage_items = await self._run_validated_json_prompt(
                 "technique_assignment",
                 {
                     "coverage_goals": context.coverage_goals,
@@ -28,9 +28,10 @@ class TechniqueAssignmentAgent(BaseAgent):
                     "risk_analysis": context.risk_analysis,
                 },
                 context,
+                "coverage_items",
+                validate_coverage_items,
             )
-            coverage_items = result.get("coverage_items", [])
-            validate_coverage_items(coverage_items)
+            # TechniqueAssignmentAgent 是唯一产生 technique 和 technique_reason 的角色。
             context.coverage_items = coverage_items
             return AgentResult(success=True, data={"coverage_items": context.coverage_items})
         except Exception as exc:

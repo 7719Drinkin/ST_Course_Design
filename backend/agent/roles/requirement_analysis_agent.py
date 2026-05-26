@@ -3,7 +3,7 @@ from __future__ import annotations
 from ..core.agent_context import AgentContext
 from ..core.agent_result import AgentResult
 from ..core.base_agent import BaseAgent
-from ..tools.output_validator import validate_analyzed_requirements
+from ..tools.validation.output_validator import validate_analyzed_requirements
 
 
 class RequirementAnalysisAgent(BaseAgent):
@@ -16,13 +16,14 @@ class RequirementAnalysisAgent(BaseAgent):
             if not context.requirements:
                 raise ValueError("requirements are required.")
 
-            result = await self._run_json_prompt(
+            analyzed_requirements = await self._run_validated_json_prompt(
                 "requirement_analysis",
                 {"requirements": context.requirements},
                 context,
+                "analyzed_requirements",
+                validate_analyzed_requirements,
             )
-            analyzed_requirements = result.get("analyzed_requirements", [])
-            validate_analyzed_requirements(analyzed_requirements)
+            # 写回上下文前已经完成模型校验，后续风险和覆盖阶段不用再猜字段形状。
             context.analyzed_requirements = analyzed_requirements
             return AgentResult(
                 success=True,

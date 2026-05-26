@@ -36,7 +36,7 @@ Related coverage item:
 Related risk item:
 {risk_item}
 
-Required JSON structure:
+Required JSON structure (each item is a TestCaseDraft):
 {
   "test_cases": [
     {

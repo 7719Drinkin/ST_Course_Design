@@ -3,7 +3,7 @@ from __future__ import annotations
 from ..core.agent_context import AgentContext
 from ..core.agent_result import AgentResult
 from ..core.base_agent import BaseAgent
-from ..tools.output_validator import validate_coverage_goals
+from ..tools.validation.output_validator import validate_coverage_goals
 
 
 class CoverageIdentificationAgent(BaseAgent):
@@ -18,16 +18,17 @@ class CoverageIdentificationAgent(BaseAgent):
             if not context.risk_analysis:
                 raise ValueError("risk_analysis are required.")
 
-            result = await self._run_json_prompt(
+            coverage_goals = await self._run_validated_json_prompt(
                 "coverage_identification",
                 {
                     "analyzed_requirements": context.analyzed_requirements,
                     "risk_analysis": context.risk_analysis,
                 },
                 context,
+                "coverage_goals",
+                validate_coverage_goals,
             )
-            coverage_goals = result.get("coverage_goals", [])
-            validate_coverage_goals(coverage_goals)
+            # 覆盖识别只写 CoverageGoal，不携带 technique，避免过早做策略决策。
             context.coverage_goals = coverage_goals
             return AgentResult(success=True, data={"coverage_goals": context.coverage_goals})
         except Exception as exc:

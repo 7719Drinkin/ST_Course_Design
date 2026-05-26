@@ -25,7 +25,7 @@ Rules:
 AUT requirement text:
 {requirement_text}
 
-Required JSON structure:
+Required JSON structure (each item is a ParsedRequirement):
 {
   "requirements": [
     {
