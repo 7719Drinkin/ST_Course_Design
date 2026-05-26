@@ -1,20 +1,14 @@
 from __future__ import annotations
 
-import sys
 from itertools import product
-from pathlib import Path
 
-BACKEND = Path(__file__).resolve().parents[2] / "backend"
-if str(BACKEND) not in sys.path:
-    sys.path.insert(0, str(BACKEND))
-
-from agent.tools.blackbox_algorithms import (
+from backend.agent.tools.blackbox_algorithms import (
     generate_bva_cases,
     generate_deterministic_blackbox_tests,
     generate_dt_cases,
     generate_ep_cases,
 )
-from agent.tools.output_validator import (
+from backend.agent.tools.output_validator import (
     validate_coverage_items,
     validate_test_cases,
     validate_test_design_specs,

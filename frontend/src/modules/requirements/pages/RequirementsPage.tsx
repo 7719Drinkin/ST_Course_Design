@@ -123,7 +123,7 @@ export function RequirementsPage() {
             <div className="info-panel">
               <Text className="section-title">输入内容</Text>
               <Descriptions size="small" column={1}>
-                <Descriptions.Item label="来源类型">直接输入或需求文档(TXT, MarkDown, PDF, DOCX)</Descriptions.Item>
+                <Descriptions.Item label="来源类型">CSV、TXT、直接输入或需求文档</Descriptions.Item>
                 <Descriptions.Item label="文本内容">可直接粘贴需求描述</Descriptions.Item>
                 <Descriptions.Item label="上传文件">可选择本地需求文件</Descriptions.Item>
               </Descriptions>
