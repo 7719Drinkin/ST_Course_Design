@@ -1,10 +1,11 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import {
   Alert,
   Button,
   Card,
-  Collapse,
+  Descriptions,
   Input,
+  Segmented,
   Space,
   Spin,
   Table,
@@ -15,17 +16,24 @@ import {
 import type { UploadFile } from 'antd'
 import { useAppStore } from '@/app/store/appStore'
 import { ingestFile, ingestText, isAllowedFileType } from '@/modules/requirements/api/requirementsApi'
-import { ImprovementSummary } from '@/shared/components/ImprovementSummary'
 import { RevisionPanel } from '@/shared/components/RevisionPanel'
 import { WorkflowEmptyState } from '@/shared/components/WorkflowFeedback'
-import type { DisplayRequirement } from '@/shared/types'
+import type { DisplayRequirement, SourceType } from '@/shared/types'
 
 const { TextArea } = Input
-const { Text } = Typography
+const { Paragraph, Text } = Typography
+
+const SOURCE_OPTIONS: { label: string; value: SourceType }[] = [
+  { label: '直接输入', value: 'direct' },
+  { label: 'TXT', value: 'txt' },
+  { label: 'CSV', value: 'csv' },
+  { label: '需求文档', value: 'srs' },
+]
 
 export function RequirementsPage() {
   const [fileList, setFileList] = useState<UploadFile[]>([])
   const [pasteText, setPasteText] = useState('')
+  const [sourceType, setSourceType] = useState<SourceType>('direct')
   const [loading, setLoading] = useState(false)
   const [inputError, setInputError] = useState<string>()
   const [successMessage, setSuccessMessage] = useState<string>()
@@ -35,45 +43,56 @@ export function RequirementsPage() {
   const setSourceName = useAppStore((s) => s.setSourceName)
   const updateRequirement = useAppStore((s) => s.updateRequirement)
   const setCurrentStep = useAppStore((s) => s.setCurrentStep)
+  const setConcepts = useAppStore((s) => s.setConcepts)
   const setRiskEntries = useAppStore((s) => s.setRiskEntries)
   const setCoverageItems = useAppStore((s) => s.setCoverageItems)
+  const setStrategies = useAppStore((s) => s.setStrategies)
   const setTestCases = useAppStore((s) => s.setTestCases)
   const setOracleResults = useAppStore((s) => s.setOracleResults)
   const setFsm = useAppStore((s) => s.setFsm)
   const setOptimizeResult = useAppStore((s) => s.setOptimizeResult)
+  const setPromptEvidence = useAppStore((s) => s.setPromptEvidence)
+  const setAnalysisResults = useAppStore((s) => s.setAnalysisResults)
   const setHighlightedRequirementId = useAppStore((s) => s.setHighlightedRequirementId)
+
+  const selectedFile = fileList[0]?.originFileObj as File | undefined
+  const hasInput = Boolean(selectedFile || pasteText.trim())
+
+  const fieldCompleteness = useMemo(() => {
+    if (requirements.length === 0) return 0
+    const complete = requirements.filter((item) => item.missing_fields.length === 0).length
+    return Math.round((complete / requirements.length) * 100)
+  }, [requirements])
 
   const handleIngest = async () => {
     setLoading(true)
     setInputError(undefined)
     setSuccessMessage(undefined)
-    const selectedFile = fileList[0]?.originFileObj as File | undefined
 
     try {
       if (selectedFile) {
         if (!isAllowedFileType(selectedFile.name)) {
           setInputError('不支持的文件类型，仅允许 .txt .md .pdf .docx .doc')
-          setLoading(false)
           return
         }
         await ingestFile(selectedFile)
         setSourceName(selectedFile.name)
-        setSuccessMessage(`"${selectedFile.name}" 上传成功`)
+        setSuccessMessage(`已提交 ${selectedFile.name}，系统正在处理需求内容。`)
       } else {
         const content = pasteText.trim()
         if (!content) {
           setInputError('请先粘贴需求文本，或上传文件后再提交。')
-          setLoading(false)
           return
         }
-        await ingestText(content)
-        setSourceName('粘贴输入')
-        setSuccessMessage('文本上传成功')
+        await ingestText(content, sourceType)
+        setSourceName(`${sourceType} 输入`)
+        setSuccessMessage(`已提交 ${sourceType} 输入，系统正在处理需求内容。`)
       }
     } catch {
-      setInputError('上传失败，请检查后端服务是否启动。')
+      setInputError('提交失败，请检查服务是否可用，或稍后重试。')
+    } finally {
+      setLoading(false)
     }
-    setLoading(false)
   }
 
   const handleReset = () => {
@@ -81,207 +100,237 @@ export function RequirementsPage() {
     setFileList([])
     setSourceName(null)
     setRequirements([])
+    setConcepts([])
     setRiskEntries([])
     setCoverageItems([])
+    setStrategies([])
     setTestCases([])
     setOracleResults([])
     setFsm(null)
     setOptimizeResult(null)
+    setPromptEvidence([])
+    setAnalysisResults([])
     setHighlightedRequirementId(null)
     setInputError(undefined)
     setSuccessMessage(undefined)
   }
 
-  const promptPanel = (record: DisplayRequirement) => {
-    if (!record.prompt_template_id && !record.source_context_ids?.length) return null
-    return (
-      <Collapse
-        size="small"
-        ghost
-        items={[
-          {
-            key: 'prompt',
-            label: 'Prompt 透明度',
-            children: (
-              <Space direction="vertical" size={4} style={{ fontSize: 12 }}>
-                <Text type="secondary">template: {record.prompt_template_id || '—'}</Text>
-                <Text type="secondary">model: {record.model_name || '—'}</Text>
-                <Text type="secondary">schema: {record.output_schema_version || '—'}</Text>
-                <Text type="secondary">
-                  context: {(record.source_context_ids ?? []).join(', ') || '—'}
-                </Text>
-                <Text type="secondary">
-                  retrieved: {(record.retrieved_context_ids ?? []).join(', ') || '—'}
-                </Text>
-              </Space>
-            ),
-          },
-        ]}
-      />
-    )
-  }
-
-  const missingCount = requirements.filter((r) => r.missing_fields.length > 0).length
-
   return (
     <Space direction="vertical" size={24} className="full-width">
-      <Card title="需求输入" className="workflow-card">
-        <Space direction="vertical" size={16} className="full-width">
-          <div>
-            <Text type="secondary">直接粘贴需求文本</Text>
-            <TextArea
-              rows={4}
-              placeholder="粘贴待测系统的需求描述，或上传需求文件后执行解析..."
-              value={pasteText}
-              onChange={(e) => {
-                setPasteText(e.target.value)
-                setInputError(undefined)
-              }}
-              className="top-gap"
+      <div className="workbench-grid workbench-grid-2">
+        <Card title="输入控制台" className="workflow-card">
+          <Space direction="vertical" size={18} className="full-width">
+            <div className="info-panel">
+              <Text className="section-title">输入内容</Text>
+              <Descriptions size="small" column={1}>
+                <Descriptions.Item label="来源类型">CSV、TXT、直接输入或需求文档</Descriptions.Item>
+                <Descriptions.Item label="文本内容">可直接粘贴需求描述</Descriptions.Item>
+                <Descriptions.Item label="上传文件">可选择本地需求文件</Descriptions.Item>
+              </Descriptions>
+            </div>
+
+            <Segmented
+              value={sourceType}
+              onChange={(value) => setSourceType(value as SourceType)}
+              options={SOURCE_OPTIONS}
+              block
             />
-          </div>
-          <Upload.Dragger
-            multiple={false}
-            accept=".txt,.md,.pdf,.docx,.doc"
-            beforeUpload={(file) => {
-              if (!isAllowedFileType(file.name)) {
-                setInputError('不支持的文件类型，仅允许 .txt .md .pdf .docx .doc')
-                return Upload.LIST_IGNORE
-              }
-              setInputError(undefined)
-              return false
-            }}
-            fileList={fileList}
-            onChange={(info) => {
-              setFileList(info.fileList)
-              setSuccessMessage(undefined)
-            }}
-            className="upload-zone"
-          >
-            <p className="upload-title">或上传需求文档 (TXT / MD / PDF / DOCX / DOC)</p>
-          </Upload.Dragger>
-          {inputError && <Alert type="warning" showIcon message={inputError} />}
-          {successMessage && <Alert type="success" showIcon message={successMessage} />}
-          <Space wrap>
-            <Button type="primary" onClick={handleIngest} loading={loading}>
-              提交
-            </Button>
-            <Button onClick={handleReset}>
-              重置
-            </Button>
+
+            <div>
+              <Text strong>直接输入</Text>
+              <TextArea
+                rows={8}
+                placeholder="粘贴待测系统的需求文本。系统会自动整理为可审查的结构化内容。"
+                value={pasteText}
+                onChange={(event) => {
+                  setPasteText(event.target.value)
+                  setInputError(undefined)
+                }}
+                className="top-gap"
+              />
+            </div>
+
+            <Upload.Dragger
+              multiple={false}
+              accept=".txt,.md,.pdf,.docx,.doc"
+              beforeUpload={(file) => {
+                if (!isAllowedFileType(file.name)) {
+                  setInputError('不支持的文件类型，仅允许 .txt .md .pdf .docx .doc')
+                  return Upload.LIST_IGNORE
+                }
+                setInputError(undefined)
+                return false
+              }}
+              fileList={fileList}
+              onChange={(info) => {
+                setFileList(info.fileList.slice(-1))
+                setSuccessMessage(undefined)
+              }}
+              className="upload-zone"
+            >
+              <p className="upload-title">拖入或选择需求文档</p>
+              <p className="upload-hint">TXT / MD / PDF / DOCX / DOC</p>
+            </Upload.Dragger>
+
+            {inputError && <Alert type="warning" showIcon message={inputError} />}
+            {successMessage && <Alert type="success" showIcon message={successMessage} />}
+
+            <Space wrap>
+              <Button type="primary" onClick={handleIngest} loading={loading} disabled={!hasInput}>
+                提交输入
+              </Button>
+              <Button onClick={handleReset}>清空工作台</Button>
+            </Space>
           </Space>
-        </Space>
-      </Card>
+        </Card>
 
-      {requirements.length === 0 && (
+        <Card title="解析目标" className="workflow-card">
+          <Space direction="vertical" size={18} className="full-width">
+            <div className="metric-band">
+              <div>
+                <span>{requirements.length}</span>
+                <Text>需求条目</Text>
+              </div>
+              <div>
+                <span>{fieldCompleteness}%</span>
+                <Text>字段完整度</Text>
+              </div>
+              <div>
+                <span>{requirements.filter((item) => item.designer_confirmed).length}</span>
+                <Text>已确认</Text>
+              </div>
+            </div>
+            <div className="info-panel info-panel-muted">
+              <Text className="section-title">审查重点</Text>
+              <Paragraph>
+                系统会整理输入字段、数据范围、业务条件、期望行为和置信度。设计者可在下表直接修订并确认。
+              </Paragraph>
+            </div>
+            <div className="stage-ladder">
+              <span>需求归一化</span>
+              <span>结构化解析</span>
+              <span>设计者确认</span>
+              <span>进入风险评分</span>
+            </div>
+          </Space>
+        </Card>
+      </div>
+
+      {requirements.length === 0 ? (
         <WorkflowEmptyState
-          title="尚未载入需求数据"
-          description="上传或粘贴真实需求后，这里会展示结构化解析结果、缺失字段和人工确认入口。系统不会再用内置样例填充页面。"
-        />
-      )}
-
-      {requirements.length > 0 && (
-        <Card
-          title={
-            <span>
-              解析结果 · Designer Review
-            </span>
+          title="尚未载入需求"
+          description="提交真实需求后，表格会展示可审查的结构化内容、置信度和待补充信息。"
+          action={
+            <Button type="primary" disabled={!hasInput} onClick={handleIngest} loading={loading}>
+              提交需求
+            </Button>
           }
+        />
+      ) : (
+        <Card
+          title="结构化解析结果 · 人工审查"
           extra={
             <Button type="primary" onClick={() => setCurrentStep(1)}>
-              下一步: 风险评估
+              进入概念与风险
             </Button>
           }
         >
           <Spin spinning={loading}>
-            {missingCount > 0 && (
-              <Alert
-                className="bottom-gap"
-                type="warning"
-                showIcon
-                message={`${missingCount} 条需求存在缺失字段，可在下表直接修订。`}
-              />
-            )}
             <Table
               rowKey="requirement_id"
               size="small"
               pagination={{ pageSize: 8 }}
-              scroll={{ x: 1040 }}
+              scroll={{ x: 1200 }}
               dataSource={requirements}
               columns={[
-                { title: 'ID', dataIndex: 'requirement_id', width: 120 },
+                { title: '需求编号', dataIndex: 'requirement_id', width: 130 },
                 {
-                  title: 'Input Fields',
-                  dataIndex: 'input_fields',
-                  width: 140,
-                  render: (v: string[], record) => (
-                    <Input
-                      size="small"
-                      value={v.join(', ')}
-                      onChange={(e) =>
-                        updateRequirement(record.requirement_id, {
-                          input_fields: e.target.value.split(',').map((s) => s.trim()).filter(Boolean),
-                        })
-                      }
-                    />
-                  ),
-                },
-                {
-                  title: 'Data Ranges',
-                  dataIndex: 'data_ranges',
-                  width: 140,
+                  title: '原始需求',
+                  dataIndex: 'raw_requirement',
+                  width: 260,
                   ellipsis: true,
-                  render: (v: string[]) => v.join('; ') || '—',
                 },
                 {
-                  title: 'Expected Action',
-                  dataIndex: 'expected_action',
-                  render: (v, record) => (
+                  title: '输入字段',
+                  dataIndex: 'input_fields',
+                  width: 180,
+                  render: (value: string[], record: DisplayRequirement) => (
                     <Input
                       size="small"
-                      value={v}
-                      onChange={(e) =>
+                      value={value.join(', ')}
+                      onChange={(event) =>
                         updateRequirement(record.requirement_id, {
-                          expected_action: e.target.value,
+                          input_fields: event.target.value
+                            .split(',')
+                            .map((item) => item.trim())
+                            .filter(Boolean),
                         })
                       }
                     />
                   ),
                 },
                 {
-                  title: 'Conditions',
+                  title: '数据范围',
+                  dataIndex: 'data_ranges',
+                  width: 180,
+                  render: (value: string[]) => value.join('; ') || '—',
+                },
+                {
+                  title: '业务条件',
                   dataIndex: 'conditions',
-                  render: (v: string[], record) => (
+                  width: 220,
+                  render: (value: string[], record: DisplayRequirement) => (
                     <Input
                       size="small"
-                      value={v.join(' · ')}
-                      onChange={(e) =>
+                      value={value.join(' · ')}
+                      onChange={(event) =>
                         updateRequirement(record.requirement_id, {
-                          conditions: e.target.value.split('·').map((s) => s.trim()).filter(Boolean),
+                          conditions: event.target.value
+                            .split('·')
+                            .map((item) => item.trim())
+                            .filter(Boolean),
                         })
                       }
                     />
                   ),
                 },
                 {
-                  title: 'Confidence',
+                  title: '期望行为',
+                  dataIndex: 'expected_action',
+                  width: 220,
+                  render: (value: string, record: DisplayRequirement) => (
+                    <Input
+                      size="small"
+                      value={value}
+                      onChange={(event) =>
+                        updateRequirement(record.requirement_id, {
+                          expected_action: event.target.value,
+                        })
+                      }
+                    />
+                  ),
+                },
+                {
+                  title: '置信度',
                   dataIndex: 'confidence',
-                  width: 90,
-                  render: (v: number) => (
-                    <Tag color={v >= 0.85 ? 'green' : v >= 0.7 ? 'gold' : 'volcano'}>
-                      {v.toFixed(2)}
+                  width: 110,
+                  render: (value: number) => (
+                    <Tag color={value >= 0.85 ? 'green' : value >= 0.7 ? 'gold' : 'volcano'}>
+                      {value.toFixed(2)}
                     </Tag>
                   ),
                 },
                 {
-                  title: 'Prompt',
-                  width: 110,
-                  render: (_, record) => promptPanel(record),
+                  title: '待补充',
+                  dataIndex: 'missing_fields',
+                  width: 160,
+                  render: (value: string[]) =>
+                    value.length > 0 ? value.map((item) => <Tag key={item}>{item}</Tag>) : <Tag color="green">None</Tag>,
                 },
                 {
-                  title: 'Confirmed',
-                  width: 100,
-                  render: (_, record) => (
+                  title: '审查',
+                  width: 120,
+                  render: (_, record: DisplayRequirement) => (
                     <Button
                       size="small"
                       type={record.designer_confirmed ? 'primary' : 'default'}
@@ -302,7 +351,6 @@ export function RequirementsPage() {
         </Card>
       )}
 
-      <ImprovementSummary />
       <RevisionPanel />
     </Space>
   )

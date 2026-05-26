@@ -9,6 +9,7 @@ export async function getOptimizeResult(
   return withLiveFallback(
     () =>
       postJson<OptimizeResult>('/optimize', {
+        objective: mode,
         mode,
         test_ids: testIds ?? [],
       }),
