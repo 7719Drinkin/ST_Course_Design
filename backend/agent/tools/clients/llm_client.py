@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 from typing import Any
 
-from .json_parser import extract_json
+from ..formatting.json_parser import extract_json
 
 
 class LLMClient:

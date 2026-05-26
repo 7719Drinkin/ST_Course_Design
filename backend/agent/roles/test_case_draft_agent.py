@@ -3,7 +3,8 @@ from __future__ import annotations
 from ..core.agent_context import AgentContext
 from ..core.agent_result import AgentResult
 from ..core.base_agent import BaseAgent
-from ..tools.output_validator import validate_test_cases
+from ..core.models import CoverageItem, RiskAnalysisItem
+from ..tools.validation.output_validator import validate_test_cases
 
 
 class TestCaseDraftAgent(BaseAgent):
@@ -19,21 +20,27 @@ class TestCaseDraftAgent(BaseAgent):
             all_cases = []
             for test_design_spec in context.test_design_specs:
                 coverage_item = self._find_coverage_item(
-                    str(test_design_spec.get("coverage_item_id", "")),
+                    test_design_spec.coverage_item_id,
                     context.coverage_items,
                 )
-                result = await self._run_json_prompt(
+                risk_item = self._find_risk_item(
+                    test_design_spec.requirement_id,
+                    context.risk_analysis,
+                )
+                test_cases = await self._run_validated_json_prompt(
                     "test_case_draft",
                     {
                         "test_design_spec": test_design_spec,
                         "coverage_item": coverage_item,
+                        "risk_item": risk_item,
                     },
                     context,
+                    "test_cases",
+                    validate_test_cases,
                 )
-                test_cases = result.get("test_cases", [])
-                validate_test_cases(test_cases)
                 all_cases.extend(test_cases)
 
+            # 所有 spec 都生成成功后再写回，保证 context.test_cases 是完整批次结果。
             context.test_cases = all_cases
             return AgentResult(success=True, data={"test_cases": all_cases})
         except Exception as exc:
@@ -42,14 +49,23 @@ class TestCaseDraftAgent(BaseAgent):
     def _find_coverage_item(
         self,
         coverage_item_id: str,
-        coverage_items: list,
-    ) -> dict:
+        coverage_items: list[CoverageItem],
+    ) -> CoverageItem | dict:
         """按 coverage_item_id 找到当前 spec 对应的 coverage_item。"""
 
         for coverage_item in coverage_items:
-            if (
-                isinstance(coverage_item, dict)
-                and coverage_item.get("coverage_item_id") == coverage_item_id
-            ):
+            if coverage_item.coverage_item_id == coverage_item_id:
                 return coverage_item
+        return {}
+
+    def _find_risk_item(
+        self,
+        requirement_id: str,
+        risk_analysis: list[RiskAnalysisItem],
+    ) -> RiskAnalysisItem | dict:
+        """根据 requirement_id 查找当前测试设计规格对应的风险优先级。"""
+
+        for risk_item in risk_analysis:
+            if risk_item.requirement_id == requirement_id:
+                return risk_item
         return {}

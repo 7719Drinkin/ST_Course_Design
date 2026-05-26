@@ -9,6 +9,7 @@ class PromptRegistry:
     TEMPLATE_FILES = {
         "requirement_parse": "requirement_parse.md",
         "requirement_analysis": "requirement_analysis.md",
+        "risk_analysis": "risk_analysis.md",
         "coverage_identification": "coverage_identification.md",
         "technique_assignment": "technique_assignment.md",
         "test_design_spec": "test_design_spec.md",

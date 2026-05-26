@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from collections.abc import Callable
 from typing import Any
 
 from ..prompts.prompt_builder import PromptBuilder
-from ..tools.llm_client import LLMClient
+from ..tools.clients.llm_client import LLMClient
 from .agent_context import AgentContext
 from .agent_result import AgentResult
+from .models import PromptRecord
 
 
 class BaseAgent(ABC):
@@ -41,14 +43,10 @@ class BaseAgent(ABC):
         再试一次。只重试一次，避免模型异常时无限循环。
         """
 
-        compact_variables = {
-            key: self._compact_json(value)
-            for key, value in variables.items()
-        }
-        prompt = self.prompt_builder.build(prompt_name, compact_variables)
+        prompt = self.prompt_builder.build(prompt_name, variables)
         if record_prompt:
             context.prompts_used.append(
-                self._build_prompt_record(prompt_name, prompt, compact_variables)
+                self._build_prompt_record(prompt_name, prompt, variables)
             )
         try:
             return await self.llm_client.generate_json(prompt)
@@ -63,25 +61,37 @@ class BaseAgent(ABC):
                     self._build_prompt_record(
                         f"{prompt_name}_repair",
                         repair_prompt,
-                        compact_variables,
+                        variables,
                     )
                 )
             return await self.llm_client.generate_json(repair_prompt)
 
-    def _compact_json(self, value: Any) -> Any:
-        """预留的 prompt 压缩入口，目前保持原值不变。"""
+    async def _run_validated_json_prompt(
+        self,
+        prompt_name: str,
+        variables: dict[str, Any],
+        context: AgentContext,
+        output_key: str,
+        validator: Callable[[Any], Any],
+    ) -> Any:
+        """执行 Prompt 并立即把 LLM JSON 转成强类型模型。
 
-        return value
+        这个方法把“LLM 原始 dict -> Pydantic 模型”的边界固定在 role agent 内，
+        后续 pipeline 和 finalizer 就不会再接触裸 dict。
+        """
+
+        payload = await self._run_json_prompt(prompt_name, variables, context)
+        return validator(payload.get(output_key))
 
     def _build_prompt_record(
         self,
         prompt_name: str,
         prompt: str,
         variables: dict[str, Any],
-    ) -> dict[str, str]:
+    ) -> PromptRecord:
         """生成 prompts_used 记录，并尽量附上 item/spec 追踪信息。"""
 
-        record = {"name": prompt_name, "prompt": prompt}
+        record: dict[str, str] = {"name": prompt_name, "prompt": prompt}
 
         coverage_item = variables.get("coverage_item")
         if isinstance(coverage_item, dict):
@@ -95,4 +105,4 @@ class BaseAgent(ABC):
             if spec_id:
                 record["spec_id"] = str(spec_id)
 
-        return record
+        return PromptRecord.model_validate(record)

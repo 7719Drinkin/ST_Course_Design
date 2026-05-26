@@ -3,7 +3,7 @@ from __future__ import annotations
 from ..core.agent_context import AgentContext
 from ..core.agent_result import AgentResult
 from ..core.base_agent import BaseAgent
-from ..tools.output_validator import validate_requirements
+from ..tools.validation.output_validator import validate_requirements
 
 
 class RequirementParseAgent(BaseAgent):
@@ -16,13 +16,14 @@ class RequirementParseAgent(BaseAgent):
             if not context.requirement_text or not context.requirement_text.strip():
                 raise ValueError("requirement_text is required.")
 
-            result = await self._run_json_prompt(
+            requirements = await self._run_validated_json_prompt(
                 "requirement_parse",
                 {"requirement_text": context.requirement_text},
                 context,
+                "requirements",
+                validate_requirements,
             )
-            requirements = result.get("requirements", [])
-            validate_requirements(requirements)
+            # 阶段结果写回 AgentContext，后续 role 只读取强类型 ParsedRequirement。
             context.requirements = requirements
             return AgentResult(success=True, data={"requirements": context.requirements})
         except Exception as exc:

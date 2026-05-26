@@ -3,11 +3,28 @@
 from __future__ import annotations
 
 import os
+import sys
 import uuid
 from datetime import date, timedelta
+from pathlib import Path
 
 import pytest
 import requests
+
+# Make project root and backend importable so tests can import from backend.*
+_PROJECT_ROOT = Path(__file__).resolve().parents[2]
+if str(_PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(_PROJECT_ROOT))
+_BACKEND = _PROJECT_ROOT / "backend"
+if str(_BACKEND) not in sys.path:
+    sys.path.insert(0, str(_BACKEND))
+
+
+def pytest_configure(config: pytest.Config) -> None:
+    config.addinivalue_line("markers", "aut_api: tests that require the live AUT service")
+    config.addinivalue_line("markers", "integration: integration tests")
+    config.addinivalue_line("markers", "ragas: RAGAS evaluation tests")
+    config.addinivalue_line("markers", "llm: tests that require LLM access")
 
 
 DEFAULT_AUT_BASE_URL = "http://localhost:8080"

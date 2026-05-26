@@ -6,8 +6,10 @@ Identify which business situations should be tested from the analyzed requiremen
 Rules:
 - Identify coverage goals only.
 - Do not assign test techniques.
+- Do not output technique, strategy_rationale, or technique_reason.
 - Do not generate concrete test data.
 - Do not generate test design specifications or test cases.
+- Use risk_analysis to add abnormal paths, boundary situations, and core business scenarios for High risk requirements.
 - Do not invent unsupported behavior.
 - Preserve traceability IDs.
 - Use the input IDs exactly when provided.
@@ -26,7 +28,10 @@ Rules:
 Analyzed requirements:
 {analyzed_requirements}
 
-Required JSON structure:
+Risk analysis:
+{risk_analysis}
+
+Required JSON structure (each item is a CoverageGoal):
 {
   "coverage_goals": [
     {

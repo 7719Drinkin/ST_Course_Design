@@ -39,13 +39,28 @@ def test_app_modules_match_frontend_six_step_layout():
     assert modules.isdisjoint(REMOVED_LEGACY_MODULES)
 
 
-def test_only_ingest_routes_are_registered_for_now():
+def test_all_six_module_routes_are_registered():
     app = create_app()
     paths = {route.path for route in app.routes if hasattr(route, "methods")}
 
+    # intake_parse
     assert "/ingest" in paths
     assert "/ingest/file" in paths
-    assert "/generate" not in paths
-    assert "/risk" not in paths
-    assert "/coverage" not in paths
-    assert "/export" not in paths
+    assert "/parse" in paths
+    # concept_risk
+    assert "/concepts" in paths
+    assert "/risk" in paths
+    # coverage_strategy
+    assert "/coverage" in paths
+    assert "/strategy" in paths
+    # test_design
+    assert "/generate" in paths
+    assert "/fsm" in paths
+    assert "/oracle" in paths
+    # evidence_improve
+    assert "/revisions" in paths
+    assert "/regenerate" in paths
+    assert "/analysis" in paths
+    # optimize_export
+    assert "/optimize" in paths
+    assert "/export" in paths

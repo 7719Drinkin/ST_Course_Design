@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { Layout, Space, Tag, Typography } from 'antd'
+import { Button, Layout, Space, Tag, Typography } from 'antd'
 import heroImage from '@/assets/hero.png'
 import { PipelineSummary } from '@/app/components/PipelineSummary'
 import { StepFooter } from '@/app/components/StepFooter'
@@ -16,6 +16,7 @@ function App() {
   const sourceName = useAppStore((s) => s.sourceName)
   const testCases = useAppStore((s) => s.testCases)
   const riskEntries = useAppStore((s) => s.riskEntries)
+  const revisions = useAppStore((s) => s.revisions)
 
   useEffect(() => {
     const syncHash = () => {
@@ -121,6 +122,26 @@ function App() {
               <div className="rail-step rail-step-c">证据</div>
             </div>
           </section>
+
+          <div className="stage-jumpbar">
+            <Space wrap>
+              <Button disabled={currentStep === 0} onClick={() => navigateToStep(currentStep - 1)}>
+                上一阶段
+              </Button>
+              <Button
+                type="primary"
+                disabled={currentStep >= workflowRoutes.length - 1}
+                onClick={() => navigateToStep(currentStep + 1)}
+              >
+                下一阶段
+              </Button>
+            </Space>
+            <Text type="secondary">
+              {revisions.length > 0
+                ? `已有 ${revisions.length} 条设计者修订记录`
+                : '所有人工修改会进入修订证据轨'}
+            </Text>
+          </div>
 
           <div className="stage-content" key={currentRoute.id}>
             {currentRoute.render()}
