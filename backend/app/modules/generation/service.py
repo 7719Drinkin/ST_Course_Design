@@ -1,18 +1,13 @@
 from __future__ import annotations
 
 from typing import Any
-import json
 
 from .schemas import GenerateMetadata, GenerateRequest, GenerateResponse
 
 try:  # Supports tests importing from project root.
     import backend.agent as agent_module
-    from backend.agent.tools.blackbox_algorithms import generate_deterministic_blackbox_tests
-    from backend.agent.tools.blackbox_algorithms.models import standard_ref_for
 except ModuleNotFoundError:  # Supports uvicorn launched from backend/.
     import agent as agent_module
-    from agent.tools.blackbox_algorithms import generate_deterministic_blackbox_tests
-    from agent.tools.blackbox_algorithms.models import standard_ref_for
 
 
 DATA_KEYS = ("coverage_items", "test_design_specs", "test_cases")
@@ -21,87 +16,20 @@ ALLOWED_TECHNIQUES = {"EP", "BVA", "DT"}
 
 class GenerationService:
     async def generate_test_cases(self, request: GenerateRequest) -> GenerateResponse:
-        mode = request.generation_mode
-
-        if mode == "deterministic":
-            deterministic = self._run_deterministic(request)
-            return self._response(
-                success=deterministic["success"],
-                data=deterministic["data"],
-                request=request,
-                agent_used=False,
-                deterministic_used=True,
-                fallback_used=False,
-                fallback_reason=None,
-                errors=deterministic["errors"],
-            )
-
-        if mode == "agent":
-            agent_data, reason, errors = await self._run_agent_and_normalize(request)
-            if agent_data is None:
-                return self._response(
-                    success=False,
-                    data=_empty_data(),
-                    request=request,
-                    agent_used=True,
-                    deterministic_used=False,
-                    fallback_used=False,
-                    fallback_reason=reason,
-                    errors=errors,
-                )
-            return self._response(
-                success=True,
-                data=agent_data,
-                request=request,
-                agent_used=True,
-                deterministic_used=False,
-                fallback_used=False,
-                fallback_reason=None,
-                errors=[],
-            )
-
-        if mode == "hybrid":
-            agent_data, reason, errors = await self._run_agent_and_normalize(request)
-            deterministic = self._run_deterministic(request)
-            merged_data = (
-                self._merge_data(agent_data, deterministic["data"])
-                if agent_data is not None
-                else deterministic["data"]
-            )
-            return self._response(
-                success=agent_data is not None or deterministic["success"],
-                data=merged_data,
-                request=request,
-                agent_used=True,
-                deterministic_used=True,
-                fallback_used=agent_data is None,
-                fallback_reason=reason if agent_data is None else None,
-                errors=(errors if agent_data is None else []) + deterministic["errors"],
-            )
-
         agent_data, reason, errors = await self._run_agent_and_normalize(request)
-        if agent_data is not None:
+        if agent_data is None:
             return self._response(
-                success=True,
-                data=agent_data,
+                success=False,
+                data=_empty_data(),
                 request=request,
-                agent_used=True,
-                deterministic_used=False,
-                fallback_used=False,
-                fallback_reason=None,
-                errors=[],
+                errors=errors or [reason or "agent_failed"],
             )
 
-        deterministic = self._run_deterministic(request)
         return self._response(
-            success=deterministic["success"],
-            data=deterministic["data"],
+            success=True,
+            data=agent_data,
             request=request,
-            agent_used=True,
-            deterministic_used=True,
-            fallback_used=True,
-            fallback_reason=reason,
-            errors=errors + deterministic["errors"],
+            errors=[],
         )
 
     async def _run_agent_and_normalize(
@@ -125,26 +53,6 @@ class GenerationService:
         except ValueError as exc:
             reason = "empty_test_cases" if "empty test_cases" in str(exc) else "invalid_agent_result"
             return None, reason, [str(exc)]
-
-    def _run_deterministic(self, request: GenerateRequest) -> dict[str, Any]:
-        try:
-            return generate_deterministic_blackbox_tests(
-                requirement_id=request.requirement_id,
-                requirement_text=request.requirement_text,
-                techniques=request.techniques,
-                context=request.context,
-            )
-        except Exception as exc:
-            return {
-                "success": False,
-                "data": _empty_data(),
-                "metadata": {
-                    "deterministic": True,
-                    "techniques": request.techniques,
-                    "case_count": 0,
-                },
-                "errors": [str(exc)],
-            }
 
     def _normalize_agent_result(
         self,
@@ -196,11 +104,9 @@ class GenerationService:
                 "test_steps": _as_list(case.get("test_steps")) or ["Execute the generated black-box test case."],
                 "expected_result": expected_result,
                 "risk_level": case.get("risk_level", _risk_level(request)),
-                "standard_ref": str(case.get("standard_ref") or standard_ref_for(technique)),
-                "status": str(case.get("status") or "Draft"),
+                "standard_ref": str(case.get("standard_ref") or _standard_ref_for(technique)),
+                "status": "Draft",
             }
-            if case["status"] != "Draft":
-                case["status"] = "Draft"
             normalized_cases.append(case)
 
             if coverage_item_id not in coverage_by_id:
@@ -222,36 +128,11 @@ class GenerationService:
             "test_cases": normalized_cases,
         }
 
-    def _merge_data(
-        self,
-        agent_data: dict[str, list[dict[str, Any]]] | None,
-        deterministic_data: dict[str, list[dict[str, Any]]],
-    ) -> dict[str, list[dict[str, Any]]]:
-        if agent_data is None:
-            return deterministic_data
-        return {
-            "coverage_items": _dedupe_by_key(
-                agent_data.get("coverage_items", []) + deterministic_data.get("coverage_items", []),
-                "coverage_item_id",
-            ),
-            "test_design_specs": _dedupe_by_key(
-                agent_data.get("test_design_specs", []) + deterministic_data.get("test_design_specs", []),
-                "spec_id",
-            ),
-            "test_cases": _dedupe_cases(
-                agent_data.get("test_cases", []) + deterministic_data.get("test_cases", [])
-            ),
-        }
-
     def _response(
         self,
         success: bool,
         data: dict[str, list[dict[str, Any]]],
         request: GenerateRequest,
-        agent_used: bool,
-        deterministic_used: bool,
-        fallback_used: bool,
-        fallback_reason: str | None,
         errors: list[str],
     ) -> GenerateResponse:
         normalized_data = _ensure_data(data)
@@ -260,10 +141,7 @@ class GenerationService:
             data=normalized_data,
             metadata=GenerateMetadata(
                 generation_mode=request.generation_mode,
-                agent_used=agent_used,
-                deterministic_used=deterministic_used,
-                fallback_used=fallback_used,
-                fallback_reason=fallback_reason,
+                agent_used=True,
                 techniques=request.techniques,
                 case_count=len(normalized_data["test_cases"]),
             ),
@@ -313,7 +191,7 @@ def _normalize_coverage_items(items: Any, request: GenerateRequest) -> list[dict
                     item.get("strategy_rationale")
                     or "Agent-selected black-box coverage item."
                 ),
-                "standard_ref": str(item.get("standard_ref") or standard_ref_for(technique)),
+                "standard_ref": str(item.get("standard_ref") or _standard_ref_for(technique)),
             }
         )
     return normalized
@@ -342,8 +220,12 @@ def _normalize_design_specs(
                     "coverage_item_id": coverage_item_id,
                     "requirement_id": str(item.get("requirement_id") or related[0]["requirement_id"]),
                     "technique": technique,
-                    "design_points": item.get("design_points") if isinstance(item.get("design_points"), list) and item.get("design_points") else _design_points(related),
-                    "standard_ref": str(item.get("standard_ref") or standard_ref_for(technique)),
+                    "design_points": (
+                        item.get("design_points")
+                        if isinstance(item.get("design_points"), list) and item.get("design_points")
+                        else _design_points(related)
+                    ),
+                    "standard_ref": str(item.get("standard_ref") or _standard_ref_for(technique)),
                 }
             )
 
@@ -362,7 +244,7 @@ def _normalize_design_specs(
                 "requirement_id": coverage_item["requirement_id"],
                 "technique": coverage_item["technique"],
                 "design_points": _design_points(related),
-                "standard_ref": standard_ref_for(coverage_item["technique"]),
+                "standard_ref": _standard_ref_for(coverage_item["technique"]),
             }
         )
     return normalized
@@ -410,7 +292,7 @@ def _synthetic_coverage_item(
         "input_fields": _as_list(request.context.get("input_fields")),
         "expected_action": str(request.context.get("expected_action") or "Verify expected requirement behavior."),
         "strategy_rationale": "Synthetic coverage item created to preserve test case traceability.",
-        "standard_ref": standard_ref_for(technique),
+        "standard_ref": _standard_ref_for(technique),
     }
 
 
@@ -442,37 +324,13 @@ def _risk_level(request: GenerateRequest) -> int:
         return 3
 
 
-def _dedupe_by_key(items: list[dict[str, Any]], key: str) -> list[dict[str, Any]]:
-    result: list[dict[str, Any]] = []
-    seen: set[str] = set()
-    for item in items:
-        value = str(item.get(key, ""))
-        if value and value not in seen:
-            seen.add(value)
-            result.append(item)
-    return result
-
-
-def _dedupe_cases(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    result: list[dict[str, Any]] = []
-    seen: set[str] = set()
-    for item in items:
-        key = json.dumps(
-            {
-                "requirement_id": item.get("requirement_id"),
-                "coverage_item_id": item.get("coverage_item_id"),
-                "technique": item.get("technique"),
-                "title": item.get("title"),
-                "input_data": item.get("input_data"),
-                "expected_result": item.get("expected_result"),
-            },
-            sort_keys=True,
-            default=str,
-        )
-        if key not in seen:
-            seen.add(key)
-            result.append(item)
-    return result
+def _standard_ref_for(technique: str) -> str:
+    refs = {
+        "EP": "ISO/IEC/IEEE 29119-4 Equivalence Partitioning",
+        "BVA": "ISO/IEC/IEEE 29119-4 Boundary Value Analysis",
+        "DT": "ISO/IEC/IEEE 29119-4 Decision Table Testing",
+    }
+    return refs.get(str(technique).upper(), "ISO/IEC/IEEE 29119-4")
 
 
 def _empty_data() -> dict[str, list[dict[str, Any]]]:

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import asyncio
-from unittest.mock import AsyncMock, Mock, patch
+from unittest.mock import AsyncMock, patch
 
 from backend.app.modules.generation import service as generation_service
 from backend.app.modules.generation.schemas import GenerateRequest
@@ -19,32 +19,10 @@ def test_generate_router_exposes_generate_path():
     assert "/generate" in paths
 
 
-def test_deterministic_mode_does_not_call_agent():
-    request = GenerateRequest(
-        requirement_id="REQ-GEN-DET",
-        requirement_text="The system shall accept age between 18 and 60.",
-        generation_mode="deterministic",
-        techniques=["BVA"],
-    )
-
-    with patch.object(
-        generation_service.agent_module,
-        "generate_blackbox_tests",
-        new=AsyncMock(side_effect=AssertionError("Agent should not be called")),
-    ):
-        response = asyncio.run(generation_service.generate_test_cases(request))
-
-    assert response.success is True
-    assert response.metadata.agent_used is False
-    assert response.metadata.deterministic_used is True
-    assert {case["technique"] for case in response.data["test_cases"]} == {"BVA"}
-
-
-def test_agent_mode_does_not_call_deterministic_when_agent_is_valid():
+def test_generate_uses_agent_result():
     request = GenerateRequest(
         requirement_id="REQ-GEN-AGT",
         requirement_text="The system shall list all books.",
-        generation_mode="agent",
         techniques=["EP"],
     )
 
@@ -52,51 +30,20 @@ def test_agent_mode_does_not_call_deterministic_when_agent_is_valid():
         generation_service.agent_module,
         "generate_blackbox_tests",
         new=AsyncMock(return_value=_agent_result("REQ-GEN-AGT", "EP")),
-    ), patch.object(
-        generation_service,
-        "generate_deterministic_blackbox_tests",
-        new=Mock(side_effect=AssertionError("Deterministic should not be called")),
     ):
         response = asyncio.run(generation_service.generate_test_cases(request))
 
     assert response.success is True
     assert response.metadata.agent_used is True
-    assert response.metadata.deterministic_used is False
-    assert response.metadata.fallback_used is False
+    assert response.metadata.generation_mode == "agent"
+    assert response.metadata.case_count == 1
     assert response.data["test_cases"][0]["standard_ref"]
 
 
-def test_agent_first_uses_agent_when_result_is_valid():
+def test_generate_returns_error_when_agent_fails():
     request = GenerateRequest(
-        requirement_id="REQ-GEN-FIRST",
-        requirement_text="The system shall list all books.",
-        generation_mode="agent_first",
-        techniques=["EP"],
-    )
-
-    with patch.object(
-        generation_service.agent_module,
-        "generate_blackbox_tests",
-        new=AsyncMock(return_value=_agent_result("REQ-GEN-FIRST", "EP")),
-    ), patch.object(
-        generation_service,
-        "generate_deterministic_blackbox_tests",
-        new=Mock(side_effect=AssertionError("Fallback should not be called")),
-    ):
-        response = asyncio.run(generation_service.generate_test_cases(request))
-
-    assert response.success is True
-    assert response.metadata.agent_used is True
-    assert response.metadata.deterministic_used is False
-    assert response.metadata.fallback_used is False
-    assert response.metadata.case_count == 1
-
-
-def test_agent_first_falls_back_when_agent_returns_success_false():
-    request = GenerateRequest(
-        requirement_id="REQ-GEN-FALLBACK",
+        requirement_id="REQ-GEN-FAIL",
         requirement_text="The system shall accept copies > 0.",
-        generation_mode="agent_first",
         techniques=["BVA"],
     )
 
@@ -107,19 +54,17 @@ def test_agent_first_falls_back_when_agent_returns_success_false():
     ):
         response = asyncio.run(generation_service.generate_test_cases(request))
 
-    assert response.success is True
+    assert response.success is False
     assert response.metadata.agent_used is True
-    assert response.metadata.deterministic_used is True
-    assert response.metadata.fallback_used is True
-    assert response.metadata.fallback_reason == "invalid_agent_result"
-    assert response.data["test_cases"]
+    assert response.metadata.case_count == 0
+    assert response.errors == ["agent unavailable"]
+    assert response.data["test_cases"] == []
 
 
-def test_agent_mode_rejects_agent_technique_outside_request():
+def test_generate_rejects_agent_technique_outside_request():
     request = GenerateRequest(
         requirement_id="REQ-GEN-FILTER",
         requirement_text="The system shall list all books.",
-        generation_mode="agent",
         techniques=["EP"],
     )
 
@@ -131,30 +76,7 @@ def test_agent_mode_rejects_agent_technique_outside_request():
         response = asyncio.run(generation_service.generate_test_cases(request))
 
     assert response.success is False
-    assert response.metadata.deterministic_used is False
-    assert response.metadata.fallback_reason == "invalid_agent_result"
-
-
-def test_hybrid_merges_agent_and_deterministic_cases():
-    request = GenerateRequest(
-        requirement_id="REQ-GEN-HYBRID",
-        requirement_text="The system shall accept age between 18 and 60.",
-        generation_mode="hybrid",
-        techniques=["EP", "BVA"],
-    )
-
-    with patch.object(
-        generation_service.agent_module,
-        "generate_blackbox_tests",
-        new=AsyncMock(return_value=_agent_result("REQ-GEN-HYBRID", "EP")),
-    ):
-        response = asyncio.run(generation_service.generate_test_cases(request))
-
-    assert response.success is True
-    assert response.metadata.agent_used is True
-    assert response.metadata.deterministic_used is True
-    assert response.metadata.fallback_used is False
-    assert {"EP", "BVA"}.issubset({case["technique"] for case in response.data["test_cases"]})
+    assert response.errors
 
 
 def _agent_result(requirement_id: str, technique: str) -> dict:

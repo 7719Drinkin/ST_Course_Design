@@ -5,7 +5,7 @@ from typing import Any
 from pydantic import BaseModel, Field, validator
 
 
-ALLOWED_GENERATION_MODES = {"agent_first", "agent", "deterministic", "hybrid"}
+ALLOWED_GENERATION_MODES = {"agent"}
 ALLOWED_TECHNIQUES = {"EP", "BVA", "DT"}
 
 
@@ -15,13 +15,13 @@ class GenerateRequest(BaseModel):
     context: dict[str, Any] = Field(default_factory=dict)
     techniques: list[str] = Field(default_factory=lambda: ["EP", "BVA", "DT"])
     use_rag: bool = True
-    generation_mode: str = "agent_first"
+    generation_mode: str = "agent"
 
     @validator("generation_mode")
     def validate_generation_mode(cls, value: str) -> str:
         mode = str(value).strip().lower()
         if mode not in ALLOWED_GENERATION_MODES:
-            raise ValueError("generation_mode must be agent_first, agent, deterministic, or hybrid")
+            raise ValueError("generation_mode must be agent")
         return mode
 
     @validator("techniques", pre=True)
@@ -50,9 +50,6 @@ class GenerateRequest(BaseModel):
 class GenerateMetadata(BaseModel):
     generation_mode: str
     agent_used: bool
-    deterministic_used: bool
-    fallback_used: bool
-    fallback_reason: str | None = None
     techniques: list[str]
     case_count: int
 
