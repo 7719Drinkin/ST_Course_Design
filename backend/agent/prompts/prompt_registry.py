@@ -14,6 +14,7 @@ class PromptRegistry:
         "technique_assignment": "technique_assignment.md",
         "test_design_spec": "test_design_spec.md",
         "test_case_draft": "test_case_draft.md",
+        "fsm_modeling": "fsm_modeling.md",
     }
 
     def __init__(self, template_dir: Path | None = None) -> None:

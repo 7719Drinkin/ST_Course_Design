@@ -6,6 +6,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 
 Technique = Literal["EP", "BVA", "DT"]
+FsmTechnique = Literal["FSM"]
 RiskLevel = Literal["High", "Medium", "Low"]
 Priority = Literal["P1", "P2", "P3"]
 ScorePart = Annotated[int, Field(ge=1, le=5, strict=True)]
@@ -175,6 +176,63 @@ class TestCaseDraft(AgentModel):
         return self
 
 
+class FsmTransitionSpec(AgentModel):
+    """FR4 状态建模 prompt 产出的 FSM 迁移边。"""
+
+    model_config = ConfigDict(extra="ignore", validate_assignment=True, populate_by_name=True)
+
+    from_state: str = Field(alias="from")
+    to: str
+    event: str
+    condition: str
+    action: str
+
+
+class FsmResult(AgentModel):
+    """LLM prompt 产出的 FR4 有限状态机模型。"""
+
+    states: list[str] = Field(default_factory=list)
+    transitions: list[FsmTransitionSpec] = Field(default_factory=list)
+    coverage_paths: list[str] = Field(default_factory=list)
+    mermaid: str
+
+    @model_validator(mode="after")
+    def validate_fsm_is_non_empty(self) -> "FsmResult":
+        if not self.states:
+            raise ValueError("fsm.states 不能为空")
+        if not self.transitions:
+            raise ValueError("fsm.transitions 不能为空")
+        if not self.coverage_paths:
+            raise ValueError("fsm.coverage_paths 不能为空")
+        return self
+
+
+class FsmTestCaseDraft(AgentModel):
+    """基于状态迁移路径生成的 FR4 FSM 测试用例草案。"""
+
+    test_id: str
+    requirement_id: str
+    coverage_item_id: str
+    strategy_id: str = ""
+    technique: FsmTechnique
+    title: str
+    preconditions: list[str] = Field(default_factory=list)
+    input_data: dict[str, Any] = Field(default_factory=dict)
+    test_steps: list[str] = Field(default_factory=list)
+    expected_result: str
+    standard_ref: str
+    risk_level: RiskLevel = "Medium"
+    status: Literal["Draft"] = "Draft"
+
+    @model_validator(mode="after")
+    def validate_fsm_case(self) -> "FsmTestCaseDraft":
+        if self.technique != "FSM":
+            raise ValueError("FSM 测试用例的 technique 必须为 FSM")
+        if not self.expected_result.strip():
+            raise ValueError("expected_result 不能为空")
+        return self
+
+
 class ParseResult(AgentModel):
     """parse_requirements role 的返回值：需求解析与需求分析结果。"""
 
@@ -210,6 +268,20 @@ class GenerateResult(AgentModel):
     test_design_specs: list[TestDesignSpec] = Field(default_factory=list)
     test_cases: list[TestCaseDraft] = Field(default_factory=list)
     prompts_used: list[PromptRecord] = Field(default_factory=list)
+
+
+class FsmGenerationResult(AgentModel):
+    """generate_fsm 角色的 FR4 返回结果。"""
+
+    fsm: FsmResult
+    test_cases: list[FsmTestCaseDraft] = Field(default_factory=list)
+    prompts_used: list[PromptRecord] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_cases_are_non_empty(self) -> "FsmGenerationResult":
+        if not self.test_cases:
+            raise ValueError("test_cases 不能为空")
+        return self
 
 
 class FullPipelineResult(AgentModel):

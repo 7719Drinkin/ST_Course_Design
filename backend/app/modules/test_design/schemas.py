@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from pydantic import Field
+from pydantic import Field, field_validator
 
 from ..concept_risk.schemas import RiskAnalysisItem
 from ..coverage_strategy.schemas import CoverageItem
@@ -16,8 +16,9 @@ class TestCase(FlexibleModel):
     test_id: str
     requirement_id: str
     coverage_item_id: str
-    strategy_id: str
+    strategy_id: str = ""
     technique: Literal["EP", "BVA", "DT", "FSM"]
+    title: str = ""
     preconditions: list[str] = Field(default_factory=list)
     input_data: dict[str, Any] = Field(default_factory=dict)
     test_steps: list[str] = Field(default_factory=list)
@@ -68,6 +69,9 @@ class FsmResult(FlexibleModel):
     states: list[str] = Field(default_factory=list)
     transitions: list[FsmTransition] = Field(default_factory=list)
     coverage_paths: list[str] = Field(default_factory=list)
+    coverage: dict[str, list[str]] = Field(
+        default_factory=lambda: {"all_states": [], "all_transitions": []}
+    )
     mermaid: str = ""
 
 
@@ -96,11 +100,40 @@ class GenerateResponse(FlexibleModel):
 
 # POST /fsm 请求体
 class FsmRequest(FlexibleModel):
-    session_id: str
+    session_id: str = "default"
+    requirement_ids: list[str] = Field(default_factory=list)
+    requirement_id: str | None = None
+    requirement_text: str | None = None
     requirements: list[Requirement] | None = None
     parsed_requirements: list[ParsedRequirement] | None = None
     coverage_items: list[CoverageItem] | None = None
     state_candidates: list[str] | None = None
+    strategies: list[str] | None = None
+    max_depth: int = 6
+
+    @field_validator("strategies", mode="before")
+    @classmethod
+    def normalize_strategies(cls, value: Any) -> list[str] | None:
+        if value is None:
+            return None
+        if isinstance(value, str):
+            value = [value]
+        allowed = {"ALL_STATES", "ALL_TRANSITIONS"}
+        normalized: list[str] = []
+        for item in value:
+            strategy = str(item).strip().upper()
+            if strategy not in allowed:
+                raise ValueError("strategies 只能包含 ALL_STATES 或 ALL_TRANSITIONS")
+            if strategy not in normalized:
+                normalized.append(strategy)
+        return normalized
+
+    @field_validator("max_depth")
+    @classmethod
+    def validate_max_depth(cls, value: int) -> int:
+        if value < 1:
+            raise ValueError("max_depth 至少为 1")
+        return value
 
 
 # POST /fsm 响应体

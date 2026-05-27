@@ -1,1 +1,7 @@
-"""FastAPI dependency injection — add Depends() callables here as new modules come online."""
+"""FastAPI dependency injection helpers."""
+
+from ..modules.fsm.service import FsmService
+
+
+def get_fsm_service() -> FsmService:
+    return FsmService()

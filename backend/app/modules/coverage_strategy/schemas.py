@@ -23,9 +23,9 @@ class CoverageGoal(FlexibleModel):
 # TechniqueAssignmentAgent 产物：已分配单一黑盒测试技术的覆盖项
 class CoverageItem(FlexibleModel):
     coverage_item_id: str          # COV-AUT-*
-    coverage_goal_id: str          # 来源覆盖目标
+    coverage_goal_id: str = ""     # 来源覆盖目标
     requirement_id: str            # 来源需求
-    technique: Literal["EP", "BVA", "DT"]
+    technique: Literal["EP", "BVA", "DT", "FSM"]
     description: str = ""
     conditions: list[str] = Field(default_factory=list)
     data_ranges: list[str] = Field(default_factory=list)

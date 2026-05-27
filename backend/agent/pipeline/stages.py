@@ -2,7 +2,7 @@ from __future__ import annotations
 
 
 class StageName:
-    """对外暴露的阶段名统一放在这里，避免不同入口各写一套字符串。"""
+    """Public stage names used by runner, pipeline, and API adapters."""
 
     INPUT_VALIDATION = "input_validation"
     PARSE_REQUIREMENTS = "parse_requirements"
@@ -10,6 +10,7 @@ class StageName:
     IDENTIFY_COVERAGE = "identify_coverage"
     ASSIGN_STRATEGY = "assign_strategy"
     GENERATE_TESTS = "generate_tests"
+    GENERATE_FSM = "generate_fsm"
     FINAL_VALIDATION = "final_validation"
     AGENT_RUNNER = "agent_runner"
 
@@ -20,5 +21,6 @@ STAGE_TITLES = {
     StageName.IDENTIFY_COVERAGE: "覆盖目标识别",
     StageName.ASSIGN_STRATEGY: "测试技术分配",
     StageName.GENERATE_TESTS: "测试设计与用例生成",
+    StageName.GENERATE_FSM: "FSM 建模",
     StageName.FINAL_VALIDATION: "最终校验",
 }
