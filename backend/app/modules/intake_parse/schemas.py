@@ -36,18 +36,37 @@ class Requirement(FlexibleModel):
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
-# 结构化解析后的需求（Agent B 输出）
+# RequirementParseAgent 产物：拆分后的原子需求
 class ParsedRequirement(FlexibleModel):
-    requirement_id: str
+    requirement_id: str           # REQ-AUT-*
+    module: str = ""              # 需求所属业务模块
+    raw_text: str = ""            # 原始需求文本片段
+    description: str = ""         # 原子需求描述
+
+
+# RequirementAnalysisAgent 产物：抽取黑盒测试设计所需信息
+class AnalyzedRequirement(FlexibleModel):
+    requirement_id: str           # 对应 ParsedRequirement
+    module: str = ""              # 需求所属业务模块
+    description: str = ""         # 需求描述
     input_fields: list[str] = Field(default_factory=list)
-    data_ranges: list[Any] = Field(default_factory=list)
+    data_ranges: list[str] = Field(default_factory=list)
     conditions: list[str] = Field(default_factory=list)
+    business_rules: list[str] = Field(default_factory=list)
     expected_action: str = ""
-    confidence: float = 0.0
-    missing_fields: list[str] = Field(default_factory=list)
 
 
-# Prompt 调用证据（Agent 或占位逻辑生成）
+# Pipeline 端点 Prompt 调用记录
+class PromptRecord(FlexibleModel):
+    prompt_name: str
+    target_id: str | None = None
+    input: dict[str, Any] = Field(default_factory=dict)
+    output: dict[str, Any] = Field(default_factory=dict)
+    note: str = ""
+    created_at: str = ""
+
+
+# Prompt 调用证据（辅助端点使用）
 class PromptEvidence(FlexibleModel):
     evidence_id: str
     session_id: str
@@ -61,15 +80,12 @@ class PromptEvidence(FlexibleModel):
 
 # POST /parse 请求体
 class ParseRequest(FlexibleModel):
-    session_id: str
-    requirement_ids: list[str] | None = None
-    requirements: list[Requirement] | None = None
-    include_prompt_evidence: bool = True
+    requirement_text: str
+    rag_context: str | None = None
 
 
 # POST /parse 响应体
 class ParseResponse(FlexibleModel):
-    session_id: str
-    parsed_requirements: list[ParsedRequirement]
-    prompt_evidence: list[PromptEvidence] = Field(default_factory=list)
-    errors: list[ApiError] = Field(default_factory=list)
+    requirements: list[ParsedRequirement]
+    analyzed_requirements: list[AnalyzedRequirement]
+    prompts_used: list[PromptRecord] = Field(default_factory=list)

@@ -1,4 +1,4 @@
-"""Step 3 routes: coverage items and strategy assignment."""
+"""Step 3 routes: coverage goals and strategy assignment."""
 
 from fastapi import APIRouter, Depends
 
