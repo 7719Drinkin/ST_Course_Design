@@ -49,19 +49,20 @@ export function TestDesignPage() {
   const setFsmPathCoverage = useAppStore((s) => s.setFsmPathCoverage)
   const highlightedRequirementId = useAppStore((s) => s.highlightedRequirementId)
   const setHighlightedRequirementId = useAppStore((s) => s.setHighlightedRequirementId)
-  const setCurrentStep = useAppStore((s) => s.setCurrentStep)
+  const riskEntries = useAppStore((s) => s.riskEntries)
 
   const reqIdsKey = requirements.map((r) => r.requirement_id).join(',')
+  const coverageIdsKey = coverageItems.map((item) => item.coverage_item_id).join(',')
+  const riskKey = riskEntries.map((entry) => `${entry.requirement_id}:${entry.risk_score ?? entry.score}`).join(',')
   const hasRequirements = requirements.length > 0
 
   useEffect(() => {
-    if (!reqIdsKey) {
+    if (!reqIdsKey || coverageItems.length === 0) {
       setTestCases([])
       setOracleResults([])
       setFsm(null)
       return
     }
-    const ids = reqIdsKey.split(',')
     let active = true
     const slowTimer = window.setTimeout(() => {
       if (active) setSlowWarning(true)
@@ -70,7 +71,7 @@ export function TestDesignPage() {
     const load = async () => {
       setFetching(true)
       try {
-        const r = await getTestCases(ids)
+        const r = await getTestCases(coverageItems, riskEntries)
         if (!active) return
         const cases = r.data.map((c) => ({ ...c, status: c.status ?? 'Draft' }))
         setTestCases(cases)
@@ -79,7 +80,7 @@ export function TestDesignPage() {
           setOracleResults([])
           return
         }
-        const o = await getOracleResults(cases.map((c) => c.test_id))
+        const o = await getOracleResults(cases, requirements)
         if (active) setOracleResults(o.data)
       } finally {
         if (active) {
@@ -92,7 +93,7 @@ export function TestDesignPage() {
 
     void load()
 
-    generateFSM(ids).then((r) => {
+    generateFSM(requirements, coverageItems).then((r) => {
       if (active) {
         setFsm(r.data)
         setFsmLive(r.isLive)
@@ -103,7 +104,17 @@ export function TestDesignPage() {
       active = false
       window.clearTimeout(slowTimer)
     }
-  }, [reqIdsKey, setTestCases, setOracleResults, setFsm])
+  }, [
+    reqIdsKey,
+    coverageIdsKey,
+    coverageItems,
+    requirements,
+    riskEntries,
+    riskKey,
+    setTestCases,
+    setOracleResults,
+    setFsm,
+  ])
 
   const techniqueCounts = useMemo(() => {
     const counts: Record<string, number> = { EP: 0, BVA: 0, DT: 0, FSM: 0 }
@@ -122,9 +133,12 @@ export function TestDesignPage() {
 
   const fsmPaths = useMemo(() => {
     if (!fsm) return []
-    const statePaths = fsm.coverage.all_states.map((s) => `state:${s}`)
-    const transPaths = fsm.coverage.all_transitions.map((t) => `transition:${t}`)
-    return [...statePaths, ...transPaths]
+    if (fsm.coverage) {
+      const statePaths = fsm.coverage.all_states.map((s) => `state:${s}`)
+      const transPaths = fsm.coverage.all_transitions.map((t) => `transition:${t}`)
+      return [...statePaths, ...transPaths]
+    }
+    return fsm.coverage_paths
   }, [fsm])
 
   const needsReviewCases = oracleResults.filter((o) => o.needs_review)
@@ -163,9 +177,6 @@ export function TestDesignPage() {
               { value: 'Rejected', label: '驳回' },
             ]}
           />
-          <Button type="primary" disabled={!hasRequirements} onClick={() => setCurrentStep(4)}>
-            下一步: 证据改进
-          </Button>
         </Space>
       </div>
 

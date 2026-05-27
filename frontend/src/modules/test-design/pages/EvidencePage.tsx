@@ -21,14 +21,15 @@ export function EvidencePage() {
   const setRegenerateResult = useAppStore((s) => s.setRegenerateResult)
   const analysisResults = useAppStore((s) => s.analysisResults)
   const setAnalysisResults = useAppStore((s) => s.setAnalysisResults)
-  const setCurrentStep = useAppStore((s) => s.setCurrentStep)
 
   const latestRevision = revisions.at(-1)
   const entityLabels: Record<RevisionLog['entity_type'], string> = {
     requirement: '需求',
-    concept: '概念',
+    parsed_requirement: '结构化需求',
+    risk_result: '风险',
     risk: '风险',
     coverage: '覆盖项',
+    coverage_item: '覆盖项',
     strategy: '策略',
     test_case: '测试用例',
     fsm: '状态路径',
@@ -84,7 +85,6 @@ export function EvidencePage() {
         <WorkflowEmptyState
           title="等待可分析的测试设计结果"
           description="Prompt 证据、差量再生成和结果分析必须建立在真实需求、覆盖项和测试用例之上。"
-          action={<Button type="primary" onClick={() => setCurrentStep(0)}>返回输入阶段</Button>}
         />
       </Space>
     )
@@ -101,7 +101,7 @@ export function EvidencePage() {
                 <Text>依据记录</Text>
               </div>
               <div>
-                <span>{promptEvidence.reduce((sum, item) => sum + item.source_context_ids.length, 0)}</span>
+                <span>{promptEvidence.reduce((sum, item) => sum + (item.source_context_ids?.length ?? 0), 0)}</span>
                 <Text>引用材料</Text>
               </div>
               <div>
@@ -168,7 +168,7 @@ export function EvidencePage() {
               title: '引用材料',
               dataIndex: 'source_context_ids',
               width: 160,
-              render: (value: string[]) => <Tag>{value.length} 条</Tag>,
+              render: (value?: string[]) => <Tag>{value?.length ?? 0} 条</Tag>,
             },
             {
               title: '生成摘要',
@@ -184,10 +184,10 @@ export function EvidencePage() {
         <Card title="差量更新结果">
           {regenerateResult ? (
             <Descriptions size="small" column={2} bordered>
-              <Descriptions.Item label="新增">{regenerateResult.created.length}</Descriptions.Item>
-              <Descriptions.Item label="更新">{regenerateResult.updated.length}</Descriptions.Item>
-              <Descriptions.Item label="未变化">{regenerateResult.unchanged.length}</Descriptions.Item>
-              <Descriptions.Item label="已过期">{regenerateResult.deprecated.length}</Descriptions.Item>
+              <Descriptions.Item label="新增">{Object.keys(regenerateResult.created).length}</Descriptions.Item>
+              <Descriptions.Item label="更新">{Object.keys(regenerateResult.updated).length}</Descriptions.Item>
+              <Descriptions.Item label="未变化">{Object.keys(regenerateResult.unchanged).length}</Descriptions.Item>
+              <Descriptions.Item label="已过期">{Object.keys(regenerateResult.deprecated).length}</Descriptions.Item>
             </Descriptions>
           ) : (
             <Text type="secondary">选择一条修订记录后，可以重新计算受影响的结果。</Text>
@@ -216,10 +216,7 @@ export function EvidencePage() {
         </Card>
       </div>
 
-      <Card
-        title="追溯分析"
-        extra={<Button type="primary" onClick={() => setCurrentStep(5)}>进入优化导出</Button>}
-      >
+      <Card title="追溯分析">
         <Table
           size="small"
           rowKey={(record: AnalysisResult) =>

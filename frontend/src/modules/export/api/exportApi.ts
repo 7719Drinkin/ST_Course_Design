@@ -1,20 +1,9 @@
 import { postBlob } from '@/shared/api/apiClient'
-import type {
-  CoverageItem,
-  ExportRevisionRecord,
-  RevisionLog,
-  RiskEntry,
-  TestCase,
-} from '@/shared/types'
+import type { ExportRevisionRecord, RevisionLog } from '@/shared/types'
 
-const DESIGN_SESSION_ID = 'DS-CURRENT-WORKSPACE'
+const DESIGN_SESSION_ID = 'SESSION-CURRENT'
 
 type ExportFormat = 'json' | 'csv' | 'xlsx'
-
-type ExportExtras = {
-  risk_scores: RiskEntry[]
-  coverage_items: CoverageItem[]
-}
 
 export function mapRevisionsForExport(revisions: RevisionLog[]): ExportRevisionRecord[] {
   return revisions.map((r) => ({
@@ -30,15 +19,12 @@ export function mapRevisionsForExport(revisions: RevisionLog[]): ExportRevisionR
 
 export async function exportApproved(
   format: ExportFormat,
-  testCases: TestCase[],
-  revisions: RevisionLog[],
-  extras?: ExportExtras,
 ): Promise<Blob> {
   return postBlob('/export', {
+    session_id: DESIGN_SESSION_ID,
     format,
-    test_cases: testCases,
-    risk_scores: extras?.risk_scores ?? [],
-    coverage_items: extras?.coverage_items ?? [],
-    revisions: mapRevisionsForExport(revisions),
+    include_revisions: true,
+    include_prompt_evidence: true,
+    test_case_status: 'all',
   })
 }
