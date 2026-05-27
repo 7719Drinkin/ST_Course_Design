@@ -17,7 +17,6 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
-    from app.modules.fsm.router import router as fsm_router
     from app.modules.concept_risk.router import router as concept_risk_router
     from app.modules.coverage_strategy.router import router as coverage_strategy_router
     from app.modules.evidence_improve.router import router as evidence_improve_router
@@ -25,7 +24,6 @@ def create_app() -> FastAPI:
     from app.modules.optimize_export.router import router as optimize_export_router
     from app.modules.test_design.router import router as test_design_router
 
-    app.include_router(fsm_router)
     app.include_router(intake_parse_router)
     app.include_router(concept_risk_router)
     app.include_router(coverage_strategy_router)

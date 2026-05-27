@@ -46,6 +46,10 @@ def test_app_modules_match_frontend_six_step_layout():
 def test_all_six_module_routes_are_registered():
     app = create_app()
     paths = {route.path for route in app.routes if hasattr(route, "methods")}
+    path_counts = {
+        path: sum(1 for route in app.routes if getattr(route, "path", None) == path)
+        for path in paths
+    }
 
     # intake_parse
     assert "/ingest" in paths
@@ -60,6 +64,7 @@ def test_all_six_module_routes_are_registered():
     # test_design
     assert "/generate" in paths
     assert "/fsm" in paths
+    assert path_counts["/fsm"] == 1
     assert "/oracle" in paths
     # evidence_improve
     assert "/revisions" in paths

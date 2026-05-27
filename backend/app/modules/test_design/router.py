@@ -32,7 +32,7 @@ async def fsm(
     req: FsmRequest,
     svc: TestDesignService = Depends(get_test_design_service),
 ) -> FsmResponse:
-    return svc.fsm(req)
+    return await svc.fsm(req)
 
 
 @router.post("/oracle", response_model=OracleResponse)

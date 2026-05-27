@@ -11,6 +11,7 @@ from ..core.models import (
     CoverageGoal,
     CoverageItem,
     CoverageResult,
+    FsmGenerationResult,
     GenerateResult,
     ParseResult,
     RiskAnalysisItem,
@@ -19,6 +20,7 @@ from ..core.models import (
 )
 from ..prompts.prompt_builder import PromptBuilder
 from ..roles.coverage_identification_agent import CoverageIdentificationAgent
+from ..roles.fsm_modeling_agent import FsmModelingAgent
 from ..roles.requirement_analysis_agent import RequirementAnalysisAgent
 from ..roles.requirement_parse_agent import RequirementParseAgent
 from ..roles.risk_analysis_agent import RiskAnalysisAgent
@@ -71,6 +73,10 @@ class AgentPipeline:
             shared_prompt_builder,
         )
         self.test_case_draft_agent = TestCaseDraftAgent(
+            shared_llm_client,
+            shared_prompt_builder,
+        )
+        self.fsm_modeling_agent = FsmModelingAgent(
             shared_llm_client,
             shared_prompt_builder,
         )
@@ -189,6 +195,32 @@ class AgentPipeline:
             prompts_used=list(context.prompts_used),
         )
 
+    async def generate_fsm(
+        self,
+        requirements: Sequence[Any] | None = None,
+        parsed_requirements: Sequence[Any] | None = None,
+        coverage_items: Sequence[Any] | None = None,
+        state_candidates: Sequence[str] | None = None,
+        rag_context: str | None = None,
+    ) -> FsmGenerationResult:
+        """FR4 FSM modeling stage: prompt-based FSM model and FSM cases."""
+
+        context = AgentContext(
+            fsm_requirements=_dict_list(requirements or []),
+            fsm_parsed_requirements=_dict_list(parsed_requirements or []),
+            fsm_coverage_items=_dict_list(coverage_items or []),
+            state_candidates=[str(item) for item in (state_candidates or [])],
+            rag_context=rag_context,
+        )
+        await self._run_agent(StageName.GENERATE_FSM, self.fsm_modeling_agent, context)
+        if context.fsm is None:
+            raise StageExecutionError(StageName.GENERATE_FSM, "FSM prompt did not return fsm.", context)
+        return FsmGenerationResult(
+            fsm=context.fsm,
+            test_cases=context.fsm_test_cases,
+            prompts_used=list(context.prompts_used),
+        )
+
     async def _run_agent(
         self,
         stage: str,
@@ -297,7 +329,39 @@ async def generate_tests(
     return await AgentPipeline().generate_tests(coverage_items, risk_analysis, rag_context)
 
 
+async def generate_fsm(
+    requirements: Sequence[Any] | None = None,
+    parsed_requirements: Sequence[Any] | None = None,
+    coverage_items: Sequence[Any] | None = None,
+    state_candidates: Sequence[str] | None = None,
+    rag_context: str | None = None,
+) -> FsmGenerationResult:
+    """Module-level convenience entry for the FR4 FSM modeling stage."""
+
+    return await AgentPipeline().generate_fsm(
+        requirements,
+        parsed_requirements,
+        coverage_items,
+        state_candidates,
+        rag_context,
+    )
+
+
 def _model_list(items: Sequence[Any], model: type[Any]) -> list[Any]:
     """阶段入口兼容 dict/model，进入 AgentContext 前统一转成强类型模型。"""
 
     return validate_model_list(list(items), model, model.__name__)
+
+
+def _dict_list(items: Sequence[Any]) -> list[dict[str, Any]]:
+    result: list[dict[str, Any]] = []
+    for item in items:
+        if hasattr(item, "model_dump"):
+            result.append(item.model_dump(mode="json", by_alias=True))
+        elif isinstance(item, dict):
+            result.append(dict(item))
+        elif hasattr(item, "to_dict"):
+            result.append(item.to_dict())
+        else:
+            raise ValueError(f"FSM input item must be dict/model-like, got {type(item)!r}")
+    return result

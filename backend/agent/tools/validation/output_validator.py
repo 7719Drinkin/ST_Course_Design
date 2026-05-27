@@ -9,6 +9,7 @@ from ...core.models import (
     AnalyzedRequirement,
     CoverageGoal,
     CoverageItem,
+    FsmGenerationResult,
     ParsedRequirement,
     RiskAnalysisItem,
     TestCaseDraft,
@@ -99,6 +100,12 @@ def validate_test_cases(items: Any) -> list[TestCaseDraft]:
     """校验并转换 TestCaseDraftAgent 输出。"""
 
     return validate_model_list(items, TestCaseDraft, "test_cases")
+
+
+def validate_fsm_generation(item: Any) -> FsmGenerationResult:
+    """Validate and convert the FR4 FSM modeling prompt output."""
+
+    return validate_model(item, FsmGenerationResult, "fsm_generation")
 
 
 def _as_dict(item: Any) -> dict[str, Any] | None:
