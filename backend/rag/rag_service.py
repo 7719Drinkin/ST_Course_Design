@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from backend.rag.vector_store import ChromaVectorStore
+from .vector_store import ChromaVectorStore
 
 
 class RagService:

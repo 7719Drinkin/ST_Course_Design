@@ -5,7 +5,7 @@ import re
 from dataclasses import dataclass
 from typing import Any
 
-from backend.rag.loader import MarkdownDocument
+from .loader import MarkdownDocument
 
 
 @dataclass(frozen=True)

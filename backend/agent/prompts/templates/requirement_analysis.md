@@ -25,7 +25,7 @@ Rules:
 Parsed requirements:
 {requirements}
 
-Required JSON structure:
+Required JSON structure (each item is an AnalyzedRequirement):
 {
   "analyzed_requirements": [
     {
