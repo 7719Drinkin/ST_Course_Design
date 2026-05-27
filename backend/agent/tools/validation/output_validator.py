@@ -103,7 +103,7 @@ def validate_test_cases(items: Any) -> list[TestCaseDraft]:
 
 
 def validate_fsm_generation(item: Any) -> FsmGenerationResult:
-    """Validate and convert the FR4 FSM modeling prompt output."""
+    """校验并转换 FR4 FSM 建模 prompt 的输出。"""
 
     return validate_model(item, FsmGenerationResult, "fsm_generation")
 

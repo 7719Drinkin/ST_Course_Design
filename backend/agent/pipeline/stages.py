@@ -16,11 +16,11 @@ class StageName:
 
 
 STAGE_TITLES = {
-    StageName.PARSE_REQUIREMENTS: "Requirement parsing",
-    StageName.ANALYZE_RISK: "Risk analysis",
-    StageName.IDENTIFY_COVERAGE: "Coverage identification",
-    StageName.ASSIGN_STRATEGY: "Technique assignment",
-    StageName.GENERATE_TESTS: "Test design and case generation",
-    StageName.GENERATE_FSM: "FSM modeling",
-    StageName.FINAL_VALIDATION: "Final validation",
+    StageName.PARSE_REQUIREMENTS: "需求解析",
+    StageName.ANALYZE_RISK: "风险分析",
+    StageName.IDENTIFY_COVERAGE: "覆盖目标识别",
+    StageName.ASSIGN_STRATEGY: "测试技术分配",
+    StageName.GENERATE_TESTS: "测试设计与用例生成",
+    StageName.GENERATE_FSM: "FSM 建模",
+    StageName.FINAL_VALIDATION: "最终校验",
 }

@@ -123,7 +123,7 @@ class FsmRequest(FlexibleModel):
         for item in value:
             strategy = str(item).strip().upper()
             if strategy not in allowed:
-                raise ValueError("strategies must contain only ALL_STATES or ALL_TRANSITIONS")
+                raise ValueError("strategies 只能包含 ALL_STATES 或 ALL_TRANSITIONS")
             if strategy not in normalized:
                 normalized.append(strategy)
         return normalized
@@ -132,7 +132,7 @@ class FsmRequest(FlexibleModel):
     @classmethod
     def validate_max_depth(cls, value: int) -> int:
         if value < 1:
-            raise ValueError("max_depth must be at least 1")
+            raise ValueError("max_depth 至少为 1")
         return value
 
 

@@ -203,7 +203,7 @@ class AgentPipeline:
         state_candidates: Sequence[str] | None = None,
         rag_context: str | None = None,
     ) -> FsmGenerationResult:
-        """FR4 FSM modeling stage: prompt-based FSM model and FSM cases."""
+        """FR4 FSM 建模阶段：基于 prompt 生成 FSM 模型和 FSM 用例。"""
 
         context = AgentContext(
             fsm_requirements=_dict_list(requirements or []),
@@ -214,7 +214,7 @@ class AgentPipeline:
         )
         await self._run_agent(StageName.GENERATE_FSM, self.fsm_modeling_agent, context)
         if context.fsm is None:
-            raise StageExecutionError(StageName.GENERATE_FSM, "FSM prompt did not return fsm.", context)
+            raise StageExecutionError(StageName.GENERATE_FSM, "FSM prompt 未返回 fsm。", context)
         return FsmGenerationResult(
             fsm=context.fsm,
             test_cases=context.fsm_test_cases,
@@ -231,7 +231,7 @@ class AgentPipeline:
 
         result = await agent.run(context)
         if not result.success:
-            raise StageExecutionError(stage, str(result.error or "Agent stage failed."), context)
+            raise StageExecutionError(stage, str(result.error or "Agent 阶段执行失败。"), context)
         return result
 
     async def _retrieve_rag_context(self, context: AgentContext) -> None:
@@ -336,7 +336,7 @@ async def generate_fsm(
     state_candidates: Sequence[str] | None = None,
     rag_context: str | None = None,
 ) -> FsmGenerationResult:
-    """Module-level convenience entry for the FR4 FSM modeling stage."""
+    """FR4 FSM 建模阶段的模块级便捷入口。"""
 
     return await AgentPipeline().generate_fsm(
         requirements,
@@ -363,5 +363,5 @@ def _dict_list(items: Sequence[Any]) -> list[dict[str, Any]]:
         elif hasattr(item, "to_dict"):
             result.append(item.to_dict())
         else:
-            raise ValueError(f"FSM input item must be dict/model-like, got {type(item)!r}")
+            raise ValueError(f"FSM 输入项必须是 dict 或 model-like 对象，实际类型为 {type(item)!r}")
     return result

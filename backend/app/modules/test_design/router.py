@@ -1,4 +1,4 @@
-"""Step 4 routes: test design, FSM, and oracle review."""
+"""Step 4 路由：测试设计、FSM 状态迁移与 Oracle 审查。"""
 
 from fastapi import APIRouter, Depends
 

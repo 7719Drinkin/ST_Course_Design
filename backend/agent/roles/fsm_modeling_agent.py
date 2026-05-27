@@ -7,7 +7,7 @@ from ..tools.validation.output_validator import validate_fsm_generation
 
 
 class FsmModelingAgent(BaseAgent):
-    """Generate FR4 FSM model and FSM test cases from state-related inputs."""
+    """基于状态相关输入生成 FR4 FSM 模型和 FSM 测试用例。"""
 
     async def run(self, context: AgentContext) -> AgentResult:
         try:
@@ -16,7 +16,7 @@ class FsmModelingAgent(BaseAgent):
                 or context.fsm_parsed_requirements
                 or context.fsm_coverage_items
             ):
-                raise ValueError("FSM requirements, parsed requirements, or coverage items are required.")
+                raise ValueError("FSM 生成需要 requirements、parsed_requirements 或 coverage_items。")
 
             payload = await self._run_json_prompt(
                 "fsm_modeling",

@@ -177,7 +177,7 @@ class TestCaseDraft(AgentModel):
 
 
 class FsmTransitionSpec(AgentModel):
-    """FSM transition produced by the FR4 state-modeling prompt."""
+    """FR4 状态建模 prompt 产出的 FSM 迁移边。"""
 
     model_config = ConfigDict(extra="ignore", validate_assignment=True, populate_by_name=True)
 
@@ -189,7 +189,7 @@ class FsmTransitionSpec(AgentModel):
 
 
 class FsmResult(AgentModel):
-    """FR4 finite-state-machine model produced by the LLM prompt."""
+    """LLM prompt 产出的 FR4 有限状态机模型。"""
 
     states: list[str] = Field(default_factory=list)
     transitions: list[FsmTransitionSpec] = Field(default_factory=list)
@@ -199,16 +199,16 @@ class FsmResult(AgentModel):
     @model_validator(mode="after")
     def validate_fsm_is_non_empty(self) -> "FsmResult":
         if not self.states:
-            raise ValueError("fsm.states must not be empty")
+            raise ValueError("fsm.states 不能为空")
         if not self.transitions:
-            raise ValueError("fsm.transitions must not be empty")
+            raise ValueError("fsm.transitions 不能为空")
         if not self.coverage_paths:
-            raise ValueError("fsm.coverage_paths must not be empty")
+            raise ValueError("fsm.coverage_paths 不能为空")
         return self
 
 
 class FsmTestCaseDraft(AgentModel):
-    """FR4 FSM test case produced from state-transition paths."""
+    """基于状态迁移路径生成的 FR4 FSM 测试用例草案。"""
 
     test_id: str
     requirement_id: str
@@ -227,9 +227,9 @@ class FsmTestCaseDraft(AgentModel):
     @model_validator(mode="after")
     def validate_fsm_case(self) -> "FsmTestCaseDraft":
         if self.technique != "FSM":
-            raise ValueError("FSM test case technique must be FSM")
+            raise ValueError("FSM 测试用例的 technique 必须为 FSM")
         if not self.expected_result.strip():
-            raise ValueError("expected_result must not be empty")
+            raise ValueError("expected_result 不能为空")
         return self
 
 
@@ -271,7 +271,7 @@ class GenerateResult(AgentModel):
 
 
 class FsmGenerationResult(AgentModel):
-    """generate_fsm role return value for FR4."""
+    """generate_fsm 角色的 FR4 返回结果。"""
 
     fsm: FsmResult
     test_cases: list[FsmTestCaseDraft] = Field(default_factory=list)
@@ -280,7 +280,7 @@ class FsmGenerationResult(AgentModel):
     @model_validator(mode="after")
     def validate_cases_are_non_empty(self) -> "FsmGenerationResult":
         if not self.test_cases:
-            raise ValueError("test_cases must not be empty")
+            raise ValueError("test_cases 不能为空")
         return self
 
 
