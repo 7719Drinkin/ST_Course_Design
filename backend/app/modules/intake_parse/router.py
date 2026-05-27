@@ -3,7 +3,7 @@
 from fastapi import APIRouter, Depends, UploadFile
 from fastapi.responses import Response
 
-from .schemas import IngestRequest, ParseRequest, ParseResponse
+from .schemas import IngestRequest, ParseRequest, ParseResponse, PromptRecord
 from .service import IntakeParseService
 
 router = APIRouter(tags=["01 intake-parse"])
