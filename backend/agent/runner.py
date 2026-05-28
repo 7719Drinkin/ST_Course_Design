@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 from collections.abc import AsyncIterator
 from typing import Any
@@ -17,7 +18,7 @@ async def generate_blackbox_tests(
     requirement_text: str,
     rag_context: str | None = None,
 ) -> dict[str, Any]:
-    """对外同步入口：校验输入、串联阶段、调用 finalizer、格式化响应。"""
+    """Synchronous entry: run stages, finalize, and format the response."""
 
     if not requirement_text or not requirement_text.strip():
         return format_error_result(
@@ -29,7 +30,6 @@ async def generate_blackbox_tests(
     stage_results: dict[str, Any] = {}
 
     try:
-        # 普通模式不直接碰 role agent，也不做字段校验；这里只按固定顺序串联阶段。
         async for stage, result in _iter_pipeline_stages(pipeline, requirement_text, rag_context):
             stage_results[stage] = result
 
@@ -39,19 +39,19 @@ async def generate_blackbox_tests(
             stage_results[StageName.IDENTIFY_COVERAGE],
             stage_results[StageName.ASSIGN_STRATEGY],
             stage_results[StageName.GENERATE_TESTS],
+            stage_results[StageName.GENERATE_FSM],
+            stage_results[StageName.GENERATE_ORACLE],
         )
         return format_success_result(
-            {"success": True, **final_result.model_dump()},
+            {"success": True, **final_result.model_dump(mode="json")},
             rag_context=rag_context,
         )
     except StageExecutionError as exc:
-        # 阶段异常保留真实 failed_step，partial_result 仅用于错误页调试，不参与业务补字段。
         return format_error_result(
             exc.error,
             {"failed_step": exc.stage},
         )
     except Exception as exc:
-        # 未知异常统一归属 agent_runner，避免暴露内部文件结构给 API 调用方。
         return format_error_result(str(exc), {"failed_step": StageName.AGENT_RUNNER})
 
 
@@ -59,7 +59,7 @@ async def generate_blackbox_tests_stream(
     requirement_text: str,
     rag_context: str | None = None,
 ) -> AsyncIterator[str]:
-    """对外流式入口：每个阶段完成立即发 SSE，最终校验通过后再发 final。"""
+    """Streaming entry: emit each stage output and final payload."""
 
     if not requirement_text or not requirement_text.strip():
         yield _format_sse(
@@ -85,8 +85,9 @@ async def generate_blackbox_tests_stream(
             stage_results[StageName.IDENTIFY_COVERAGE],
             stage_results[StageName.ASSIGN_STRATEGY],
             stage_results[StageName.GENERATE_TESTS],
+            stage_results[StageName.GENERATE_FSM],
+            stage_results[StageName.GENERATE_ORACLE],
         )
-        # final_validation 是独立阶段事件；通过后才允许发送最终 final 事件。
         yield _format_sse(
             "stage",
             _stage_completed_payload(StageName.FINAL_VALIDATION, {"passed": True}),
@@ -96,7 +97,16 @@ async def generate_blackbox_tests_stream(
             {
                 "status": "completed",
                 "final_output": {
-                    "test_cases": [test_case.model_dump() for test_case in final_result.test_cases]
+                    "test_cases": [test_case.model_dump(mode="json") for test_case in final_result.test_cases],
+                    "fsm_test_cases": [
+                        test_case.model_dump(mode="json") for test_case in final_result.fsm_test_cases
+                    ],
+                    "all_test_cases": [
+                        test_case.model_dump(mode="json") for test_case in final_result.all_test_cases
+                    ],
+                    "oracle_results": [
+                        oracle_item.model_dump(mode="json") for oracle_item in final_result.oracle_results
+                    ],
                 },
             },
         )
@@ -114,7 +124,7 @@ async def _iter_pipeline_stages(
     requirement_text: str,
     rag_context: str | None,
 ) -> AsyncIterator[tuple[str, Any]]:
-    """完整 workflow 的唯一阶段顺序定义，普通和流式入口都复用这里。"""
+    """Single source of truth for the internal stage orchestration."""
 
     parse_result = await pipeline.parse_requirements(requirement_text, rag_context)
     yield StageName.PARSE_REQUIREMENTS, parse_result
@@ -122,32 +132,90 @@ async def _iter_pipeline_stages(
     risk_result = await pipeline.analyze_risk(parse_result.analyzed_requirements, rag_context)
     yield StageName.ANALYZE_RISK, risk_result
 
+    fr3_result, fsm_result = await asyncio.gather(
+        _run_fr3_branch(
+            pipeline,
+            parse_result.analyzed_requirements,
+            risk_result.risk_analysis,
+            rag_context,
+        ),
+        _run_fr4_branch(
+            pipeline,
+            parse_result.requirements,
+            parse_result.analyzed_requirements,
+            rag_context,
+        ),
+    )
+
+    yield StageName.IDENTIFY_COVERAGE, fr3_result[0]
+    yield StageName.ASSIGN_STRATEGY, fr3_result[1]
+    yield StageName.GENERATE_TESTS, fr3_result[2]
+    yield StageName.GENERATE_FSM, fsm_result
+
+    merged_test_cases = _merge_test_cases(fr3_result[2].test_cases, fsm_result.test_cases)
+    oracle_result = await pipeline.generate_oracles(
+        merged_test_cases,
+        requirements=parse_result.analyzed_requirements,
+        rag_context=rag_context,
+    )
+    yield StageName.GENERATE_ORACLE, oracle_result
+
+
+async def _run_fr3_branch(
+    pipeline: AgentPipeline,
+    analyzed_requirements: list,
+    risk_analysis: list,
+    rag_context: str | None,
+) -> tuple[Any, Any, Any]:
     coverage_result = await pipeline.identify_coverage(
-        parse_result.analyzed_requirements,
-        risk_result.risk_analysis,
+        analyzed_requirements,
+        risk_analysis,
         rag_context,
     )
-    yield StageName.IDENTIFY_COVERAGE, coverage_result
-
     strategy_result = await pipeline.assign_strategy(
         coverage_result.coverage_goals,
-        parse_result.analyzed_requirements,
-        risk_result.risk_analysis,
+        analyzed_requirements,
+        risk_analysis,
         rag_context,
     )
-    yield StageName.ASSIGN_STRATEGY, strategy_result
-
     generate_result = await pipeline.generate_tests(
         strategy_result.coverage_items,
-        risk_result.risk_analysis,
+        risk_analysis,
         rag_context,
     )
-    yield StageName.GENERATE_TESTS, generate_result
+    return coverage_result, strategy_result, generate_result
+
+
+async def _run_fr4_branch(
+    pipeline: AgentPipeline,
+    requirements: list,
+    analyzed_requirements: list,
+    rag_context: str | None,
+) -> Any:
+    return await pipeline.generate_fsm(
+        requirements=requirements,
+        parsed_requirements=analyzed_requirements,
+        rag_context=rag_context,
+    )
+
+
+def _merge_test_cases(fr3_cases: list, fr4_cases: list) -> list[dict[str, Any]]:
+    merged_cases: list[dict[str, Any]] = []
+
+    for test_case in fr3_cases:
+        payload = test_case.model_dump(mode="json")
+        payload["test_source"] = "FR3"
+        merged_cases.append(payload)
+
+    for test_case in fr4_cases:
+        payload = test_case.model_dump(mode="json")
+        payload["test_source"] = "FR4"
+        merged_cases.append(payload)
+
+    return merged_cases
 
 
 def _stage_completed_payload(stage: str, output: Any) -> dict[str, Any]:
-    """统一 stage completed 事件格式，保证普通阶段和 final_validation 一致。"""
-
     return {
         "stage": stage,
         "title": STAGE_TITLES.get(stage, stage),
@@ -157,8 +225,6 @@ def _stage_completed_payload(stage: str, output: Any) -> dict[str, Any]:
 
 
 def _stage_error_payload(stage: str, error: str) -> dict[str, str]:
-    """统一 stage_error 事件格式，错误阶段名只使用 StageName。"""
-
     return {
         "stage": stage,
         "status": "failed",
@@ -167,14 +233,10 @@ def _stage_error_payload(stage: str, error: str) -> dict[str, str]:
 
 
 def _format_sse(event: str, data: dict[str, Any]) -> str:
-    """把单个事件和 JSON 数据格式化为标准 SSE 消息。"""
-
     return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
 
 
 def _stage_output(output: Any) -> Any:
-    """阶段事件只接受新模型结果；这里明确用 model_dump 输出给 SSE。"""
-
     if isinstance(output, BaseModel):
-        return output.model_dump()
+        return output.model_dump(mode="json")
     return output

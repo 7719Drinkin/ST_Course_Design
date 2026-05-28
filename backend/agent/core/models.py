@@ -314,6 +314,22 @@ class OracleGenerationResult(AgentModel):
         return self
 
 
+class MergedTestCase(AgentModel):
+    """FR3/FR4 鍚堝苟鍚庣殑缁熶竴娴嬭瘯鐢ㄤ緥瑙嗗浘锛屼繚鐣欐潵婧愪俊鎭€?"""
+
+    source: Literal["FR3", "FR4"]
+    test_id: str
+    requirement_id: str
+    technique: str
+    test_case: dict[str, Any] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def validate_merged_case(self) -> "MergedTestCase":
+        if not self.test_case:
+            raise ValueError("test_case 涓嶈兘涓虹┖")
+        return self
+
+
 class FullPipelineResult(AgentModel):
     """完整流水线返回值，汇总所有阶段产物并用于最终质量门禁。"""
 
@@ -324,4 +340,8 @@ class FullPipelineResult(AgentModel):
     coverage_items: list[CoverageItem] = Field(default_factory=list)
     test_design_specs: list[TestDesignSpec] = Field(default_factory=list)
     test_cases: list[TestCaseDraft] = Field(default_factory=list)
+    fsm: FsmResult | None = None
+    fsm_test_cases: list[FsmTestCaseDraft] = Field(default_factory=list)
+    all_test_cases: list[MergedTestCase] = Field(default_factory=list)
+    oracle_results: list[OracleResult] = Field(default_factory=list)
     prompts_used: list[PromptRecord] = Field(default_factory=list)
