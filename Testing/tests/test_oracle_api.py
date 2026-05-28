@@ -6,7 +6,9 @@ import zipfile
 from pathlib import Path
 
 import pytest
-from fastapi import FastAPI
+
+fastapi = pytest.importorskip("fastapi")
+FastAPI = fastapi.FastAPI
 
 
 fastapi_testclient = pytest.importorskip("fastapi.testclient")
