@@ -60,13 +60,6 @@ class TestDesignService:
         ]
 
         workflow_store.save_object(request.session_id, "fsm", fsm)
-        workflow_store.save_many(
-            request.session_id,
-            "test_cases",
-            [],
-            "test_id",
-            replace_all=True,
-        )
         workflow_store.save_many(request.session_id, "prompt_evidence", prompt_evidence, "evidence_id")
 
         return FsmResponse(

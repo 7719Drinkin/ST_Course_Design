@@ -1,15 +1,16 @@
 import { postJson, withLiveFallback } from '@/shared/api/apiClient'
-import type { TestCase } from '@/shared/types'
+import type { CoverageItem, GenerateResponse, RiskEntry, TestCase } from '@/shared/types'
 
-export async function getTestCases(requirementIds?: string[]) {
+export async function getTestCases(coverageItems: CoverageItem[], riskAnalysis: RiskEntry[]) {
   return withLiveFallback(
     async () => {
-      const cases = await postJson<TestCase[]>('/generate', {
-        requirement_ids: requirementIds ?? [],
+      const response = await postJson<GenerateResponse>('/generate', {
+        coverage_items: coverageItems,
+        risk_analysis: riskAnalysis,
       })
-      return cases.map((c) => ({ ...c, status: c.status ?? 'Draft' }))
+      return response.test_cases.map((c) => ({ ...c, status: c.status ?? 'Draft' }))
     },
     [] as TestCase[],
-    'E: POST /generate',
+    'B: POST /generate',
   )
 }

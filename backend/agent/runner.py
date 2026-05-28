@@ -124,7 +124,7 @@ async def _iter_pipeline_stages(
     requirement_text: str,
     rag_context: str | None,
 ) -> AsyncIterator[tuple[str, Any]]:
-    """Single source of truth for the internal stage orchestration."""
+    """内部阶段编排唯一入口。"""
 
     parse_result = await pipeline.parse_requirements(requirement_text, rag_context)
     yield StageName.PARSE_REQUIREMENTS, parse_result

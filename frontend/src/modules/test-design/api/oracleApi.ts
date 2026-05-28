@@ -1,9 +1,26 @@
 import { postJson, withLiveFallback } from '@/shared/api/apiClient'
-import type { OracleResult } from '@/shared/types'
+import type { DisplayRequirement, OracleResult, TestCase } from '@/shared/types'
 
-export async function getOracleResults(testIds?: string[]) {
+type OracleBackendResponse = {
+  session_id: string
+  oracle_results: OracleResult[]
+}
+
+export async function getOracleResults(testCases: TestCase[], requirements: DisplayRequirement[]) {
   return withLiveFallback(
-    () => postJson<OracleResult[]>('/oracle', { test_ids: testIds ?? [] }),
+    async () => {
+      const response = await postJson<OracleBackendResponse>('/oracle', {
+        session_id: 'SESSION-CURRENT',
+        test_cases: testCases,
+        requirements: requirements.map((item) => ({
+          requirement_id: item.requirement_id,
+          raw_text: item.raw_requirement,
+          description: item.description,
+          source: item.source,
+        })),
+      })
+      return response.oracle_results
+    },
     [] as OracleResult[],
     'B: POST /oracle',
   )

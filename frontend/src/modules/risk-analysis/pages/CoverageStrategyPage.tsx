@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Button, Card, Input, Select, Space, Table, Tag, Typography } from 'antd'
 import { TECHNIQUE_OPTIONS, useAppStore } from '@/app/store/appStore'
-import { getCoverageItems } from '@/modules/risk-analysis/api/coverageApi'
-import { getStrategies } from '@/modules/risk-analysis/api/strategyApi'
+import { getCoverageGoals } from '@/modules/risk-analysis/api/coverageApi'
+import { getCoverageItems } from '@/modules/risk-analysis/api/strategyApi'
+import { toAnalyzedRequirements } from '@/modules/risk-analysis/api/riskApi'
 import { RevisionPanel } from '@/shared/components/RevisionPanel'
 import { DataStatusTag, WorkflowEmptyState } from '@/shared/components/WorkflowFeedback'
-import type { CoverageItem, CoverageStatus, StrategyItem, Technique } from '@/shared/types'
+import type { CoverageGoal, CoverageItem, CoverageStatus, Technique } from '@/shared/types'
 
 const { Paragraph, Text } = Typography
 
@@ -26,6 +27,7 @@ function normalizeCoverageItem(item: CoverageItem): CoverageItem {
 export function CoverageStrategyPage() {
   const [coverageLive, setCoverageLive] = useState<boolean>()
   const [strategyLive, setStrategyLive] = useState<boolean>()
+  const [coverageGoals, setCoverageGoals] = useState<CoverageGoal[]>([])
 
   const requirements = useAppStore((s) => s.requirements)
   const riskEntries = useAppStore((s) => s.riskEntries)
@@ -33,36 +35,37 @@ export function CoverageStrategyPage() {
   const setCoverageItems = useAppStore((s) => s.setCoverageItems)
   const updateCoverageItem = useAppStore((s) => s.updateCoverageItem)
   const addCoverageItem = useAppStore((s) => s.addCoverageItem)
-  const strategies = useAppStore((s) => s.strategies)
-  const setStrategies = useAppStore((s) => s.setStrategies)
-  const updateStrategy = useAppStore((s) => s.updateStrategy)
-  const setCurrentStep = useAppStore((s) => s.setCurrentStep)
 
   const reqIdsKey = requirements.map((requirement) => requirement.requirement_id).join(',')
-  const coverageIdsKey = coverageItems.map((item) => item.coverage_item_id).join(',')
+  const riskKey = riskEntries.map((entry) => `${entry.requirement_id}:${entry.risk_score ?? entry.score}`).join(',')
+  const goalsKey = coverageGoals.map((item) => item.coverage_goal_id).join(',')
   const hasRequirements = requirements.length > 0
+  const analyzedRequirements = useMemo(() => toAnalyzedRequirements(requirements), [requirements])
 
   useEffect(() => {
     if (!reqIdsKey) {
-      setCoverageItems([])
+      queueMicrotask(() => {
+        setCoverageGoals([])
+        setCoverageItems([])
+      })
       return
     }
-    getCoverageItems(reqIdsKey.split(',')).then((result) => {
-      setCoverageItems(result.data.map(normalizeCoverageItem))
+    getCoverageGoals(analyzedRequirements, riskEntries).then((result) => {
+      setCoverageGoals(result.data)
       setCoverageLive(result.isLive)
     })
-  }, [reqIdsKey, setCoverageItems])
+  }, [analyzedRequirements, reqIdsKey, riskEntries, riskKey, setCoverageItems])
 
   useEffect(() => {
-    if (!coverageIdsKey) {
-      setStrategies([])
+    if (!goalsKey) {
+      queueMicrotask(() => setCoverageItems([]))
       return
     }
-    getStrategies(coverageIdsKey.split(',')).then((result) => {
-      setStrategies(result.data)
+    getCoverageItems(coverageGoals, analyzedRequirements, riskEntries).then((result) => {
+      setCoverageItems(result.data.map(normalizeCoverageItem))
       setStrategyLive(result.isLive)
     })
-  }, [coverageIdsKey, setStrategies])
+  }, [coverageGoals, goalsKey, analyzedRequirements, riskEntries, setCoverageItems])
 
   const techniqueCounts = useMemo(() => {
     const counts: Record<Technique, number> = { EP: 0, BVA: 0, DT: 0, FSM: 0 }
@@ -102,7 +105,6 @@ export function CoverageStrategyPage() {
         <WorkflowEmptyState
           title="等待需求与风险数据"
           description="覆盖项和覆盖策略必须基于已解析的 AUT 需求生成。请先完成输入解析和风险评分。"
-          action={<Button type="primary" onClick={() => setCurrentStep(0)}>返回输入阶段</Button>}
         />
       ) : (
         <>
@@ -112,8 +114,8 @@ export function CoverageStrategyPage() {
                 <DataStatusTag isLive={coverageLive} />
                 <div className="metric-band">
                   <div>
-                    <span>{coverageItems.length}</span>
-                    <Text>COV-AUT</Text>
+                    <span>{coverageGoals.length}</span>
+                    <Text>覆盖目标</Text>
                   </div>
                   <div>
                     <span>{coverageItems.filter((item) => item.status === 'human_added').length}</span>
@@ -142,7 +144,7 @@ export function CoverageStrategyPage() {
                   ))}
                 </div>
                 <Paragraph>
-                  EP、BVA、DT、FSM 的选择由算法和 Prompt 给出建议，前端负责让设计者审查和修改。
+                  EP、BVA、DT 的选择由后端生成建议，前端负责让设计者审查和修改。
                 </Paragraph>
               </Space>
             </Card>
@@ -153,7 +155,6 @@ export function CoverageStrategyPage() {
             extra={
               <Space wrap>
                 <Button onClick={handleAddCoverage}>新增覆盖项</Button>
-                <Button type="primary" onClick={() => setCurrentStep(3)}>进入用例生成</Button>
               </Space>
             }
           >
@@ -256,26 +257,31 @@ export function CoverageStrategyPage() {
             />
           </Card>
 
-          <Card title="策略审查">
+          <Card title="覆盖策略审查">
             <Table
               size="small"
-              rowKey="strategy_id"
+              rowKey="coverage_item_id"
               pagination={{ pageSize: 6 }}
               scroll={{ x: 980 }}
-              dataSource={strategies}
+              dataSource={coverageItems}
               columns={[
-                { title: '策略编号', dataIndex: 'strategy_id', width: 140 },
-                { title: '覆盖项', dataIndex: 'coverage_item_id', width: 140 },
+                { title: '覆盖项', dataIndex: 'coverage_item_id', width: 160 },
                 {
                   title: '方法',
                   dataIndex: 'technique',
                   width: 120,
-                  render: (value: Technique, record: StrategyItem) => (
+                  render: (value: Technique, record: CoverageItem) => (
                     <Select
                       size="small"
                       value={value}
                       style={{ width: '100%' }}
-                      onChange={(technique) => updateStrategy(record.strategy_id, { technique })}
+                      onChange={(technique) =>
+                        updateCoverageItem(record.coverage_item_id, {
+                          technique,
+                          techniques: [technique],
+                          status: 'human_revised',
+                        })
+                      }
                       options={TECHNIQUE_OPTIONS.map((technique) => ({
                         value: technique,
                         label: technique,
@@ -283,36 +289,21 @@ export function CoverageStrategyPage() {
                     />
                   ),
                 },
-                { title: '参考依据', dataIndex: 'standard_ref', width: 180, ellipsis: true },
+                { title: '技术理由', dataIndex: 'technique_reason', width: 220, ellipsis: true },
                 {
                   title: '选择理由',
-                  dataIndex: 'reason',
+                  dataIndex: 'strategy_rationale',
                   ellipsis: true,
-                  render: (value: string, record: StrategyItem) => (
+                  render: (value: string, record: CoverageItem) => (
                     <Input
                       size="small"
-                      value={value}
+                      value={value ?? ''}
                       onChange={(event) =>
-                        updateStrategy(record.strategy_id, { reason: event.target.value })
-                      }
-                    />
-                  ),
-                },
-                {
-                  title: '审查',
-                  width: 120,
-                  render: (_, record: StrategyItem) => (
-                    <Button
-                      size="small"
-                      type={record.designer_confirmed ? 'primary' : 'default'}
-                      onClick={() =>
-                        updateStrategy(record.strategy_id, {
-                          designer_confirmed: !record.designer_confirmed,
+                        updateCoverageItem(record.coverage_item_id, {
+                          strategy_rationale: event.target.value,
                         })
                       }
-                    >
-                      {record.designer_confirmed ? '已确认' : '确认'}
-                    </Button>
+                    />
                   ),
                 },
               ]}

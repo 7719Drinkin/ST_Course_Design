@@ -1,7 +1,6 @@
 import { create } from 'zustand'
 import type {
   AnalysisResult,
-  ConceptItem,
   CoverageItem,
   DisplayRequirement,
   FSMResult,
@@ -28,10 +27,6 @@ type AppState = {
   requirements: DisplayRequirement[]
   setRequirements: (data: DisplayRequirement[]) => void
   updateRequirement: (id: string, patch: Partial<DisplayRequirement>, reason?: string) => void
-
-  concepts: ConceptItem[]
-  setConcepts: (data: ConceptItem[]) => void
-  updateConcept: (id: string, patch: Partial<ConceptItem>, reason?: string) => void
 
   riskEntries: RiskEntry[]
   setRiskEntries: (data: RiskEntry[]) => void
@@ -80,7 +75,7 @@ type AppState = {
 
 let revisionCounter = 0
 
-const TECHNIQUE_OPTIONS: Technique[] = ['EP', 'BVA', 'DT', 'FSM']
+const TECHNIQUE_OPTIONS: Technique[] = ['EP', 'BVA', 'DT']
 
 export { TECHNIQUE_OPTIONS }
 
@@ -140,22 +135,6 @@ export const useAppStore = create<AppState>((set, get) => ({
     })
   },
 
-  concepts: [],
-  setConcepts: (data) => set({ concepts: data }),
-  updateConcept: (id, patch, reason = '设计者确认概念有效性') => {
-    const prev = get().concepts.find((c) => c.concept_id === id)
-    if (!prev) return
-    collectPatchRevisions(prev as unknown as Record<string, unknown>, patch, {
-      step: 1,
-      entity_type: 'concept',
-      entity_id: id,
-      reason,
-    }, get().addRevision)
-    set({
-      concepts: get().concepts.map((c) => (c.concept_id === id ? { ...c, ...patch } : c)),
-    })
-  },
-
   riskEntries: [],
   setRiskEntries: (data) => set({ riskEntries: data }),
   updateRiskEntry: (requirementId, patch, reason = '设计者调整风险评分') => {
@@ -163,7 +142,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     if (!prev) return
     collectPatchRevisions(prev as unknown as Record<string, unknown>, patch, {
       step: 1,
-      entity_type: 'risk',
+      entity_type: 'risk_result',
       entity_id: requirementId,
       reason,
     }, get().addRevision)
@@ -181,7 +160,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     if (!prev) return
     collectPatchRevisions(prev as unknown as Record<string, unknown>, patch, {
       step: 2,
-      entity_type: 'coverage',
+      entity_type: 'coverage_item',
       entity_id: coverageItemId,
       reason,
     }, get().addRevision)
@@ -194,7 +173,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   addCoverageItem: (item) => {
     get().addRevision({
       step: 2,
-      entity_type: 'coverage',
+      entity_type: 'coverage_item',
       entity_id: item.coverage_item_id,
       field: 'created',
       old_value: '',
