@@ -142,6 +142,7 @@ def _xlsx_bytes(bundle: dict[str, Any]) -> bytes:
         "coverage_items": bundle.get("coverage_items", []),
         "strategies": bundle.get("strategies", []),
         "test_cases": bundle.get("test_cases", []),
+        "oracle_results": bundle.get("oracle_results", []),
         "revisions": bundle.get("revisions", []),
         "analysis_results": bundle.get("analysis_results", []),
         "prompt_evidence": bundle.get("prompt_evidence", []),

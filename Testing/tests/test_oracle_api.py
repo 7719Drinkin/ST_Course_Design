@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import sys
+import io
+import zipfile
 from pathlib import Path
 
 import pytest
@@ -19,6 +21,7 @@ if str(BACKEND) not in sys.path:
 
 from backend.agent.pipeline import AgentPipeline  # noqa: E402
 from app.modules.store import workflow_store  # noqa: E402
+from app.modules.optimize_export.router import router as optimize_export_router  # noqa: E402
 from app.modules.test_design.router import router as design_router  # noqa: E402
 
 
@@ -26,6 +29,7 @@ from app.modules.test_design.router import router as design_router  # noqa: E402
 def client() -> TestClient:
     app = FastAPI()
     app.include_router(design_router)
+    app.include_router(optimize_export_router)
     return TestClient(app)
 
 
@@ -83,6 +87,18 @@ def test_oracle_api_returns_results_evidence_and_persists(
     assert bundle["oracle_results"][0]["test_id"] == "TC-AUT-001"
     assert bundle["prompt_evidence"]
 
+    export_response = client.get(
+        "/export",
+        params={"session_id": session_id, "format": "json"},
+    )
+    assert export_response.status_code == 200
+    export_bundle = export_response.json()["export_bundle"]
+    assert export_bundle["oracle_results"][0]["test_id"] == "TC-AUT-001"
+    assert (
+        export_bundle["oracle_results"][0]["expected_result_suggestion"]
+        == "借阅请求被拒绝，且系统不创建借阅记录。"
+    )
+
 
 def test_oracle_api_marks_review_when_context_is_insufficient(
     client: TestClient,
@@ -117,3 +133,51 @@ def test_oracle_api_marks_review_when_context_is_insufficient(
     assert oracle_result["confidence"] < 0.7
     assert oracle_result["needs_review"] is True
     assert "人工复核" in oracle_result["expected_result_suggestion"]
+
+
+def test_oracle_results_are_exported_as_csv_and_xlsx(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    async def fail_oracle_prompt(self, *args, **kwargs):
+        raise RuntimeError("模拟 Oracle prompt 不可用")
+
+    monkeypatch.setattr(AgentPipeline, "generate_oracles", fail_oracle_prompt)
+    session_id = "SESSION-FR5-EXPORT-FILES"
+
+    oracle_response = client.post(
+        "/oracle",
+        json={
+            "session_id": session_id,
+            "test_cases": [
+                {
+                    "test_id": "TC-AUT-CSV",
+                    "requirement_id": "REQ-AUT-CSV",
+                    "coverage_item_id": "COV-AUT-CSV",
+                    "technique": "EP",
+                    "test_steps": ["提交无效借阅请求。"],
+                    "expected_result": "系统拒绝无效借阅请求。",
+                }
+            ],
+        },
+    )
+    assert oracle_response.status_code == 200
+
+    csv_response = client.get(
+        "/export",
+        params={"session_id": session_id, "format": "csv"},
+    )
+    assert csv_response.status_code == 200
+    csv_text = csv_response.content.decode("utf-8-sig")
+    assert "oracle_result" in csv_text
+    assert "系统拒绝无效借阅请求。" in csv_text
+
+    xlsx_response = client.get(
+        "/export",
+        params={"session_id": session_id, "format": "xlsx"},
+    )
+    assert xlsx_response.status_code == 200
+    assert xlsx_response.content.startswith(b"PK")
+    with zipfile.ZipFile(io.BytesIO(xlsx_response.content)) as archive:
+        workbook_xml = archive.read("xl/workbook.xml").decode("utf-8")
+    assert "oracle_results" in workbook_xml

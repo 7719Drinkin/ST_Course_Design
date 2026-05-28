@@ -10,7 +10,7 @@ from ..concept_risk.schemas import RiskResult
 from ..coverage_strategy.schemas import CoverageItem, Strategy
 from ..evidence_improve.schemas import AnalysisResult, RevisionRecord
 from ..intake_parse.schemas import FlexibleModel, PromptEvidence, Requirement
-from ..test_design.schemas import TestCase
+from ..test_design.schemas import OracleResult, TestCase
 
 
 # 测试套件优化结果
@@ -31,6 +31,7 @@ class ExportBundle(FlexibleModel):
     coverage_items: list[CoverageItem] = Field(default_factory=list)
     strategies: list[Strategy] = Field(default_factory=list)
     test_cases: list[TestCase] = Field(default_factory=list)
+    oracle_results: list[OracleResult] = Field(default_factory=list)
     optimization_result: OptimizationResult | None = None
     revisions: list[RevisionRecord] = Field(default_factory=list)
     prompt_evidence: list[PromptEvidence] = Field(default_factory=list)
