@@ -80,7 +80,7 @@ class PromptEvidence(FlexibleModel):
 
 # POST /parse 请求体
 class ParseRequest(FlexibleModel):
-    requirement_text: str
+    requirement_text: str = ""
     rag_context: str | None = None
 
 

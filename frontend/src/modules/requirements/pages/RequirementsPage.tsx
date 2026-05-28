@@ -5,7 +5,6 @@ import {
   Card,
   Descriptions,
   Input,
-  Segmented,
   Space,
   Spin,
   Table,
@@ -15,25 +14,22 @@ import {
 } from 'antd'
 import type { UploadFile } from 'antd'
 import { useAppStore } from '@/app/store/appStore'
-import { ingestFile, ingestText, isAllowedFileType } from '@/modules/requirements/api/requirementsApi'
+import {
+  ingestFile,
+  ingestText,
+  isAllowedFileType,
+  parseRequirements,
+} from '@/modules/requirements/api/requirementsApi'
 import { RevisionPanel } from '@/shared/components/RevisionPanel'
 import { WorkflowEmptyState } from '@/shared/components/WorkflowFeedback'
-import type { DisplayRequirement, SourceType } from '@/shared/types'
+import type { DisplayRequirement } from '@/shared/types'
 
 const { TextArea } = Input
 const { Paragraph, Text } = Typography
 
-const SOURCE_OPTIONS: { label: string; value: SourceType }[] = [
-  { label: '直接输入', value: 'direct' },
-  { label: 'TXT', value: 'txt' },
-  { label: 'CSV', value: 'csv' },
-  { label: '需求文档', value: 'srs' },
-]
-
 export function RequirementsPage() {
   const [fileList, setFileList] = useState<UploadFile[]>([])
   const [pasteText, setPasteText] = useState('')
-  const [sourceType, setSourceType] = useState<SourceType>('direct')
   const [loading, setLoading] = useState(false)
   const [inputError, setInputError] = useState<string>()
   const [successMessage, setSuccessMessage] = useState<string>()
@@ -42,8 +38,6 @@ export function RequirementsPage() {
   const setRequirements = useAppStore((s) => s.setRequirements)
   const setSourceName = useAppStore((s) => s.setSourceName)
   const updateRequirement = useAppStore((s) => s.updateRequirement)
-  const setCurrentStep = useAppStore((s) => s.setCurrentStep)
-  const setConcepts = useAppStore((s) => s.setConcepts)
   const setRiskEntries = useAppStore((s) => s.setRiskEntries)
   const setCoverageItems = useAppStore((s) => s.setCoverageItems)
   const setStrategies = useAppStore((s) => s.setStrategies)
@@ -70,24 +64,36 @@ export function RequirementsPage() {
     setSuccessMessage(undefined)
 
     try {
+      let parseInput = ''
+      let sourceLabel = ''
       if (selectedFile) {
         if (!isAllowedFileType(selectedFile.name)) {
-          setInputError('不支持的文件类型，仅允许 .txt .md .pdf .docx .doc')
+          setInputError('不支持的文件类型，仅允许 .txt .md .pdf .docx')
           return
         }
+        const fileExt = selectedFile.name.slice(selectedFile.name.lastIndexOf('.')).toLowerCase()
         await ingestFile(selectedFile)
         setSourceName(selectedFile.name)
-        setSuccessMessage(`已提交 ${selectedFile.name}，系统正在处理需求内容。`)
+        sourceLabel = selectedFile.name
+        parseInput = fileExt === '.txt' || fileExt === '.md' ? await selectedFile.text() : ''
       } else {
         const content = pasteText.trim()
         if (!content) {
           setInputError('请先粘贴需求文本，或上传文件后再提交。')
           return
         }
-        await ingestText(content, sourceType)
-        setSourceName(`${sourceType} 输入`)
-        setSuccessMessage(`已提交 ${sourceType} 输入，系统正在处理需求内容。`)
+        await ingestText(content)
+        sourceLabel = '文本输入'
+        parseInput = content
+        setSourceName(sourceLabel)
       }
+      const parsed = await parseRequirements(parseInput, sourceLabel)
+      setRequirements(parsed)
+      setSuccessMessage(
+        parsed.length > 0
+          ? `已提交并解析 ${parsed.length} 条需求。`
+          : '输入已提交，后端当前未返回结构化需求。',
+      )
     } catch {
       setInputError('提交失败，请检查服务是否可用，或稍后重试。')
     } finally {
@@ -100,7 +106,6 @@ export function RequirementsPage() {
     setFileList([])
     setSourceName(null)
     setRequirements([])
-    setConcepts([])
     setRiskEntries([])
     setCoverageItems([])
     setStrategies([])
@@ -123,18 +128,10 @@ export function RequirementsPage() {
             <div className="info-panel">
               <Text className="section-title">输入内容</Text>
               <Descriptions size="small" column={1}>
-                <Descriptions.Item label="来源类型">CSV、TXT、直接输入或需求文档</Descriptions.Item>
                 <Descriptions.Item label="文本内容">可直接粘贴需求描述</Descriptions.Item>
-                <Descriptions.Item label="上传文件">可选择本地需求文件</Descriptions.Item>
+                <Descriptions.Item label="上传文件">支持 TXT、MD、PDF、DOCX</Descriptions.Item>
               </Descriptions>
             </div>
-
-            <Segmented
-              value={sourceType}
-              onChange={(value) => setSourceType(value as SourceType)}
-              options={SOURCE_OPTIONS}
-              block
-            />
 
             <div>
               <Text strong>直接输入</Text>
@@ -152,10 +149,10 @@ export function RequirementsPage() {
 
             <Upload.Dragger
               multiple={false}
-              accept=".txt,.md,.pdf,.docx,.doc"
+              accept=".txt,.md,.pdf,.docx"
               beforeUpload={(file) => {
                 if (!isAllowedFileType(file.name)) {
-                  setInputError('不支持的文件类型，仅允许 .txt .md .pdf .docx .doc')
+                  setInputError('不支持的文件类型，仅允许 .txt .md .pdf .docx')
                   return Upload.LIST_IGNORE
                 }
                 setInputError(undefined)
@@ -169,7 +166,7 @@ export function RequirementsPage() {
               className="upload-zone"
             >
               <p className="upload-title">拖入或选择需求文档</p>
-              <p className="upload-hint">TXT / MD / PDF / DOCX / DOC</p>
+              <p className="upload-hint">TXT / MD / PDF / DOCX</p>
             </Upload.Dragger>
 
             {inputError && <Alert type="warning" showIcon message={inputError} />}
@@ -177,7 +174,7 @@ export function RequirementsPage() {
 
             <Space wrap>
               <Button type="primary" onClick={handleIngest} loading={loading} disabled={!hasInput}>
-                提交输入
+                提交并解析
               </Button>
               <Button onClick={handleReset}>清空工作台</Button>
             </Space>
@@ -210,7 +207,7 @@ export function RequirementsPage() {
               <span>需求归一化</span>
               <span>结构化解析</span>
               <span>设计者确认</span>
-              <span>进入风险评分</span>
+              <span>风险评分准备</span>
             </div>
           </Space>
         </Card>
@@ -222,19 +219,12 @@ export function RequirementsPage() {
           description="提交真实需求后，表格会展示可审查的结构化内容、置信度和待补充信息。"
           action={
             <Button type="primary" disabled={!hasInput} onClick={handleIngest} loading={loading}>
-              提交需求
+              提交并解析
             </Button>
           }
         />
       ) : (
-        <Card
-          title="结构化解析结果 · 人工审查"
-          extra={
-            <Button type="primary" onClick={() => setCurrentStep(1)}>
-              进入概念与风险
-            </Button>
-          }
-        >
+        <Card title="结构化解析结果 · 人工审查">
           <Spin spinning={loading}>
             <Table
               rowKey="requirement_id"
