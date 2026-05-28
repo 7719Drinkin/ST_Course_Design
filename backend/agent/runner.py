@@ -47,10 +47,7 @@ async def generate_blackbox_tests(
             rag_context=rag_context,
         )
     except StageExecutionError as exc:
-        return format_error_result(
-            exc.error,
-            {"failed_step": exc.stage},
-        )
+        return format_error_result(exc.error, {"failed_step": exc.stage})
     except Exception as exc:
         return format_error_result(str(exc), {"failed_step": StageName.AGENT_RUNNER})
 
@@ -97,16 +94,10 @@ async def generate_blackbox_tests_stream(
             {
                 "status": "completed",
                 "final_output": {
-                    "test_cases": [test_case.model_dump(mode="json") for test_case in final_result.test_cases],
-                    "fsm_test_cases": [
-                        test_case.model_dump(mode="json") for test_case in final_result.fsm_test_cases
-                    ],
-                    "all_test_cases": [
-                        test_case.model_dump(mode="json") for test_case in final_result.all_test_cases
-                    ],
-                    "oracle_results": [
-                        oracle_item.model_dump(mode="json") for oracle_item in final_result.oracle_results
-                    ],
+                    "test_cases": [item.model_dump(mode="json") for item in final_result.test_cases],
+                    "fsm_test_cases": [item.model_dump(mode="json") for item in final_result.fsm_test_cases],
+                    "all_test_cases": [item.model_dump(mode="json") for item in final_result.all_test_cases],
+                    "oracle_results": [item.model_dump(mode="json") for item in final_result.oracle_results],
                 },
             },
         )
@@ -132,6 +123,7 @@ async def _iter_pipeline_stages(
     risk_result = await pipeline.analyze_risk(parse_result.analyzed_requirements, rag_context)
     yield StageName.ANALYZE_RISK, risk_result
 
+    # FR3 与 FR4 并列执行，随后统一进入 FR5。
     fr3_result, fsm_result = await asyncio.gather(
         _run_fr3_branch(
             pipeline,
@@ -167,6 +159,8 @@ async def _run_fr3_branch(
     risk_analysis: list,
     rag_context: str | None,
 ) -> tuple[Any, Any, Any]:
+    """FR3 分支：覆盖识别 -> 技术分配 -> 用例生成。"""
+
     coverage_result = await pipeline.identify_coverage(
         analyzed_requirements,
         risk_analysis,
@@ -192,6 +186,8 @@ async def _run_fr4_branch(
     analyzed_requirements: list,
     rag_context: str | None,
 ) -> Any:
+    """FR4 分支：FSM 建模。"""
+
     return await pipeline.generate_fsm(
         requirements=requirements,
         parsed_requirements=analyzed_requirements,
@@ -200,6 +196,8 @@ async def _run_fr4_branch(
 
 
 def _merge_test_cases(fr3_cases: list, fr4_cases: list) -> list[dict[str, Any]]:
+    """合并 FR3/FR4 用例，并打上来源标签供 FR5 使用。"""
+
     merged_cases: list[dict[str, Any]] = []
 
     for test_case in fr3_cases:
@@ -216,6 +214,8 @@ def _merge_test_cases(fr3_cases: list, fr4_cases: list) -> list[dict[str, Any]]:
 
 
 def _stage_completed_payload(stage: str, output: Any) -> dict[str, Any]:
+    """统一 stage 完成事件的输出结构。"""
+
     return {
         "stage": stage,
         "title": STAGE_TITLES.get(stage, stage),
@@ -225,6 +225,8 @@ def _stage_completed_payload(stage: str, output: Any) -> dict[str, Any]:
 
 
 def _stage_error_payload(stage: str, error: str) -> dict[str, str]:
+    """统一 stage 失败事件的输出结构。"""
+
     return {
         "stage": stage,
         "status": "failed",
