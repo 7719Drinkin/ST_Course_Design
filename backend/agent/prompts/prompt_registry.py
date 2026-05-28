@@ -15,6 +15,7 @@ class PromptRegistry:
         "test_design_spec": "test_design_spec.md",
         "test_case_draft": "test_case_draft.md",
         "fsm_modeling": "fsm_modeling.md",
+        "oracle_generation": "oracle_generation.md",
     }
 
     def __init__(self, template_dir: Path | None = None) -> None:

@@ -9,6 +9,7 @@ from .models import (
     CoverageItem,
     FsmResult,
     FsmTestCaseDraft,
+    OracleResult,
     ParsedRequirement,
     PromptRecord,
     RiskAnalysisItem,
@@ -35,5 +36,9 @@ class AgentContext:
     state_candidates: list[str] = field(default_factory=list)
     fsm: FsmResult | None = None
     fsm_test_cases: list[FsmTestCaseDraft] = field(default_factory=list)
+    oracle_test_cases: list[dict[str, Any]] = field(default_factory=list)
+    oracle_requirements: list[dict[str, Any]] = field(default_factory=list)
+    source_context_ids: list[str] = field(default_factory=list)
+    oracle_results: list[OracleResult] = field(default_factory=list)
     rag_context: str | None = None
     prompts_used: list[PromptRecord] = field(default_factory=list)

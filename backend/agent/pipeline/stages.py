@@ -11,6 +11,7 @@ class StageName:
     ASSIGN_STRATEGY = "assign_strategy"
     GENERATE_TESTS = "generate_tests"
     GENERATE_FSM = "generate_fsm"
+    GENERATE_ORACLE = "generate_oracle"
     FINAL_VALIDATION = "final_validation"
     AGENT_RUNNER = "agent_runner"
 
@@ -22,5 +23,6 @@ STAGE_TITLES = {
     StageName.ASSIGN_STRATEGY: "测试技术分配",
     StageName.GENERATE_TESTS: "测试设计与用例生成",
     StageName.GENERATE_FSM: "FSM 建模",
+    StageName.GENERATE_ORACLE: "Oracle 预言生成",
     StageName.FINAL_VALIDATION: "最终校验",
 }
