@@ -71,12 +71,11 @@ export function RequirementsPage() {
           setInputError('不支持的文件类型，仅允许 .txt .md .pdf .docx')
           return
         }
+        const fileExt = selectedFile.name.slice(selectedFile.name.lastIndexOf('.')).toLowerCase()
         await ingestFile(selectedFile)
         setSourceName(selectedFile.name)
         sourceLabel = selectedFile.name
-        parseInput = selectedFile.name.endsWith('.txt') || selectedFile.name.endsWith('.md')
-          ? await selectedFile.text()
-          : selectedFile.name
+        parseInput = fileExt === '.txt' || fileExt === '.md' ? await selectedFile.text() : ''
       } else {
         const content = pasteText.trim()
         if (!content) {
@@ -175,7 +174,7 @@ export function RequirementsPage() {
 
             <Space wrap>
               <Button type="primary" onClick={handleIngest} loading={loading} disabled={!hasInput}>
-                提交输入
+                提交并解析
               </Button>
               <Button onClick={handleReset}>清空工作台</Button>
             </Space>
@@ -220,7 +219,7 @@ export function RequirementsPage() {
           description="提交真实需求后，表格会展示可审查的结构化内容、置信度和待补充信息。"
           action={
             <Button type="primary" disabled={!hasInput} onClick={handleIngest} loading={loading}>
-              提交需求
+              提交并解析
             </Button>
           }
         />

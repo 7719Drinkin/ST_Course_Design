@@ -22,8 +22,22 @@ class IntakeParseService:
               输入：requirement_text, rag_context
               输出：list[ParsedRequirement] + list[AnalyzedRequirement]
         """
+        requirement_text = self._resolve_requirement_text(request)
+        # TODO: pass requirement_text into RequirementParseAgent once B Agent is wired.
+        if not requirement_text:
+            return ParseResponse(
+                requirements=[],
+                analyzed_requirements=[],
+                prompts_used=[],
+            )
         return ParseResponse(
             requirements=[],
             analyzed_requirements=[],
             prompts_used=[],
         )
+
+    def _resolve_requirement_text(self, request: ParseRequest) -> str:
+        requirement_text = request.requirement_text.strip()
+        if requirement_text:
+            return requirement_text
+        return ingest_manager.load_text().strip()
