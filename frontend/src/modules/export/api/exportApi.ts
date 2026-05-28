@@ -25,6 +25,6 @@ export async function exportApproved(
     format,
     include_revisions: true,
     include_prompt_evidence: true,
-    test_case_status: 'all',
+    test_case_status: 'approved_only',
   })
 }
