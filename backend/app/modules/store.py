@@ -168,6 +168,7 @@ class WorkflowStore:
             "revisions": session.get("revisions", []),
             "prompt_evidence": session.get("prompt_evidence", []),
             "analysis_results": session.get("analysis_results", []),
+            "oracle_results": session.get("oracle_results", []),
         }
 
 

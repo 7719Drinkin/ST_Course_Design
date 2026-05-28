@@ -40,4 +40,4 @@ async def oracle(
     req: OracleRequest,
     svc: TestDesignService = Depends(get_test_design_service),
 ) -> OracleResponse:
-    return svc.oracle(req)
+    return await svc.oracle(req)
