@@ -315,7 +315,7 @@ class OracleGenerationResult(AgentModel):
 
 
 class MergedTestCase(AgentModel):
-    """FR3/FR4 鍚堝苟鍚庣殑缁熶竴娴嬭瘯鐢ㄤ緥瑙嗗浘锛屼繚鐣欐潵婧愪俊鎭€?"""
+    """FR3/FR4 合并后的统一测试用例视图，保留来源信息。"""
 
     source: Literal["FR3", "FR4"]
     test_id: str
@@ -326,7 +326,7 @@ class MergedTestCase(AgentModel):
     @model_validator(mode="after")
     def validate_merged_case(self) -> "MergedTestCase":
         if not self.test_case:
-            raise ValueError("test_case 涓嶈兘涓虹┖")
+            raise ValueError("test_case 不能为空")
         return self
 
 

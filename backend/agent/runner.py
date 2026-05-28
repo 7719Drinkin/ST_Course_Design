@@ -18,11 +18,11 @@ async def generate_blackbox_tests(
     requirement_text: str,
     rag_context: str | None = None,
 ) -> dict[str, Any]:
-    """Synchronous entry: run stages, finalize, and format the response."""
+    """同步入口：执行主流程并返回格式化结果。"""
 
     if not requirement_text or not requirement_text.strip():
         return format_error_result(
-            "requirement_text is required.",
+            "需求文本不能为空。",
             {"failed_step": StageName.INPUT_VALIDATION},
         )
 
@@ -59,14 +59,14 @@ async def generate_blackbox_tests_stream(
     requirement_text: str,
     rag_context: str | None = None,
 ) -> AsyncIterator[str]:
-    """Streaming entry: emit each stage output and final payload."""
+    """流式入口：按阶段输出进度，最后输出完整结果。"""
 
     if not requirement_text or not requirement_text.strip():
         yield _format_sse(
             "stage_error",
             _stage_error_payload(
                 StageName.INPUT_VALIDATION,
-                "requirement_text is required.",
+                "需求文本不能为空。",
             ),
         )
         return
