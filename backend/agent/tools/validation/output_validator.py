@@ -10,6 +10,8 @@ from ...core.models import (
     CoverageGoal,
     CoverageItem,
     FsmGenerationResult,
+    OracleGenerationResult,
+    OracleResult,
     ParsedRequirement,
     RiskAnalysisItem,
     TestCaseDraft,
@@ -106,6 +108,18 @@ def validate_fsm_generation(item: Any) -> FsmGenerationResult:
     """校验并转换 FR4 FSM 建模 prompt 的输出。"""
 
     return validate_model(item, FsmGenerationResult, "fsm_generation")
+
+
+def validate_oracle_results(items: Any) -> list[OracleResult]:
+    """校验并转换 FR5 Oracle prompt 输出项。"""
+
+    return validate_model_list(items, OracleResult, "oracle_results")
+
+
+def validate_oracle_generation(item: Any) -> OracleGenerationResult:
+    """校验并转换 FR5 Oracle prompt 顶层输出。"""
+
+    return validate_model(item, OracleGenerationResult, "oracle_generation")
 
 
 def _as_dict(item: Any) -> dict[str, Any] | None:

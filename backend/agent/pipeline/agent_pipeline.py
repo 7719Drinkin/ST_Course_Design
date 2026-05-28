@@ -13,6 +13,7 @@ from ..core.models import (
     CoverageResult,
     FsmGenerationResult,
     GenerateResult,
+    OracleGenerationResult,
     ParseResult,
     RiskAnalysisItem,
     RiskResult,
@@ -21,6 +22,7 @@ from ..core.models import (
 from ..prompts.prompt_builder import PromptBuilder
 from ..roles.coverage_identification_agent import CoverageIdentificationAgent
 from ..roles.fsm_modeling_agent import FsmModelingAgent
+from ..roles.oracle_generation_agent import OracleGenerationAgent
 from ..roles.requirement_analysis_agent import RequirementAnalysisAgent
 from ..roles.requirement_parse_agent import RequirementParseAgent
 from ..roles.risk_analysis_agent import RiskAnalysisAgent
@@ -77,6 +79,10 @@ class AgentPipeline:
             shared_prompt_builder,
         )
         self.fsm_modeling_agent = FsmModelingAgent(
+            shared_llm_client,
+            shared_prompt_builder,
+        )
+        self.oracle_generation_agent = OracleGenerationAgent(
             shared_llm_client,
             shared_prompt_builder,
         )
@@ -221,6 +227,37 @@ class AgentPipeline:
             prompts_used=list(context.prompts_used),
         )
 
+    async def generate_oracles(
+        self,
+        test_cases: Sequence[Any],
+        requirements: Sequence[Any] | None = None,
+        source_context_ids: Sequence[str] | None = None,
+        rag_context: str | None = None,
+    ) -> OracleGenerationResult:
+        """FR5 Oracle 阶段：为测试用例生成或审查预期结果。"""
+
+        context = AgentContext(
+            oracle_test_cases=_dict_list(test_cases),
+            oracle_requirements=_dict_list(requirements or []),
+            source_context_ids=[str(item) for item in (source_context_ids or [])],
+            rag_context=rag_context,
+        )
+        await self._run_agent(
+            StageName.GENERATE_ORACLE,
+            self.oracle_generation_agent,
+            context,
+        )
+        if not context.oracle_results:
+            raise StageExecutionError(
+                StageName.GENERATE_ORACLE,
+                "Oracle prompt 未返回 oracle_results。",
+                context,
+            )
+        return OracleGenerationResult(
+            oracle_results=context.oracle_results,
+            prompts_used=list(context.prompts_used),
+        )
+
     async def _run_agent(
         self,
         stage: str,
@@ -347,6 +384,22 @@ async def generate_fsm(
     )
 
 
+async def generate_oracles(
+    test_cases: Sequence[Any],
+    requirements: Sequence[Any] | None = None,
+    source_context_ids: Sequence[str] | None = None,
+    rag_context: str | None = None,
+) -> OracleGenerationResult:
+    """FR5 Oracle 阶段的模块级便捷入口。"""
+
+    return await AgentPipeline().generate_oracles(
+        test_cases,
+        requirements,
+        source_context_ids,
+        rag_context,
+    )
+
+
 def _model_list(items: Sequence[Any], model: type[Any]) -> list[Any]:
     """阶段入口兼容 dict/model，进入 AgentContext 前统一转成强类型模型。"""
 
@@ -363,5 +416,5 @@ def _dict_list(items: Sequence[Any]) -> list[dict[str, Any]]:
         elif hasattr(item, "to_dict"):
             result.append(item.to_dict())
         else:
-            raise ValueError(f"FSM 输入项必须是 dict 或 model-like 对象，实际类型为 {type(item)!r}")
+            raise ValueError(f"阶段输入项必须是 dict 或 model-like 对象，实际类型为 {type(item)!r}")
     return result

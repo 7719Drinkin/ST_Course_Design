@@ -11,6 +11,7 @@ RiskLevel = Literal["High", "Medium", "Low"]
 Priority = Literal["P1", "P2", "P3"]
 ScorePart = Annotated[int, Field(ge=1, le=5, strict=True)]
 StrictInt = Annotated[int, Field(strict=True)]
+Confidence = Annotated[float, Field(ge=0, le=1)]
 
 T = TypeVar("T", bound="AgentModel")
 
@@ -233,6 +234,22 @@ class FsmTestCaseDraft(AgentModel):
         return self
 
 
+class OracleResult(AgentModel):
+    """FR5 Oracle prompt 针对单条输入测试用例的输出。"""
+
+    test_id: str
+    expected_result_suggestion: str
+    confidence: Confidence
+    explanation: str
+    needs_review: bool
+
+    @model_validator(mode="after")
+    def validate_review_flag(self) -> "OracleResult":
+        if self.confidence < 0.7 and not self.needs_review:
+            raise ValueError("confidence < 0.7 时 needs_review 必须为 true")
+        return self
+
+
 class ParseResult(AgentModel):
     """parse_requirements role 的返回值：需求解析与需求分析结果。"""
 
@@ -281,6 +298,19 @@ class FsmGenerationResult(AgentModel):
     def validate_cases_are_non_empty(self) -> "FsmGenerationResult":
         if not self.test_cases:
             raise ValueError("test_cases 不能为空")
+        return self
+
+
+class OracleGenerationResult(AgentModel):
+    """generate_oracles 角色的 FR5 预期结果审查返回值。"""
+
+    oracle_results: list[OracleResult] = Field(default_factory=list)
+    prompts_used: list[PromptRecord] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_results_are_non_empty(self) -> "OracleGenerationResult":
+        if not self.oracle_results:
+            raise ValueError("oracle_results 不能为空")
         return self
 
 

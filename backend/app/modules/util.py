@@ -187,4 +187,13 @@ def csv_bytes(bundle: dict[str, Any]) -> bytes:
             item.get("strategy_id"),
             item.get("expected_result", ""),
         ])
+    for item in bundle.get("oracle_results", []):
+        writer.writerow([
+            "oracle_result",
+            item.get("test_id"),
+            "",
+            "",
+            "",
+            item.get("expected_result_suggestion", ""),
+        ])
     return output.getvalue().encode("utf-8-sig")

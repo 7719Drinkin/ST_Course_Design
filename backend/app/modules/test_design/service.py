@@ -14,6 +14,7 @@ from .schemas import (
     GenerateRequest,
     GenerateResponse,
     OracleRequest,
+    OracleResult,
     OracleResponse,
     TestCase,
 )
@@ -82,14 +83,264 @@ class TestDesignService:
             prompt_evidence=prompt_evidence,
         )
 
-    def oracle(self, request: OracleRequest) -> OracleResponse:
-        """审查或生成测试用例的 expected_result。"""
+    async def oracle(self, request: OracleRequest) -> OracleResponse:
+        """通过 FR5 Oracle Agent 审查或生成测试用例 expected_result。"""
+
+        test_cases = _oracle_test_cases(request)
+        requirements = _oracle_requirements(request, test_cases)
+        source_context_ids = request.source_context_ids or []
+
+        try:
+            result = await AgentPipeline().generate_oracles(
+                test_cases=test_cases,
+                requirements=requirements,
+                source_context_ids=source_context_ids,
+                rag_context=_joined_context_text({"requirements": requirements}),
+            )
+            oracle_results = [
+                _to_oracle_result(item.model_dump(mode="json", by_alias=True))
+                for item in result.oracle_results
+            ]
+            prompt_evidence = _oracle_prompt_records_to_evidence(
+                request.session_id,
+                result.prompts_used,
+                [item.test_id for item in oracle_results],
+                _oracle_output_summary(oracle_results),
+                "FR5 Oracle 由 oracle_generation LLM/Prompt pipeline 生成。",
+            )
+        except Exception as exc:
+            oracle_results, prompt_evidence = _deterministic_oracle_fallback(
+                request,
+                test_cases,
+                requirements,
+                source_context_ids,
+                exc,
+            )
+
+        workflow_store.save_many(request.session_id, "test_cases", request.test_cases, "test_id")
+        workflow_store.save_many(request.session_id, "oracle_results", oracle_results, "test_id")
+        workflow_store.save_many(request.session_id, "prompt_evidence", prompt_evidence, "evidence_id")
 
         return OracleResponse(
             session_id=request.session_id,
-            oracle_results=[],
-            prompt_evidence=[],
+            oracle_results=oracle_results,
+            prompt_evidence=prompt_evidence,
         )
+
+
+def _oracle_test_cases(request: OracleRequest) -> list[dict[str, Any]]:
+    return to_dicts(request.test_cases)
+
+
+def _oracle_requirements(
+    request: OracleRequest,
+    test_cases: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    explicit_requirements = to_dicts(request.requirements)
+    if explicit_requirements:
+        return explicit_requirements
+
+    requirement_ids = _requirement_ids_from_test_cases(test_cases)
+    requirements = workflow_store.get_list(
+        request.session_id,
+        "requirements",
+        requirement_ids or None,
+        "requirement_id",
+    )
+    parsed_requirements = workflow_store.get_list(
+        request.session_id,
+        "parsed_requirements",
+        requirement_ids or None,
+        "requirement_id",
+    )
+    return _merge_by_requirement_id([*requirements, *parsed_requirements])
+
+
+def _requirement_ids_from_test_cases(test_cases: list[dict[str, Any]]) -> list[str]:
+    return _dedupe(
+        [
+            str(item.get("requirement_id") or "").strip()
+            for item in test_cases
+            if str(item.get("requirement_id") or "").strip()
+        ]
+    )
+
+
+def _merge_by_requirement_id(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    merged: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for item in items:
+        requirement_id = str(item.get("requirement_id") or "").strip()
+        key = requirement_id or repr(sorted(item.items()))
+        if key in seen:
+            continue
+        seen.add(key)
+        merged.append(item)
+    return merged
+
+
+def _to_oracle_result(item: dict[str, Any]) -> OracleResult:
+    confidence = _bounded_confidence(item.get("confidence"), 0.5)
+    return OracleResult(
+        test_id=str(item.get("test_id") or ""),
+        expected_result_suggestion=str(
+            item.get("expected_result_suggestion") or "预期结果需要人工复核。"
+        ),
+        confidence=confidence,
+        explanation=str(item.get("explanation") or "Oracle 结果缺少解释，已标记复核。"),
+        needs_review=bool(item.get("needs_review", False)) or confidence < 0.7,
+    )
+
+
+def _deterministic_oracle_fallback(
+    request: OracleRequest,
+    test_cases: list[dict[str, Any]],
+    requirements: list[dict[str, Any]],
+    source_context_ids: list[str],
+    failure: Exception,
+) -> tuple[list[OracleResult], list[Any]]:
+    oracle_results = [
+        _fallback_oracle_result(index, test_case, requirements)
+        for index, test_case in enumerate(test_cases, start=1)
+    ]
+    prompt_evidence = [
+        evidence(
+            request.session_id,
+            "oracle_generation_fallback",
+            "oracle_results",
+            {
+                "test_ids": [item.get("test_id") for item in test_cases],
+                "requirement_ids": _requirement_ids_from_test_cases(test_cases),
+                "source_context_ids": source_context_ids,
+            },
+            _oracle_output_summary(oracle_results),
+            next_index(
+                workflow_store.get_list(request.session_id, "prompt_evidence"),
+                "evidence_id",
+                "PE-AUT",
+            ),
+            f"oracle_generation prompt 执行失败，已使用 FR5 确定性 Oracle 兜底：{failure}",
+        )
+    ]
+    return oracle_results, prompt_evidence
+
+
+def _fallback_oracle_result(
+    index: int,
+    test_case: dict[str, Any],
+    requirements: list[dict[str, Any]],
+) -> OracleResult:
+    test_id = str(test_case.get("test_id") or f"TC-AUT-ORACLE-{index:03d}")
+    requirement = _matching_requirement(test_case, requirements)
+    existing_expected = str(test_case.get("expected_result") or "").strip()
+    requirement_expected = _requirement_expected_text(requirement)
+
+    if existing_expected:
+        confidence = 0.76 if requirement else 0.66
+        explanation = (
+            "沿用测试用例已有 expected_result，并结合匹配需求复核。"
+            if requirement
+            else "沿用测试用例已有 expected_result；未找到匹配需求，需人工确认。"
+        )
+        suggestion = existing_expected
+    elif requirement_expected:
+        confidence = 0.74
+        explanation = "根据 requirement_id 匹配到的需求行为生成预期结果。"
+        suggestion = requirement_expected
+    else:
+        confidence = 0.5
+        explanation = "缺少已有 expected_result 和明确需求依据，需人工补充预期结果。"
+        suggestion = _generic_oracle_suggestion(test_case)
+
+    return OracleResult(
+        test_id=test_id,
+        expected_result_suggestion=suggestion,
+        confidence=confidence,
+        explanation=explanation,
+        needs_review=confidence < 0.7,
+    )
+
+
+def _matching_requirement(
+    test_case: dict[str, Any],
+    requirements: list[dict[str, Any]],
+) -> dict[str, Any] | None:
+    requirement_id = str(test_case.get("requirement_id") or "").strip()
+    if not requirement_id:
+        return None
+    for requirement in requirements:
+        if str(requirement.get("requirement_id") or "").strip() == requirement_id:
+            return requirement
+    return None
+
+
+def _requirement_expected_text(requirement: dict[str, Any] | None) -> str:
+    if not requirement:
+        return ""
+    for key in ("expected_action", "expected_result", "description", "raw_text", "text", "title"):
+        value = requirement.get(key)
+        if value:
+            return str(value).strip()
+    return ""
+
+
+def _generic_oracle_suggestion(test_case: dict[str, Any]) -> str:
+    title = str(test_case.get("title") or "").strip()
+    steps = test_case.get("test_steps") if isinstance(test_case.get("test_steps"), list) else []
+    if title:
+        return f"执行“{title}”后，系统应产生与需求一致的可观察结果；具体 expected_result 需要人工复核。"
+    if steps:
+        return "执行测试步骤后，系统应产生与需求一致的可观察结果；具体 expected_result 需要人工复核。"
+    return "系统应产生与需求一致的可观察结果；具体 expected_result 需要人工复核。"
+
+
+def _bounded_confidence(value: Any, default: float) -> float:
+    try:
+        confidence = float(value)
+    except (TypeError, ValueError):
+        return default
+    return min(1.0, max(0.0, confidence))
+
+
+def _oracle_prompt_records_to_evidence(
+    session_id: str,
+    records: list[Any],
+    test_ids: list[str],
+    output_summary: dict[str, Any],
+    note: str,
+) -> list[Any]:
+    start_index = next_index(
+        workflow_store.get_list(session_id, "prompt_evidence"),
+        "evidence_id",
+        "PE-AUT",
+    )
+    prompt_evidence: list[Any] = []
+    for offset, record in enumerate(records):
+        item = record.model_dump(mode="json") if hasattr(record, "model_dump") else dict(record)
+        prompt_name = str(item.get("name") or item.get("prompt_name") or "oracle_generation")
+        prompt_evidence.append(
+            evidence(
+                session_id,
+                prompt_name,
+                "oracle_results",
+                {
+                    "test_ids": test_ids,
+                    "prompt": item.get("prompt", ""),
+                },
+                output_summary,
+                start_index + offset,
+                note,
+            )
+        )
+    return prompt_evidence
+
+
+def _oracle_output_summary(oracle_results: list[OracleResult]) -> dict[str, Any]:
+    return {
+        "oracle_result_count": len(oracle_results),
+        "needs_review_count": sum(1 for item in oracle_results if item.needs_review),
+        "low_confidence_count": sum(1 for item in oracle_results if item.confidence < 0.7),
+    }
 
 
 def _deterministic_fsm_fallback(
