@@ -38,7 +38,11 @@ export function ExportPage() {
   const optimizeResult = useAppStore((s) => s.optimizeResult)
   const setOptimizeResult = useAppStore((s) => s.setOptimizeResult)
 
-  const approved = testCases.filter((t) => t.status === 'Approved')
+  const approved = useMemo(() => testCases.filter((t) => t.status === 'Approved'), [testCases])
+  const selectedForOptimize = useMemo(
+    () => (approved.length > 0 ? approved : testCases),
+    [approved, testCases],
+  )
   const approvedIdsKey = approved.map((t) => t.test_id).join(',')
   const allIdsKey = testCases.map((t) => t.test_id).join(',')
   const hasTestCases = testCases.length > 0
@@ -48,12 +52,11 @@ export function ExportPage() {
       setOptimizeResult(null)
       return
     }
-    const ids = approvedIdsKey ? approvedIdsKey.split(',') : allIdsKey ? allIdsKey.split(',') : []
-    getOptimizeResult(mode, ids).then((r) => {
+    getOptimizeResult(mode, selectedForOptimize, coverageItems, riskEntries).then((r) => {
       setOptimizeResult(r.data)
       setOptLive(r.isLive)
     })
-  }, [mode, approvedIdsKey, allIdsKey, setOptimizeResult])
+  }, [mode, approvedIdsKey, allIdsKey, selectedForOptimize, coverageItems, riskEntries, setOptimizeResult])
 
   const previewPayload = useMemo(
     () => ({
@@ -72,14 +75,11 @@ export function ExportPage() {
     }
     setExporting(true)
     try {
-      const blob = await exportApproved(format, approved, revisions, {
-        risk_scores: riskEntries,
-        coverage_items: coverageItems,
-      })
+      const blob = await exportApproved(format)
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
-      a.download = `autotest_export.${format === 'xlsx' ? 'csv' : format}`
+      a.download = `autotest_export.${format}`
       a.click()
       URL.revokeObjectURL(url)
       message.success(`已导出 ${approved.length} 条已通过用例、风险分和覆盖项`)
@@ -90,6 +90,9 @@ export function ExportPage() {
   }
 
   const opt = optimizeResult
+  const reductionPercent = opt
+    ? Math.max(0, Math.round(((opt.before_count - opt.after_count) / Math.max(1, opt.before_count)) * 100))
+    : 0
 
   return (
     <Space direction="vertical" size={24} className="full-width">
@@ -147,7 +150,7 @@ export function ExportPage() {
                     </div>
                   </Col>
                 </Row>
-                <Progress className="top-gap" percent={opt?.reduction_rate ?? 0} strokeColor="#0f766e" />
+                <Progress className="top-gap" percent={opt?.reduction_rate ?? reductionPercent} strokeColor="#0f766e" />
                 {opt?.removed_test_ids && opt.removed_test_ids.length > 0 && (
                   <List
                     size="small"
