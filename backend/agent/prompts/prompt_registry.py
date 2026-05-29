@@ -14,6 +14,7 @@ class PromptRegistry:
         "technique_assignment": "technique_assignment.md",
         "test_design_spec": "test_design_spec.md",
         "test_case_draft": "test_case_draft.md",
+        "revision_regenerate": "revision_regenerate.md",
         "fsm_modeling": "fsm_modeling.md",
         "oracle_generation": "oracle_generation.md",
     }

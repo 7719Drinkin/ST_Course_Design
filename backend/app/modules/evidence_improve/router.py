@@ -32,7 +32,7 @@ async def regenerate(
     req: RegenerateRequest,
     svc: EvidenceImproveService = Depends(get_evidence_improve_service),
 ) -> RegenerateResponse:
-    return svc.regenerate(req)
+    return await svc.regenerate(req)
 
 
 @router.post("/analysis", response_model=AnalysisResponse)

@@ -269,6 +269,9 @@ export interface ExportRevisionRecord {
   target_id: string
   before: Record<string, string>
   after: Record<string, string>
+  reason: string
+  created_by: string
+  created_at: string
   timestamp: string
 }
 

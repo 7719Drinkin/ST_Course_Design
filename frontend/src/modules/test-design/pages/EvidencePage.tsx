@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Button, Card, Descriptions, List, Select, Space, Table, Tag, Typography } from 'antd'
+import { Button, Card, Descriptions, List, Select, Space, Table, Tag, Typography, message } from 'antd'
 import { useAppStore } from '@/app/store/appStore'
 import { getAnalysisResults, regenerateFromRevision } from '@/modules/test-design/api/evidenceApi'
+import { isBackendRevisionSupported } from '@/modules/test-design/api/revisionsApi'
 import { RevisionPanel } from '@/shared/components/RevisionPanel'
 import { DataStatusTag, WorkflowEmptyState } from '@/shared/components/WorkflowFeedback'
-import type { AnalysisResult, PromptEvidence, RevisionLog } from '@/shared/types'
+import type { AnalysisResult, PromptEvidence, RevisionLog, TestCase } from '@/shared/types'
 
 const { Paragraph, Text } = Typography
 
@@ -14,15 +15,21 @@ export function EvidencePage() {
   const [analysisLive, setAnalysisLive] = useState<boolean>()
 
   const promptEvidence = useAppStore((s) => s.promptEvidence)
+  const setPromptEvidence = useAppStore((s) => s.setPromptEvidence)
   const requirements = useAppStore((s) => s.requirements)
+  const coverageItems = useAppStore((s) => s.coverageItems)
+  const strategies = useAppStore((s) => s.strategies)
+  const riskEntries = useAppStore((s) => s.riskEntries)
   const testCases = useAppStore((s) => s.testCases)
+  const setTestCases = useAppStore((s) => s.setTestCases)
   const revisions = useAppStore((s) => s.revisions)
   const regenerateResult = useAppStore((s) => s.regenerateResult)
   const setRegenerateResult = useAppStore((s) => s.setRegenerateResult)
   const analysisResults = useAppStore((s) => s.analysisResults)
   const setAnalysisResults = useAppStore((s) => s.setAnalysisResults)
 
-  const latestRevision = revisions.at(-1)
+  const backendRevisions = revisions.filter(isBackendRevisionSupported)
+  const latestRevision = backendRevisions.at(-1)
   const entityLabels: Record<RevisionLog['entity_type'], string> = {
     requirement: '需求',
     parsed_requirement: '结构化需求',
@@ -43,7 +50,7 @@ export function EvidencePage() {
     needs_review: '待审查',
   }
 
-  const revisionOptions = [...revisions].reverse().map((revision) => ({
+  const revisionOptions = [...backendRevisions].reverse().map((revision) => ({
     value: revision.id,
     label: `${revision.id} · ${entityLabels[revision.entity_type]} · ${revision.entity_id}`,
   }))
@@ -74,9 +81,24 @@ export function EvidencePage() {
   const handleRegenerate = async () => {
     const revisionId = selectedRevisionId ?? latestRevision?.id
     if (!revisionId) return
-    const result = await regenerateFromRevision(revisionId)
-    setRegenerateResult(result.data)
-    setRegenerateLive(result.isLive)
+    try {
+      const result = await regenerateFromRevision(revisionId, {
+        requirements,
+        coverage_items: coverageItems,
+        strategies,
+        risk_results: riskEntries,
+        test_cases: testCases,
+      })
+      setRegenerateResult(result.data)
+      setTestCases(mergeRegeneratedTestCases(testCases, result.data))
+      if (result.data.prompt_evidence?.length) {
+        setPromptEvidence(mergePromptEvidence(promptEvidence, result.data.prompt_evidence))
+      }
+      setRegenerateLive(result.isLive)
+    } catch {
+      setRegenerateLive(false)
+      message.error('LLM 再生成失败，请检查后端 LLM 配置或 Prompt 输出。')
+    }
   }
 
   if (requirements.length === 0 && testCases.length === 0) {
@@ -244,4 +266,41 @@ export function EvidencePage() {
       <RevisionPanel />
     </Space>
   )
+}
+
+function mergeRegeneratedTestCases(current: TestCase[], result: {
+  created: Record<string, unknown>
+  updated: Record<string, unknown>
+  deprecated: Record<string, unknown>
+}) {
+  const incoming = [
+    ...testCasesFromGroup(result.created),
+    ...testCasesFromGroup(result.updated),
+    ...testCasesFromGroup(result.deprecated),
+  ]
+  if (incoming.length === 0) return current
+
+  const byId = new Map(current.map((item) => [item.test_id, item]))
+  incoming.forEach((item) => {
+    if (item.test_id) byId.set(item.test_id, item)
+  })
+  return [...byId.values()]
+}
+
+function testCasesFromGroup(group: Record<string, unknown> | undefined): TestCase[] {
+  const value = group?.test_cases
+  return Array.isArray(value) ? value.filter(isTestCase) : []
+}
+
+function isTestCase(value: unknown): value is TestCase {
+  return Boolean(value && typeof value === 'object' && 'test_id' in value)
+}
+
+function mergePromptEvidence(current: PromptEvidence[], incoming: PromptEvidence[]) {
+  const byId = new Map(current.map((item) => [item.evidence_id ?? `${item.prompt_template_id}-${item.model_name}`, item]))
+  incoming.forEach((item) => {
+    const key = item.evidence_id ?? `${item.prompt_template_id}-${item.model_name}`
+    byId.set(key, item)
+  })
+  return [...byId.values()]
 }

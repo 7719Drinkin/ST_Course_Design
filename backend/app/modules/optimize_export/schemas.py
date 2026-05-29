@@ -61,6 +61,16 @@ class ExportRequest(FlexibleModel):
     include_revisions: bool = True
     include_prompt_evidence: bool = True
     test_case_status: Literal["all", "approved_only"] = "all"
+    requirements: list[Requirement] | None = None
+    risk_results: list[RiskResult] | None = None
+    coverage_items: list[CoverageItem] | None = None
+    strategies: list[Strategy] | None = None
+    test_cases: list[TestCase] | None = None
+    oracle_results: list[OracleResult] | None = None
+    optimization_result: OptimizationResult | None = None
+    revisions: list[RevisionRecord] | None = None
+    prompt_evidence: list[PromptEvidence] | None = None
+    analysis_results: list[AnalysisResult] | None = None
 
 
 # POST /export 响应体（JSON 时返回 export_bundle；CSV/XLSX 时返回 file）

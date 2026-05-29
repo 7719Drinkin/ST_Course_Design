@@ -16,7 +16,10 @@ export async function getOptimizeResult(
       }>('/optimize', {
         session_id: 'SESSION-CURRENT',
         test_cases: testCases,
-        coverage_items: coverageItems,
+        coverage_items: coverageItems.map((item) => ({
+          ...item,
+          technique: item.technique ?? item.techniques?.[0] ?? 'EP',
+        })),
         risk_results: riskResults.map((item) => ({
           target_id: item.target_id ?? item.requirement_id,
           target_type: item.target_type ?? 'requirement',
