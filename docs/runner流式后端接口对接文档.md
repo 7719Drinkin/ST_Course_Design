@@ -294,19 +294,71 @@ stage = "generate_oracle"
 
 不接收 runner 流式输出。
 
-该接口只保存人工修订记录。
+该接口只保存人工修订记录，供 `/regenerate` 使用。
+
+| `/revisions` 响应字段 | 来源 |
+|---|---|
+| `revision` | 后端保存的 `RevisionRecord` |
+| `affected_ids` | 被修订对象及其直接影响对象 ID |
 
 ### 3.10 `/regenerate`
 
-当前不直接接收 `generate_blackbox_tests_stream(...)` 的输出。
+不接收 `generate_blackbox_tests_stream(...)` 的输出。
 
-该接口是基于人工修订做差量再生成；如果后续也要流式化，应单独新增 revision runner，而不是复用完整需求输入 runner。
+该接口调用 revision runner：
+
+```python
+regenerate_from_revision(revision, current_state, rag_context)
+```
+
+从 revision runner 返回值中取：
+
+| `/regenerate` 响应字段 | revision runner 返回字段 |
+|---|---|
+| `created` | `result.created` |
+| `updated` | `result.updated` |
+| `unchanged` | `result.unchanged` |
+| `deprecated` | `result.deprecated` |
+| `prompt_evidence` | `result.prompt_evidence` |
+
+revision runner 根据 `reentry_stage` 复用 `AgentPipeline` 中间函数：
+
+| `reentry_stage` | 复用函数 |
+|---|---|
+| `parse` | `parse_requirements` |
+| `risk` | `analyze_risk` |
+| `strategy` | `assign_strategy` |
+| `generate` | `generate_tests` |
+| `fsm` | `generate_fsm` |
+| `oracle` | `generate_oracles` |
+| `analysis` | 不调用生成阶段 |
+
+对应示例：
+
+```json
+{
+  "created": {
+    "test_cases": []
+  },
+  "updated": {
+    "coverage_items": [],
+    "oracle_results": []
+  },
+  "unchanged": {},
+  "deprecated": {
+    "test_cases": []
+  },
+  "prompt_evidence": []
+}
+```
+
+说明：`/regenerate` 不复用完整需求输入 runner；LLM 只判断重入阶段，不直接生成最终测试用例。
 
 ### 3.11 `/analysis`
 
 不直接接收某一个 runner stage。
 
-如果需要在一键生成后做分析，可以在收到以下阶段后综合生成：
+一键生成后主要使用：
 
 | 分析所需数据 | runner 来源 |
 |---|---|
@@ -316,17 +368,40 @@ stage = "generate_oracle"
 | FSM 用例 | `generate_fsm.output.test_cases` |
 | 最终总用例 | `final.final_output.all_test_cases` |
 
+如果发生在 `/regenerate` 之后，额外使用：
+
+| 分析所需数据 | revision runner 来源 |
+|---|---|
+| 新增对象 | `result.created` |
+| 更新对象 | `result.updated` |
+| 废弃对象 | `result.deprecated` |
+| Prompt 证据 | `result.prompt_evidence` |
+
+说明：`/analysis` 应分析合并后的当前状态。
+
 ### 3.12 `/optimize`
 
 不直接接收某一个 runner stage。
 
-如果一键生成后立即优化，主要使用：
+一键生成后主要使用：
 
 | 优化所需数据 | runner 来源 |
 |---|---|
 | `test_cases` | `final.final_output.all_test_cases` |
 | `coverage_items` | `assign_strategy.output.coverage_items`，以及后端从 FSM 用例补出的 FSM 覆盖项 |
 | `risk_results` | `analyze_risk.output.risk_analysis` 转换得到 |
+
+如果发生在 `/regenerate` 之后，额外使用：
+
+| 优化所需数据 | revision runner 来源 |
+|---|---|
+| 新增测试用例 | `result.created.test_cases` |
+| 更新测试用例 | `result.updated.test_cases` |
+| 废弃测试用例 | `result.deprecated.test_cases` |
+| 更新覆盖项 | `result.updated.coverage_items` |
+| 更新风险结果 | `result.updated.risk_results` |
+
+说明：`/optimize` 不由 `/regenerate` 自动触发。
 
 ### 3.13 `/export`
 
