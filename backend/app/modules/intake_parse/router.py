@@ -37,4 +37,4 @@ async def parse_requirements(
     req: ParseRequest,
     svc: IntakeParseService = Depends(get_intake_parse_service),
 ) -> ParseResponse:
-    return svc.parse(req)
+    return await svc.parse(req)

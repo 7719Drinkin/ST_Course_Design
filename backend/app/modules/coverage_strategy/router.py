@@ -17,7 +17,7 @@ async def coverage(
     req: CoverageRequest,
     svc: CoverageStrategyService = Depends(get_coverage_strategy_service),
 ) -> CoverageResponse:
-    return svc.generate_coverage(req)
+    return await svc.generate_coverage(req)
 
 
 @router.post("/strategy", response_model=StrategyResponse)
@@ -25,4 +25,4 @@ async def strategy(
     req: StrategyRequest,
     svc: CoverageStrategyService = Depends(get_coverage_strategy_service),
 ) -> StrategyResponse:
-    return svc.assign_strategy(req)
+    return await svc.assign_strategy(req)

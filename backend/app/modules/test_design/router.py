@@ -24,7 +24,7 @@ async def generate(
     req: GenerateRequest,
     svc: TestDesignService = Depends(get_test_design_service),
 ) -> GenerateResponse:
-    return svc.generate(req)
+    return await svc.generate(req)
 
 
 @router.post("/fsm", response_model=FsmResponse)

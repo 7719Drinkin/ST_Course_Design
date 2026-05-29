@@ -29,9 +29,10 @@ class OptimizeExportService:
         if request.risk_results:
             workflow_store.save_many(request.session_id, "risk_results", request.risk_results, "target_id")
 
+        optimization_coverage_items = _coverage_with_fsm_items(coverage_items, test_cases)
         kept_ids = self._kept_tests(
             test_cases,
-            coverage_items,
+            optimization_coverage_items,
             risk_results,
             request.objective,
             request.preserve_high_risk_unique_coverage,
@@ -40,7 +41,11 @@ class OptimizeExportService:
         removed_ids = [item for item in all_ids if item not in kept_ids]
         preserved_coverage = sorted(_covered_ids([item for item in test_cases if item.get("test_id") in kept_ids]))
         warnings = []
-        expected_coverage = {str(item.get("coverage_item_id")) for item in coverage_items if item.get("coverage_item_id")}
+        expected_coverage = {
+            str(item.get("coverage_item_id"))
+            for item in optimization_coverage_items
+            if item.get("coverage_item_id")
+        }
         missing = sorted(expected_coverage - set(preserved_coverage))
         if missing:
             warnings.append("Coverage items without kept tests: " + ", ".join(missing))
@@ -191,6 +196,34 @@ def _dedupe(items: list[str]) -> list[str]:
             seen.add(item)
             result.append(item)
     return result
+
+
+def _coverage_with_fsm_items(
+    coverage_items: list[dict[str, Any]],
+    test_cases: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    existing_ids = {
+        str(item.get("coverage_item_id") or "")
+        for item in coverage_items
+        if item.get("coverage_item_id")
+    }
+    augmented = list(coverage_items)
+    for test_case in test_cases:
+        if str(test_case.get("technique") or "").upper() != "FSM":
+            continue
+        for coverage_id in _coverage_ids(test_case):
+            if coverage_id in existing_ids:
+                continue
+            existing_ids.add(coverage_id)
+            augmented.append(
+                {
+                    "coverage_item_id": coverage_id,
+                    "requirement_id": str(test_case.get("requirement_id") or ""),
+                    "technique": "FSM",
+                    "description": str(test_case.get("title") or "FSM coverage inferred from test case."),
+                }
+            )
+    return augmented
 
 
 def _coverage_ids(test_case: dict[str, Any]) -> set[str]:

@@ -80,6 +80,7 @@ class PromptEvidence(FlexibleModel):
 
 # POST /parse 请求体
 class ParseRequest(FlexibleModel):
+    session_id: str = "SESSION-CURRENT"
     requirement_text: str = ""
     rag_context: str | None = None
 

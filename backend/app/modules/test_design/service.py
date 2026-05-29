@@ -3,8 +3,24 @@ from __future__ import annotations
 
 from typing import Any
 
+from fastapi import HTTPException
+
+from ..util import (
+    STAGE_FSM,
+    STAGE_GENERATE,
+    STAGE_ORACLE,
+    effective_rag_context,
+    evidence,
+    next_index,
+    normalize_stage_output,
+    parse_sse_event,
+    prompt_records_to_evidence,
+    resolve_requirement_text,
+    save_requirement_input,
+    stage_output_summary,
+    to_dicts,
+)
 from ..store import workflow_store
-from ..util import evidence, next_index, to_dicts
 from .schemas import (
     FsmRequest,
     FsmResponse,
@@ -17,83 +33,89 @@ from .schemas import (
 )
 
 try:
-    from backend.agent.pipeline import AgentPipeline
+    from backend.agent import generate_blackbox_tests_stream
+    from backend.agent.tools.fsm import generate_fsm_tests
 except ModuleNotFoundError:
-    from agent.pipeline import AgentPipeline
+    from agent import generate_blackbox_tests_stream
+    from agent.tools.fsm import generate_fsm_tests
 
 
 class TestDesignService:
-    def generate(self, request: GenerateRequest) -> GenerateResponse:
-        """FR3 /generate 的旧后端接入已清理。"""
-
+    async def generate(self, request: GenerateRequest) -> GenerateResponse:
+        requirement_text = resolve_requirement_text(
+            session_id=request.session_id,
+            explicit_text=request.requirement_text,
+            fallback_payload={
+                "coverage_items": request.coverage_items,
+                "risk_analysis": request.risk_analysis or [],
+            },
+        )
+        save_requirement_input(request.session_id, requirement_text, request.rag_context)
+        output, _ = await _runner_stage_output(
+            request.session_id,
+            requirement_text,
+            request.rag_context,
+            STAGE_GENERATE,
+        )
         return GenerateResponse(
-            test_design_specs=[],
-            test_cases=[],
-            prompts_used=[],
+            test_design_specs=output.get("test_design_specs", []),
+            test_cases=output.get("test_cases", []),
+            prompts_used=output.get("prompts_used", []),
         )
 
     async def fsm(self, request: FsmRequest) -> FsmResponse:
-        """FR4 /fsm 的旧后端接入已清理。"""
-
-        fsm = FsmResult()
-        prompt_evidence = [
-            evidence(
-                request.session_id,
-                "fsm_integration_cleared",
-                request.requirement_id or "fsm",
-                {
-                    "requirement_id": request.requirement_id,
-                    "requirement_ids": request.requirement_ids,
-                    "state_candidates": request.state_candidates or [],
-                },
-                {
-                    "fsm_enabled": False,
-                    "reason": "FR4 旧后端接入已移除，请使用统一 agent 主流程。",
-                },
-                next_index(
-                    workflow_store.get_list(request.session_id, "prompt_evidence"),
-                    "evidence_id",
-                    "PE-AUT",
-                ),
-                "在不调整模块架构的前提下，已移除 FR4 后端侧旧编排。",
-            )
-        ]
-
-        workflow_store.save_object(request.session_id, "fsm", fsm)
-        workflow_store.save_many(request.session_id, "prompt_evidence", prompt_evidence, "evidence_id")
-
-        return FsmResponse(
+        requirement_text = resolve_requirement_text(
             session_id=request.session_id,
-            fsm=fsm,
-            test_cases=[],
-            prompt_evidence=prompt_evidence,
+            explicit_text=request.requirement_text,
+            fallback_payload={
+                "requirements": request.requirements,
+                "parsed_requirements": request.parsed_requirements,
+                "coverage_items": request.coverage_items,
+                "state_candidates": request.state_candidates or [],
+            },
         )
+        try:
+            output, prompt_evidence = await _runner_stage_output(
+                request.session_id,
+                requirement_text,
+                request.rag_context,
+                STAGE_FSM,
+            )
+            return FsmResponse(
+                session_id=request.session_id,
+                fsm=output.get("fsm") or {},
+                test_cases=output.get("test_cases", []),
+                prompt_evidence=prompt_evidence,
+            )
+        except HTTPException as exc:
+            if exc.status_code < 500 and requirement_text:
+                raise
+            return self._deterministic_fsm_fallback(request, requirement_text, exc)
 
     async def oracle(self, request: OracleRequest) -> OracleResponse:
-        """通过 FR5 oracle agent 生成或审查 expected_result。"""
-
         test_cases = _oracle_test_cases(request)
         requirements = _oracle_requirements(request, test_cases)
         source_context_ids = request.source_context_ids or []
 
         try:
-            result = await AgentPipeline().generate_oracles(
-                test_cases=test_cases,
-                requirements=requirements,
-                source_context_ids=source_context_ids,
-                rag_context=_joined_context_text({"requirements": requirements}),
+            requirement_text = resolve_requirement_text(
+                session_id=request.session_id,
+                explicit_text=request.requirement_text,
+                fallback_payload={
+                    "requirements": requirements,
+                    "test_cases": test_cases,
+                },
+            )
+            output, prompt_evidence = await _runner_stage_output(
+                request.session_id,
+                requirement_text,
+                request.rag_context or _joined_context_text({"requirements": requirements}),
+                STAGE_ORACLE,
             )
             oracle_results = [
-                _to_oracle_result(item.model_dump(mode="json", by_alias=True))
-                for item in result.oracle_results
+                _to_oracle_result(item)
+                for item in output.get("oracle_results", [])
             ]
-            prompt_evidence = _oracle_prompt_records_to_evidence(
-                request.session_id,
-                result.prompts_used,
-                [item.test_id for item in oracle_results],
-                _oracle_output_summary(oracle_results),
-                "FR5 oracle results generated by oracle_generation prompt pipeline.",
-            )
         except Exception as exc:
             oracle_results, prompt_evidence = _deterministic_oracle_fallback(
                 request,
@@ -113,9 +135,201 @@ class TestDesignService:
             prompt_evidence=prompt_evidence,
         )
 
+    def _deterministic_fsm_fallback(
+        self,
+        request: FsmRequest,
+        requirement_text: str,
+        failure: Exception,
+    ) -> FsmResponse:
+        requirement_id = _fsm_requirement_id(request)
+        result = generate_fsm_tests(
+            requirement_id=requirement_id,
+            requirement_text=requirement_text or requirement_id,
+            context={
+                "requirements": to_dicts(request.requirements),
+                "parsed_requirements": to_dicts(request.parsed_requirements),
+                "coverage_items": to_dicts(request.coverage_items),
+                "state_candidates": request.state_candidates or [],
+            },
+            strategies=request.strategies,
+            max_depth=request.max_depth,
+        )
+        data = result.get("data", {}) if isinstance(result.get("data"), dict) else {}
+        fsm = _deterministic_fsm_result(data)
+        test_cases = data.get("test_cases", []) if isinstance(data.get("test_cases"), list) else []
+        prompt_evidence = [
+            evidence(
+                request.session_id,
+                "fsm_generation_fallback",
+                requirement_id,
+                {
+                    "requirement_id": requirement_id,
+                    "state_candidates": request.state_candidates or [],
+                    "runner_error": str(failure),
+                },
+                stage_output_summary(
+                    STAGE_FSM,
+                    {"fsm": fsm.model_dump(mode="json", by_alias=True), "test_cases": test_cases},
+                ),
+                next_index(
+                    workflow_store.get_list(request.session_id, "prompt_evidence"),
+                    "evidence_id",
+                    "PE-AUT",
+                ),
+                "Agent runner FSM stage failed; deterministic FSM generator was used as a fallback.",
+            )
+        ]
+
+        save_requirement_input(request.session_id, requirement_text, request.rag_context)
+        workflow_store.save_object(request.session_id, "fsm", fsm)
+        workflow_store.save_many(request.session_id, "test_cases", test_cases, "test_id")
+        workflow_store.save_many(request.session_id, "prompt_evidence", prompt_evidence, "evidence_id")
+
+        return FsmResponse(
+            session_id=request.session_id,
+            fsm=fsm,
+            test_cases=test_cases,
+            prompt_evidence=prompt_evidence,
+        )
+
+
+async def _runner_stage_output(
+    session_id: str,
+    requirement_text: str,
+    rag_context: str | None,
+    target_stage: str,
+) -> tuple[dict, list[Any]]:
+    stream = generate_blackbox_tests_stream(
+        requirement_text=requirement_text,
+        rag_context=effective_rag_context(session_id, rag_context),
+    )
+    try:
+        async for raw_event in stream:
+            event, data = parse_sse_event(raw_event)
+            if event == "stage" and data.get("stage") == target_stage:
+                output = normalize_stage_output(data.get("output") or {})
+                prompt_evidence = _save_stage_output(session_id, target_stage, output)
+                return output, prompt_evidence
+            if event == "stage_error":
+                _raise_stage_error(data)
+    finally:
+        aclose = getattr(stream, "aclose", None)
+        if aclose is not None:
+            await aclose()
+    raise HTTPException(status_code=502, detail=f"Runner did not emit {target_stage} stage")
+
+
+def _save_stage_output(session_id: str, stage: str, output: dict) -> list[Any]:
+    if stage == STAGE_GENERATE:
+        workflow_store.save_many(
+            session_id,
+            "test_design_specs",
+            output.get("test_design_specs", []),
+            "spec_id",
+            replace_all=True,
+        )
+        workflow_store.save_many(session_id, "test_cases", output.get("test_cases", []), "test_id")
+        target_id = "test_cases"
+    elif stage == STAGE_FSM:
+        workflow_store.save_object(session_id, "fsm", output.get("fsm") or {})
+        workflow_store.save_many(session_id, "test_cases", output.get("test_cases", []), "test_id")
+        target_id = "fsm"
+    elif stage == STAGE_ORACLE:
+        workflow_store.save_many(
+            session_id,
+            "oracle_results",
+            output.get("oracle_results", []),
+            "test_id",
+            replace_all=True,
+        )
+        target_id = "oracle_results"
+    else:
+        target_id = stage
+
+    prompt_evidence = prompt_records_to_evidence(
+        session_id=session_id,
+        records=output.get("prompts_used"),
+        target_id=target_id,
+        output_data=stage_output_summary(stage, output),
+        note=f"Agent runner stage {stage} prompt evidence.",
+    )
+    workflow_store.save_many(session_id, "prompt_evidence", prompt_evidence, "evidence_id")
+    return prompt_evidence
+
+
+def _raise_stage_error(data: dict) -> None:
+    status = 400 if data.get("stage") == "input_validation" else 502
+    raise HTTPException(status_code=status, detail=data.get("error") or "Agent runner stage failed")
+
 
 def _oracle_test_cases(request: OracleRequest) -> list[dict[str, Any]]:
     return to_dicts(request.test_cases)
+
+
+def _fsm_requirement_id(request: FsmRequest) -> str:
+    if request.requirement_id:
+        return request.requirement_id
+    if request.requirement_ids:
+        return request.requirement_ids[0]
+    for collection in (request.requirements or [], request.parsed_requirements or []):
+        payload = collection.model_dump(mode="json", by_alias=True) if hasattr(collection, "model_dump") else collection
+        if isinstance(payload, dict) and payload.get("requirement_id"):
+            return str(payload["requirement_id"])
+    return "REQ-AUT-FSM"
+
+
+def _deterministic_fsm_result(data: dict[str, Any]) -> FsmResult:
+    model = data.get("fsm_model") if isinstance(data.get("fsm_model"), dict) else {}
+    state_items = model.get("states") if isinstance(model.get("states"), list) else []
+    transition_items = model.get("transitions") if isinstance(model.get("transitions"), list) else []
+    state_names = {
+        str(item.get("state_id") or ""): str(item.get("name") or item.get("state_id") or "")
+        for item in state_items
+        if isinstance(item, dict)
+    }
+    states = [name for name in state_names.values() if name]
+    transitions = []
+    for item in transition_items:
+        if not isinstance(item, dict):
+            continue
+        transitions.append(
+            {
+                "from": state_names.get(str(item.get("source_state") or ""), str(item.get("source_state") or "")),
+                "to": state_names.get(str(item.get("target_state") or ""), str(item.get("target_state") or "")),
+                "event": str(item.get("event") or ""),
+                "condition": str(item.get("condition") or ""),
+                "action": str(item.get("action") or ""),
+            }
+        )
+    coverage_paths = _deterministic_coverage_paths(data, state_names)
+    return FsmResult(
+        states=states,
+        transitions=transitions,
+        coverage_paths=coverage_paths,
+        coverage={
+            "all_states": states,
+            "all_transitions": [str(item.get("transition_id") or "") for item in transition_items if isinstance(item, dict)],
+        },
+        mermaid=str(data.get("mermaid") or model.get("mermaid") or ""),
+    )
+
+
+def _deterministic_coverage_paths(
+    data: dict[str, Any],
+    state_names: dict[str, str],
+) -> list[str]:
+    test_cases = data.get("test_cases") if isinstance(data.get("test_cases"), list) else []
+    paths: list[str] = []
+    for item in test_cases:
+        if not isinstance(item, dict):
+            continue
+        covered_states = item.get("covered_states") if isinstance(item.get("covered_states"), list) else []
+        path = " -> ".join(state_names.get(str(state), str(state)) for state in covered_states if state)
+        if path:
+            paths.append(path)
+    if paths:
+        return paths
+    return [" -> ".join(state_names.values())] if state_names else []
 
 
 def _oracle_requirements(

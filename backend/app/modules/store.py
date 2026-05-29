@@ -10,10 +10,14 @@ from pydantic import BaseModel
 SESSION_LIST_KEYS = {
     "requirements",
     "parsed_requirements",
+    "analyzed_requirements",
     "concepts",
+    "risk_analysis",
     "risk_results",
+    "coverage_goals",
     "coverage_items",
     "strategies",
+    "test_design_specs",
     "test_cases",
     "prompt_evidence",
     "revisions",
@@ -21,15 +25,19 @@ SESSION_LIST_KEYS = {
     "oracle_results",
 }
 
-SESSION_OBJECT_KEYS = {"optimization_result", "fsm"}
+SESSION_OBJECT_KEYS = {"optimization_result", "fsm", "requirement_input"}
 
 ID_FIELDS = {
     "requirements": "requirement_id",
     "parsed_requirements": "requirement_id",
+    "analyzed_requirements": "requirement_id",
     "concepts": "concept_id",
+    "risk_analysis": "requirement_id",
     "risk_results": "target_id",
+    "coverage_goals": "coverage_goal_id",
     "coverage_items": "coverage_item_id",
     "strategies": "strategy_id",
+    "test_design_specs": "spec_id",
     "test_cases": "test_id",
     "prompt_evidence": "evidence_id",
     "revisions": "revision_id",
