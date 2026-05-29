@@ -4,7 +4,7 @@ from typing import Any
 
 from .pipeline.agent_pipeline import AgentPipeline
 from .prompts.prompt_builder import PromptBuilder
-from .revision_impact import (
+from .revision.revision_impact import (
     has_revision_scope,
     impacted_coverage_items,
     impacted_test_cases,
@@ -14,8 +14,8 @@ from .revision_impact import (
     revision_impact,
     workflow_state,
 )
-from .revision_reentry import ReentryContext, rerun_from_impact
-from .revision_utils import RevisionRunnerError, dedupe, make_next_id, merge_grouped, prompt_evidence, renumber_evidence, string_list
+from .revision.revision_reentry import ReentryContext, rerun_from_impact
+from .revision.revision_utils import RevisionRunnerError, dedupe, make_next_id, merge_grouped, prompt_evidence, renumber_evidence, string_list
 from .tools.clients.llm_client import LLMClient
 
 

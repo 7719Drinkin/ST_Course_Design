@@ -4,7 +4,7 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, replace
 from typing import Any, Literal
 
-from .pipeline.agent_pipeline import AgentPipeline
+from ..pipeline.agent_pipeline import AgentPipeline
 from .revision_impact import (
     deprecate_replaced_tests,
     related_requirements,
