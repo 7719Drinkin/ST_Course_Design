@@ -9,10 +9,12 @@ from .pipeline.agent_pipeline import (
     parse_requirements,
 )
 from .pipeline.stages import StageName
+from .revision_runner import RevisionRunnerError, regenerate_from_revision
 from .runner import generate_blackbox_tests, generate_blackbox_tests_stream
 
 __all__ = [
     "AgentPipeline",
+    "RevisionRunnerError",
     "StageName",
     "analyze_risk",
     "assign_strategy",
@@ -23,4 +25,5 @@ __all__ = [
     "generate_tests",
     "identify_coverage",
     "parse_requirements",
+    "regenerate_from_revision",
 ]
