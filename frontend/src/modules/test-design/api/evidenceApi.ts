@@ -1,23 +1,16 @@
 import { postJson, withLiveFallback } from '@/shared/api/apiClient'
 import type { AnalysisResult, RegenerateResult } from '@/shared/types'
 
-const EMPTY_REGENERATE_RESULT: RegenerateResult = {
-  created: {},
-  updated: {},
-  unchanged: {},
-  deprecated: {},
-}
-
-export async function regenerateFromRevision(revisionId: string) {
-  return withLiveFallback(
-    () =>
-      postJson<RegenerateResult>('/regenerate', {
-        session_id: 'SESSION-CURRENT',
-        revision_id: revisionId,
-      }),
-    EMPTY_REGENERATE_RESULT,
-    'B/E: POST /regenerate',
-  )
+export async function regenerateFromRevision(
+  revisionId: string,
+  currentState?: Record<string, unknown>,
+) {
+  const data = await postJson<RegenerateResult>('/regenerate', {
+    session_id: 'SESSION-CURRENT',
+    revision_id: revisionId,
+    current_state: currentState,
+  })
+  return { data, isLive: true }
 }
 
 export async function getAnalysisResults(sessionId = 'SESSION-CURRENT') {

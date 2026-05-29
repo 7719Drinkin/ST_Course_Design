@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { saveRevisionLog } from '@/modules/test-design/api/revisionsApi'
 import type {
   AnalysisResult,
   CoverageItem,
@@ -262,16 +263,18 @@ export const useAppStore = create<AppState>((set, get) => ({
   revisions: [],
   addRevision: (entry) => {
     revisionCounter += 1
+    const revision = {
+      ...entry,
+      id: `REV-${String(revisionCounter).padStart(3, '0')}`,
+      timestamp: new Date().toISOString(),
+    }
     set({
       revisions: [
         ...get().revisions,
-        {
-          ...entry,
-          id: `REV-${String(revisionCounter).padStart(4, '0')}`,
-          timestamp: new Date().toISOString(),
-        },
+        revision,
       ],
     })
+    void saveRevisionLog(revision).catch(() => undefined)
   },
 
   highlightedRequirementId: null,

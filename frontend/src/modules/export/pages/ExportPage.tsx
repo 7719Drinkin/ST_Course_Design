@@ -35,6 +35,10 @@ export function ExportPage() {
   const revisions = useAppStore((s) => s.revisions)
   const riskEntries = useAppStore((s) => s.riskEntries)
   const coverageItems = useAppStore((s) => s.coverageItems)
+  const requirements = useAppStore((s) => s.requirements)
+  const strategies = useAppStore((s) => s.strategies)
+  const promptEvidence = useAppStore((s) => s.promptEvidence)
+  const analysisResults = useAppStore((s) => s.analysisResults)
   const optimizeResult = useAppStore((s) => s.optimizeResult)
   const setOptimizeResult = useAppStore((s) => s.setOptimizeResult)
 
@@ -75,7 +79,17 @@ export function ExportPage() {
     }
     setExporting(true)
     try {
-      const blob = await exportApproved(format)
+      const blob = await exportApproved(format, {
+        requirements,
+        riskEntries,
+        coverageItems,
+        strategies,
+        testCases: approved,
+        revisions,
+        optimizeResult,
+        promptEvidence,
+        analysisResults,
+      })
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url

@@ -143,7 +143,9 @@ class WorkflowStore:
             return [target_id]
 
         key, id_field = collection
-        revised = dict(after)
+        existing_items = self.get_list(session_id, key, [target_id], id_field)
+        revised = dict(existing_items[0]) if existing_items else dict(before)
+        revised.update(after)
         revised.setdefault(id_field, target_id)
         revision_status = "human_added" if not before else "human_revised"
         if key == "coverage_items":
