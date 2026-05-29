@@ -35,6 +35,8 @@ class RiskAnalysisItem(FlexibleModel):
 
 # POST /risk 请求体
 class RiskRequest(FlexibleModel):
+    session_id: str = "SESSION-CURRENT"
+    requirement_text: str = ""
     analyzed_requirements: list[AnalyzedRequirement]
     rag_context: str | None = None
 

@@ -17,4 +17,9 @@ async def risk(
     req: RiskRequest,
     svc: ConceptRiskService = Depends(get_concept_risk_service),
 ) -> RiskResponse:
-    return svc.score_risk(req)
+    return await svc.score_risk(req)
+
+
+@router.post("/concepts")
+async def concepts() -> dict[str, list[dict[str, str]]]:
+    return {"concepts": []}

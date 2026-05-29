@@ -4,10 +4,7 @@ from typing import Any
 
 from .schemas import FsmRequest, FsmResponse
 
-try:
-    from backend.agent.tools.fsm import generate_fsm_tests
-except ModuleNotFoundError:
-    from agent.tools.fsm import generate_fsm_tests
+from agent.tools.fsm import generate_fsm_tests
 
 
 class FsmService:

@@ -47,8 +47,11 @@ class Strategy(FlexibleModel):
 
 # POST /coverage 请求体
 class CoverageRequest(FlexibleModel):
+    session_id: str = "SESSION-CURRENT"
+    requirement_text: str = ""
     analyzed_requirements: list[AnalyzedRequirement]
     risk_analysis: list[RiskAnalysisItem]
+    rag_context: str | None = None
 
 
 # POST /coverage 响应体
@@ -59,9 +62,12 @@ class CoverageResponse(FlexibleModel):
 
 # POST /strategy 请求体
 class StrategyRequest(FlexibleModel):
+    session_id: str = "SESSION-CURRENT"
+    requirement_text: str = ""
     coverage_goals: list[CoverageGoal]
     analyzed_requirements: list[AnalyzedRequirement]
     risk_analysis: list[RiskAnalysisItem]
+    rag_context: str | None = None
 
 
 # POST /strategy 响应体

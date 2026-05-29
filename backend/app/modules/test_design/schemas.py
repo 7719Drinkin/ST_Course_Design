@@ -86,6 +86,8 @@ class OracleResult(FlexibleModel):
 
 # POST /generate 请求体
 class GenerateRequest(FlexibleModel):
+    session_id: str = "SESSION-CURRENT"
+    requirement_text: str = ""
     coverage_items: list[CoverageItem]
     risk_analysis: list[RiskAnalysisItem] | None = None
     rag_context: str | None = None
@@ -109,6 +111,7 @@ class FsmRequest(FlexibleModel):
     coverage_items: list[CoverageItem] | None = None
     state_candidates: list[str] | None = None
     strategies: list[str] | None = None
+    rag_context: str | None = None
     max_depth: int = 6
 
     @field_validator("strategies", mode="before")
@@ -150,6 +153,8 @@ class OracleRequest(FlexibleModel):
     test_cases: list[TestCase]
     requirements: list[Requirement] | None = None
     source_context_ids: list[str] | None = None
+    requirement_text: str = ""
+    rag_context: str | None = None
 
 
 # POST /oracle 响应体

@@ -18,10 +18,7 @@ from .schemas import (
     RevisionsResponse,
 )
 
-try:
-    from backend.agent import RevisionRunnerError, regenerate_from_revision
-except ModuleNotFoundError:
-    from agent import RevisionRunnerError, regenerate_from_revision
+from agent import RevisionRunnerError, regenerate_from_revision
 
 
 class EvidenceImproveService:
