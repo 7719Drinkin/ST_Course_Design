@@ -32,12 +32,8 @@ from .schemas import (
     OracleResponse,
 )
 
-try:
-    from backend.agent import generate_blackbox_tests_stream
-    from backend.agent.tools.fsm import generate_fsm_tests
-except ModuleNotFoundError:
-    from agent import generate_blackbox_tests_stream
-    from agent.tools.fsm import generate_fsm_tests
+from agent import generate_blackbox_tests_stream
+from agent.tools.fsm import generate_fsm_tests
 
 
 class TestDesignService:

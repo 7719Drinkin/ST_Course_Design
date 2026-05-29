@@ -18,10 +18,7 @@ from ..util import (
 )
 from .schemas import ParseRequest, ParseResponse
 
-try:
-    from backend.agent import generate_blackbox_tests_stream
-except ModuleNotFoundError:
-    from agent import generate_blackbox_tests_stream
+from agent import generate_blackbox_tests_stream
 
 
 class IntakeParseService:
