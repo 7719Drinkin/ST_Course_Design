@@ -56,7 +56,7 @@ async def generate_blackbox_tests_stream(
     requirement_text: str,
     rag_context: str | None = None,
 ) -> AsyncIterator[str]:
-    """流式入口：按阶段输出进度，最后输出完整结果。"""
+    """流式入口：按阶段输出进度，单阶段失败不丢失已完成阶段的产出。"""
 
     if not requirement_text or not requirement_text.strip():
         yield _format_sse(
@@ -70,12 +70,33 @@ async def generate_blackbox_tests_stream(
 
     pipeline = AgentPipeline()
     stage_results: dict[str, Any] = {}
+    error_stage: str | None = None
 
     try:
         async for stage, result in _iter_pipeline_stages(pipeline, requirement_text, rag_context):
             stage_results[stage] = result
             yield _format_sse("stage", _stage_completed_payload(stage, result))
+    except StageExecutionError as exc:
+        error_stage = exc.stage
+        yield _format_sse("stage_error", _stage_error_payload(exc.stage, exc.error))
+    except Exception as exc:
+        yield _format_sse(
+            "stage_error",
+            _stage_error_payload(StageName.AGENT_RUNNER, str(exc)),
+        )
+        return
 
+    # Finalize: only if all 7 stages completed successfully
+    required_stages = [
+        StageName.PARSE_REQUIREMENTS,
+        StageName.ANALYZE_RISK,
+        StageName.IDENTIFY_COVERAGE,
+        StageName.ASSIGN_STRATEGY,
+        StageName.GENERATE_TESTS,
+        StageName.GENERATE_FSM,
+        StageName.GENERATE_ORACLE,
+    ]
+    if all(k in stage_results for k in required_stages):
         final_result = finalize_pipeline_result(
             stage_results[StageName.PARSE_REQUIREMENTS],
             stage_results[StageName.ANALYZE_RISK],
@@ -101,12 +122,15 @@ async def generate_blackbox_tests_stream(
                 },
             },
         )
-    except StageExecutionError as exc:
-        yield _format_sse("stage_error", _stage_error_payload(exc.stage, exc.error))
-    except Exception as exc:
+    else:
+        completed = list(stage_results.keys())
         yield _format_sse(
-            "stage_error",
-            _stage_error_payload(StageName.AGENT_RUNNER, str(exc)),
+            "final",
+            {
+                "status": "partial",
+                "completed_stages": completed,
+                "error_stage": error_stage,
+            },
         )
 
 
@@ -115,69 +139,61 @@ async def _iter_pipeline_stages(
     requirement_text: str,
     rag_context: str | None,
 ) -> AsyncIterator[tuple[str, Any]]:
-    """内部阶段编排唯一入口。"""
+    """阶段式执行：每阶段完成即 yield，不阻塞后续阶段的 SSE 事件发布。"""
 
+    # ---- Stage 1: Parse Requirements ----
     parse_result = await pipeline.parse_requirements(requirement_text, rag_context)
     yield StageName.PARSE_REQUIREMENTS, parse_result
 
+    # ---- Stage 2: Analyze Risk ----
     risk_result = await pipeline.analyze_risk(parse_result.analyzed_requirements, rag_context)
     yield StageName.ANALYZE_RISK, risk_result
 
-    # FR3 与 FR4 并列执行，随后统一进入 FR5。
-    fr3_result, fsm_result = await asyncio.gather(
-        _run_fr3_branch(
-            pipeline,
-            parse_result.analyzed_requirements,
-            risk_result.risk_analysis,
-            rag_context,
-        ),
+    # ---- Stage 3: Identify Coverage (yield immediately, before strategy) ----
+    coverage_result = await pipeline.identify_coverage(
+        parse_result.analyzed_requirements,
+        risk_result.risk_analysis,
+        rag_context,
+    )
+    yield StageName.IDENTIFY_COVERAGE, coverage_result
+
+    # ---- Stage 4: Assign Strategy (yield immediately, before generate) ----
+    strategy_result = await pipeline.assign_strategy(
+        coverage_result.coverage_goals,
+        parse_result.analyzed_requirements,
+        risk_result.risk_analysis,
+        rag_context,
+    )
+    yield StageName.ASSIGN_STRATEGY, strategy_result
+
+    # ---- Stage 5a: Generate Tests + Stage 5b: FSM (parallel, after coverage/strategy yielded) ----
+    fsm_task = asyncio.create_task(
         _run_fr4_branch(
             pipeline,
             parse_result.requirements,
             parse_result.analyzed_requirements,
             rag_context,
-        ),
+        )
     )
 
-    yield StageName.IDENTIFY_COVERAGE, fr3_result[0]
-    yield StageName.ASSIGN_STRATEGY, fr3_result[1]
-    yield StageName.GENERATE_TESTS, fr3_result[2]
+    generate_result = await pipeline.generate_tests(
+        strategy_result.coverage_items,
+        risk_result.risk_analysis,
+        rag_context,
+    )
+    yield StageName.GENERATE_TESTS, generate_result
+
+    fsm_result = await fsm_task
     yield StageName.GENERATE_FSM, fsm_result
 
-    merged_test_cases = _merge_test_cases(fr3_result[2].test_cases, fsm_result.test_cases)
+    # ---- Stage 6: Oracle (depends on FR3 tests + FSM tests) ----
+    merged_test_cases = _merge_test_cases(generate_result.test_cases, fsm_result.test_cases)
     oracle_result = await pipeline.generate_oracles(
         merged_test_cases,
         requirements=parse_result.analyzed_requirements,
         rag_context=rag_context,
     )
     yield StageName.GENERATE_ORACLE, oracle_result
-
-
-async def _run_fr3_branch(
-    pipeline: AgentPipeline,
-    analyzed_requirements: list,
-    risk_analysis: list,
-    rag_context: str | None,
-) -> tuple[Any, Any, Any]:
-    """FR3 分支：覆盖识别 -> 技术分配 -> 用例生成。"""
-
-    coverage_result = await pipeline.identify_coverage(
-        analyzed_requirements,
-        risk_analysis,
-        rag_context,
-    )
-    strategy_result = await pipeline.assign_strategy(
-        coverage_result.coverage_goals,
-        analyzed_requirements,
-        risk_analysis,
-        rag_context,
-    )
-    generate_result = await pipeline.generate_tests(
-        strategy_result.coverage_items,
-        risk_analysis,
-        rag_context,
-    )
-    return coverage_result, strategy_result, generate_result
 
 
 async def _run_fr4_branch(

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+
 from ..core.agent_context import AgentContext
 from ..core.agent_result import AgentResult
 from ..core.base_agent import BaseAgent
@@ -8,35 +10,39 @@ from ..tools.validation.output_validator import validate_test_design_specs
 
 
 class TestDesignSpecAgent(BaseAgent):
-    """按 coverage_item 逐项展开测试设计规格。"""
+    """按 coverage_item 并行展开测试设计规格。"""
 
     async def run(self, context: AgentContext) -> AgentResult:
-        """为每个 coverage_item 单独生成 test_design_specs 并汇总。"""
 
         try:
             if not context.coverage_items:
                 raise ValueError("coverage_items are required.")
 
-            all_specs = []
-            for coverage_item in context.coverage_items:
-                risk_item = self._find_risk_item(
-                    coverage_item.requirement_id,
-                    context.risk_analysis,
+            async def _process_one(item):
+                risk = self._find_risk_item(
+                    item.requirement_id, context.risk_analysis,
                 )
-                test_design_specs = await self._run_validated_json_prompt(
+                return await self._run_validated_json_prompt(
                     "test_design_spec",
                     {
-                        "coverage_item": coverage_item,
+                        "coverage_item": item,
                         "rag_context": context.rag_context or "",
-                        "risk_item": risk_item,
+                        "risk_item": risk,
                     },
                     context,
                     "test_design_specs",
                     validate_test_design_specs,
                 )
-                all_specs.extend(test_design_specs)
 
-            # 批量生成完成后再写回上下文，避免中途失败留下半成品给下游阶段。
+            tasks = [_process_one(item) for item in context.coverage_items]
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+
+            all_specs = []
+            for result in results:
+                if isinstance(result, BaseException):
+                    raise result
+                all_specs.extend(result)
+
             context.test_design_specs = all_specs
             return AgentResult(
                 success=True,
@@ -50,8 +56,6 @@ class TestDesignSpecAgent(BaseAgent):
         requirement_id: str,
         risk_analysis: list[RiskAnalysisItem],
     ) -> RiskAnalysisItem | dict:
-        """根据 requirement_id 查找当前需求对应的风险分析结果。"""
-
         for risk_item in risk_analysis:
             if risk_item.requirement_id == requirement_id:
                 return risk_item

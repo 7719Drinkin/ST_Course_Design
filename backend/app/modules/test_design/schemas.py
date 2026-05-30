@@ -52,7 +52,7 @@ class TestCaseDraft(FlexibleModel):
     expected_result: str = ""
     standard_ref: str = ""
     priority: Literal["P1", "P2", "P3"] = "P2"
-    status: Literal["Draft"] = "Draft"
+    status: Literal["Draft", "Approved", "Rejected"] = "Draft"
 
 
 # FSM 状态迁移边

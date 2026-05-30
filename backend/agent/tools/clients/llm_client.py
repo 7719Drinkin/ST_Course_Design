@@ -57,5 +57,9 @@ class LLMClient:
         except ImportError as exc:
             raise RuntimeError("openai package is required for DeepSeek API calls.") from exc
 
-        self._client = AsyncOpenAI(api_key=self.api_key, base_url=self.base_url)
+        self._client = AsyncOpenAI(
+            api_key=self.api_key,
+            base_url=self.base_url,
+            timeout=1800.0,  # 30 min, 避免 generate_tests 等长阶段被 OpenAI SDK 600s 默认超时截断
+        )
         return self._client

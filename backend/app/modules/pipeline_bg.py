@@ -168,7 +168,7 @@ def _save_fsm(session_id: str, output: dict[str, Any]) -> None:
     fsm = output.get("fsm") or {}
     workflow_store.save_object(session_id, "fsm", fsm)
     test_cases = output.get("test_cases", [])
-    workflow_store.save_many(session_id, "test_cases", test_cases, "test_id")
+    workflow_store.save_many(session_id, "fsm_test_cases", test_cases, "test_id")
     _save_prompt_evidence(session_id, output, "fsm", STAGE_FSM)
 
 
