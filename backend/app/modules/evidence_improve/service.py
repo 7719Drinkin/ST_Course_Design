@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 
 from fastapi import HTTPException
@@ -55,36 +56,17 @@ class EvidenceImproveService:
         workflow_store.save_many(request.session_id, "revisions", [revision], "revision_id")
         return RevisionsResponse(revision=revision, affected_ids=affected_ids)
 
-    async def regenerate(self, request: RegenerateRequest) -> RegenerateResponse:
+    async def regenerate(self, request: RegenerateRequest) -> dict:
         revision = workflow_store.find_revision(request.session_id, request.revision_id)
         if revision is None:
             raise HTTPException(status_code=404, detail=f"revision_id not found: {request.revision_id}")
 
         state = _workflow_state(request.session_id, request.current_state)
-        try:
-            result = await regenerate_from_revision(
-                revision,
-                state,
-                rag_context=str((request.current_state or {}).get("rag_context") or "") or None,
-            )
-        except RevisionRunnerError as exc:
-            raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
-
-        created = result.get("created", {})
-        updated = result.get("updated", {})
-        unchanged = result.get("unchanged", {})
-        deprecated = result.get("deprecated", {})
-        prompt_evidence = result.get("prompt_evidence", [])
-        _save_regenerate_outputs(request.session_id, created, updated, deprecated)
-        workflow_store.save_many(request.session_id, "prompt_evidence", prompt_evidence, "evidence_id")
-        return RegenerateResponse(
-            session_id=request.session_id,
-            created=created,
-            updated=updated,
-            unchanged=unchanged,
-            deprecated=deprecated,
-            prompt_evidence=prompt_evidence,
-        )
+        asyncio.create_task(_background_regenerate(
+            request.session_id, revision, state,
+            str((request.current_state or {}).get("rag_context") or "") or None,
+        ))
+        return {"session_id": request.session_id, "status": "started"}
 
     def analyze(self, request: AnalysisRequest) -> AnalysisResponse:
         requirements = to_dicts(request.requirements) or workflow_store.get_list(request.session_id, "requirements")
@@ -399,3 +381,21 @@ def _revised_ids(
         ).values():
             ids.update(values)
     return {item for item in ids if item}
+
+
+async def _background_regenerate(
+    session_id: str,
+    revision: dict[str, Any],
+    state: dict[str, list[dict[str, Any]]],
+    rag_context: str | None,
+) -> None:
+    try:
+        result = await regenerate_from_revision(revision, state, rag_context=rag_context)
+        created = result.get("created", {})
+        updated = result.get("updated", {})
+        deprecated = result.get("deprecated", {})
+        prompt_evidence = result.get("prompt_evidence", [])
+        _save_regenerate_outputs(session_id, created, updated, deprecated)
+        workflow_store.save_many(session_id, "prompt_evidence", prompt_evidence, "evidence_id")
+    except Exception:
+        pass

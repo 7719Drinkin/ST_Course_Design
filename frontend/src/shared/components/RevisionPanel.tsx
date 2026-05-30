@@ -1,5 +1,6 @@
-import { Card, List, Typography } from 'antd'
+import { Card, List, Tag, Typography } from 'antd'
 import { useAppStore } from '@/app/store/appStore'
+import { SyncOutlined, CheckCircleOutlined, CloseCircleOutlined } from '@ant-design/icons'
 
 const { Text } = Typography
 
@@ -13,7 +14,14 @@ export function RevisionPanel() {
         size="small"
         dataSource={[...revisions].reverse().slice(0, 8)}
         renderItem={(r) => (
-          <List.Item>
+          <List.Item
+            extra={
+              r.syncStatus === 'saving' ? <SyncOutlined spin style={{ color: '#1677ff' }} />
+                : r.syncStatus === 'saved' ? <CheckCircleOutlined style={{ color: '#52c41a' }} />
+                  : r.syncStatus === 'failed' ? <CloseCircleOutlined style={{ color: '#ff4d4f' }} />
+                    : null
+            }
+          >
             <Text type="secondary" style={{ fontSize: 12 }}>
               {r.id} · Stage {r.step + 1} · {r.entity_type} · {r.entity_id}
             </Text>

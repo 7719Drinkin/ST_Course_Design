@@ -277,6 +277,11 @@ body::before {
     0 0 0 4px rgba(184, 173, 155, 0.1);
 }
 
+.route-status-awaiting {
+  background: var(--accent);
+  box-shadow: 0 0 0 4px var(--accent-soft);
+}
+
 .route-status-pending::after {
   content: "";
   width: 6px;

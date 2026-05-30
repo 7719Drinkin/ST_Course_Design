@@ -10,5 +10,6 @@ class ConceptRiskService:
     async def score_risk(self, request: RiskRequest) -> RiskResponse:
         stored = workflow_store.get_list(request.session_id, "risk_analysis")
         if stored:
-            return RiskResponse(risk_analysis=stored, prompts_used=[])
+            evidence = workflow_store.get_list(request.session_id, "prompt_evidence")
+            return RiskResponse(risk_analysis=stored, prompts_used=evidence)
         return RiskResponse(risk_analysis=[], prompts_used=[])

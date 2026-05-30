@@ -76,7 +76,8 @@ export function TestDesignPage() {
         const r = await getTestCases(coverageItems, riskEntries)
         if (!active) return
         const cases = r.data.map((c) => ({ ...c, status: c.status ?? 'Draft' }))
-        setTestCases(cases)
+        const fsmCasesFromStore = useAppStore.getState().testCases.filter((t) => t.technique === 'FSM')
+        setTestCases([...cases, ...fsmCasesFromStore])
         setTcLive(r.isLive)
         if (cases.length === 0) {
           setOracleResults([])
@@ -146,6 +147,18 @@ export function TestDesignPage() {
 
   const needsReviewCases = oracleResults.filter((o) => o.needs_review)
 
+  const handleApproveAll = () => {
+    filteredCases.forEach((tc) => {
+      if (tc.status !== 'Approved') updateTestCase(tc.test_id, { status: 'Approved' }, undefined, true)
+    })
+  }
+
+  const handleRejectAll = () => {
+    filteredCases.forEach((tc) => {
+      if (tc.status !== 'Rejected') updateTestCase(tc.test_id, { status: 'Rejected' }, undefined, true)
+    })
+  }
+
   return (
     <Space direction="vertical" size={24} className="full-width">
       <div className="stage-toolbar stage-toolbar-wrap">
@@ -198,7 +211,12 @@ export function TestDesignPage() {
 
       {hasRequirements && <Row gutter={[16, 16]}>
         <Col xs={24} lg={16}>
-          <Card title="测试用例池 · 人工审查">
+          <Card title="测试用例池 · 人工审查" extra={
+            <Space>
+              <Button size="small" onClick={handleApproveAll}>全部通过</Button>
+              <Button size="small" danger onClick={handleRejectAll}>全部驳回</Button>
+            </Space>
+          }>
             <Spin spinning={fetching}>
               <Table
                 rowKey="test_id"
@@ -296,7 +314,7 @@ export function TestDesignPage() {
                             size="small"
                             type={record.status === statusOption.value ? 'primary' : 'default'}
                             danger={statusOption.value === 'Rejected'}
-                            onClick={() => updateTestCase(record.test_id, { status: statusOption.value })}
+                            onClick={() => updateTestCase(record.test_id, { status: statusOption.value }, undefined, true)}
                           >
                             {statusOption.label}
                           </Button>
@@ -330,6 +348,22 @@ export function TestDesignPage() {
                 <Text type="secondary" style={{ fontSize: 12 }}>
                   暂无 FSM 数据
                 </Text>
+              )}
+              {testCases.filter((tc) => tc.technique === 'FSM').length > 0 && (
+                <List
+                  size="small"
+                  style={{ marginTop: 12 }}
+                  header={<Text strong>FSM 测试用例</Text>}
+                  dataSource={testCases.filter((tc) => tc.technique === 'FSM').slice(0, 6)}
+                  renderItem={(tc) => (
+                    <List.Item>
+                      <Space direction="vertical" size={0}>
+                        <Text strong style={{ fontSize: 11 }}>{tc.test_id}</Text>
+                        <Text style={{ fontSize: 11 }}>{tc.title}</Text>
+                      </Space>
+                    </List.Item>
+                  )}
+                />
               )}
               {fsmPaths.length > 0 && (
                 <List
@@ -372,20 +406,6 @@ export function TestDesignPage() {
           columns={[
             { title: '用例编号', dataIndex: 'test_id', width: 130 },
             {
-              title: '智能判断',
-              dataIndex: 'llm_verdict',
-              render: (v) => (
-                <Tag color={v === 'Pass' ? 'green' : v === 'Fail' ? 'red' : 'default'}>
-                  {v ?? '—'}
-                </Tag>
-              ),
-            },
-            {
-              title: '规则判断',
-              dataIndex: 'rule_verdict',
-              render: (v) => <Tag>{v ?? '—'}</Tag>,
-            },
-            {
               title: '置信度',
               dataIndex: 'confidence',
               render: (v: number) => (
@@ -401,7 +421,7 @@ export function TestDesignPage() {
                   <Button
                     size="small"
                     type="primary"
-                    onClick={() => updateTestCase(record.test_id, { status: 'Approved' })}
+                    onClick={() => updateTestCase(record.test_id, { status: 'Approved' }, undefined, true)}
                   >
                     Designer 确认
                   </Button>
