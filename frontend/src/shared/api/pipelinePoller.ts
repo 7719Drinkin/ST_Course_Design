@@ -3,7 +3,6 @@
 import { useAppStore } from '@/app/store/appStore'
 import { postJson } from '@/shared/api/apiClient'
 import type {
-  CoverageGoal,
   CoverageItem,
   CoverageResponse,
   FSMResult,

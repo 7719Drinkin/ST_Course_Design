@@ -52,6 +52,7 @@ function App() {
         if (stagePolling[4]) return 'polling'
         return 'ready'
       case 5: return optimizeResult ? 'ready' : 'pending'
+      default: return 'pending'
     }
   }, [requirements, riskEntries, coverageItems, testCases, analysisResults, optimizeResult, stagePolling, regenerateTriggered])
 
