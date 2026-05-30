@@ -1,8 +1,7 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Button, Card, Descriptions, List, Select, Space, Table, Tag, Typography, message } from 'antd'
 import { useAppStore } from '@/app/store/appStore'
 import { getAnalysisResults, regenerateFromRevision } from '@/modules/test-design/api/evidenceApi'
-import { isBackendRevisionSupported } from '@/modules/test-design/api/revisionsApi'
 import { RevisionPanel } from '@/shared/components/RevisionPanel'
 import { DataStatusTag, WorkflowEmptyState } from '@/shared/components/WorkflowFeedback'
 import type { AnalysisResult, PromptEvidence, RevisionLog, TestCase } from '@/shared/types'
@@ -13,6 +12,7 @@ export function EvidencePage() {
   const [selectedRevisionId, setSelectedRevisionId] = useState<string>()
   const [regenerateLive, setRegenerateLive] = useState<boolean>()
   const [analysisLive, setAnalysisLive] = useState<boolean>()
+  const pollTimer = useRef<ReturnType<typeof setInterval> | null>(null)
 
   const promptEvidence = useAppStore((s) => s.promptEvidence)
   const setPromptEvidence = useAppStore((s) => s.setPromptEvidence)
@@ -27,9 +27,13 @@ export function EvidencePage() {
   const setRegenerateResult = useAppStore((s) => s.setRegenerateResult)
   const analysisResults = useAppStore((s) => s.analysisResults)
   const setAnalysisResults = useAppStore((s) => s.setAnalysisResults)
+  const pipelineActive = useAppStore((s) => s.pipelineActive)
+  const regenerateTriggered = useAppStore((s) => s.regenerateTriggered)
+  const setRegenerateTriggered = useAppStore((s) => s.setRegenerateTriggered)
+  const setStagePolling = useAppStore((s) => s.setStagePolling)
 
-  const backendRevisions = revisions.filter(isBackendRevisionSupported)
-  const latestRevision = backendRevisions.at(-1)
+  const savedRevisions = revisions.filter((r) => r.syncStatus === 'saved')
+  const latestRevision = savedRevisions.at(-1)
   const entityLabels: Record<RevisionLog['entity_type'], string> = {
     requirement: '需求',
     parsed_requirement: '结构化需求',
@@ -50,7 +54,7 @@ export function EvidencePage() {
     needs_review: '待审查',
   }
 
-  const revisionOptions = [...backendRevisions].reverse().map((revision) => ({
+  const revisionOptions = [...savedRevisions].reverse().map((revision) => ({
     value: revision.id,
     label: `${revision.id} · ${entityLabels[revision.entity_type]} · ${revision.entity_id}`,
   }))
@@ -82,23 +86,58 @@ export function EvidencePage() {
     const revisionId = selectedRevisionId ?? latestRevision?.id
     if (!revisionId) return
     try {
-      const result = await regenerateFromRevision(revisionId, {
+      setRegenerateTriggered(true)
+      setStagePolling(4, true)
+      setRegenerateLive(true)
+      // Trigger async regenerate (backend returns immediately)
+      await regenerateFromRevision(revisionId, {
         requirements,
         coverage_items: coverageItems,
         strategies,
         risk_results: riskEntries,
         test_cases: testCases,
       })
-      setRegenerateResult(result.data)
-      setTestCases(mergeRegeneratedTestCases(testCases, result.data))
-      if (result.data.prompt_evidence?.length) {
-        setPromptEvidence(mergePromptEvidence(promptEvidence, result.data.prompt_evidence))
-      }
-      setRegenerateLive(result.isLive)
+      // Poll /analysis until results update
+      const prevIds = new Set(analysisResults.map((r) => r.test_id || r.coverage_item_id))
+      let polls = 0
+      const timer = setInterval(async () => {
+        polls++
+        if (polls > 30) { clearInterval(timer); setStagePolling(4, false); return }
+        try {
+          const result = await getAnalysisResults()
+          const newIds = new Set(result.data.map((r) => r.test_id || r.coverage_item_id))
+          const changed = result.data.some((r) => r.status === 'improved' && !prevIds.has(r.test_id || r.coverage_item_id))
+            || result.data.length !== analysisResults.length
+          if (changed) {
+            setAnalysisResults(result.data)
+            setAnalysisLive(result.isLive)
+            setStagePolling(4, false)
+            clearInterval(timer)
+          }
+        } catch { /* retry */ }
+      }, 2000)
+      pollTimer.current = timer
     } catch {
       setRegenerateLive(false)
+      setStagePolling(4, false)
       message.error('LLM 再生成失败，请检查后端 LLM 配置或 Prompt 输出。')
     }
+  }
+
+  // Cleanup poll timer on unmount
+  useEffect(() => {
+    return () => { if (pollTimer.current) clearInterval(pollTimer.current) }
+  }, [])
+
+  if (testCases.length === 0 && !pipelineActive) {
+    return (
+      <Space direction="vertical" size={24} className="full-width">
+        <WorkflowEmptyState
+          title="等待测试用例生成完毕"
+          description="Revision 再生成和追溯分析必须建立在测试用例已生成的基础上。"
+        />
+      </Space>
+    )
   }
 
   if (requirements.length === 0 && testCases.length === 0) {
@@ -187,16 +226,16 @@ export function EvidencePage() {
           dataSource={promptEvidence}
           columns={[
             {
-              title: '引用材料',
-              dataIndex: 'source_context_ids',
-              width: 160,
-              render: (value?: string[]) => <Tag>{value?.length ?? 0} 条</Tag>,
+              title: '阶段',
+              dataIndex: 'prompt_name',
+              width: 180,
+              ellipsis: true,
             },
             {
-              title: '生成摘要',
-              dataIndex: 'output_summary',
+              title: '说明',
+              dataIndex: 'note',
               ellipsis: true,
-              render: (value: string | undefined) => value || <Text type="secondary">等待生成</Text>,
+              render: (value: string | undefined) => value || <Text type="secondary">—</Text>,
             },
           ]}
         />
@@ -204,12 +243,12 @@ export function EvidencePage() {
 
       <div className="workbench-grid workbench-grid-2">
         <Card title="差量更新结果">
-          {regenerateResult ? (
+          {analysisResults.length > 0 ? (
             <Descriptions size="small" column={2} bordered>
-              <Descriptions.Item label="新增">{Object.keys(regenerateResult.created).length}</Descriptions.Item>
-              <Descriptions.Item label="更新">{Object.keys(regenerateResult.updated).length}</Descriptions.Item>
-              <Descriptions.Item label="未变化">{Object.keys(regenerateResult.unchanged).length}</Descriptions.Item>
-              <Descriptions.Item label="已过期">{Object.keys(regenerateResult.deprecated).length}</Descriptions.Item>
+              <Descriptions.Item label="已改进">{improvementStats.improved}</Descriptions.Item>
+              <Descriptions.Item label="缺失">{improvementStats.missing}</Descriptions.Item>
+              <Descriptions.Item label="待审查">{improvementStats.needsReview}</Descriptions.Item>
+              <Descriptions.Item label="总计">{analysisResults.length}</Descriptions.Item>
             </Descriptions>
           ) : (
             <Text type="secondary">选择一条修订记录后，可以重新计算受影响的结果。</Text>
@@ -217,18 +256,21 @@ export function EvidencePage() {
         </Card>
 
         <Card title="修订记录">
-          {revisions.length === 0 ? (
+          {savedRevisions.length === 0 ? (
             <Text type="secondary">暂无人工修订。设计者修改覆盖项、策略或用例后会生成 REV-*。</Text>
           ) : (
             <List
               size="small"
-              dataSource={[...revisions].reverse().slice(0, 6)}
+              dataSource={[...savedRevisions].reverse().slice(0, 6)}
               renderItem={(revision: RevisionLog) => (
                 <List.Item>
                   <Space direction="vertical" size={2}>
                     <Text strong>{revision.id}</Text>
                     <Text type="secondary">
                       {entityLabels[revision.entity_type]} · {revision.entity_id} · {revision.field}
+                    </Text>
+                    <Text style={{ fontSize: 12 }}>
+                      <Text delete>{revision.old_value}</Text> → <Text strong>{revision.new_value}</Text>
                     </Text>
                   </Space>
                 </List.Item>

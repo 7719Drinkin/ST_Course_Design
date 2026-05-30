@@ -1,5 +1,5 @@
 import { useEffect, useCallback } from 'react'
-import { Layout, Space, Tag, Typography } from 'antd'
+import { Button, Layout, Space, Tag, Typography } from 'antd'
 import heroImage from '@/assets/hero.png'
 import { PipelineSummary } from '@/app/components/PipelineSummary'
 import { workflowRoutes } from '@/app/routes'
@@ -19,6 +19,9 @@ function App() {
   const analysisResults = useAppStore((s) => s.analysisResults)
   const optimizeResult = useAppStore((s) => s.optimizeResult)
   const stagePolling = useAppStore((s) => s.stagePolling)
+  const regenerateTriggered = useAppStore((s) => s.regenerateTriggered)
+  const pendingRevisions = useAppStore((s) => s.pendingRevisions)
+  const commitPendingRevisions = useAppStore((s) => s.commitPendingRevisions)
 
   useEffect(() => {
     const syncHash = () => {
@@ -37,16 +40,20 @@ function App() {
     window.history.replaceState(null, '', `#/${workflowRoutes[boundedStep].id}`)
   }
 
-  const getStageDataStatus = useCallback((index: number): 'pending' | 'polling' | 'ready' => {
+  const getStageDataStatus = useCallback((index: number): 'pending' | 'polling' | 'ready' | 'awaiting' => {
     switch (index) {
       case 0: return requirements.length > 0 ? 'ready' : stagePolling[0] ? 'polling' : 'pending'
       case 1: return riskEntries.length > 0 ? 'ready' : stagePolling[1] ? 'polling' : 'pending'
       case 2: return coverageItems.length > 0 ? 'ready' : stagePolling[2] ? 'polling' : 'pending'
       case 3: return testCases.length > 0 ? 'ready' : stagePolling[3] ? 'polling' : 'pending'
-      case 4: return analysisResults.length > 0 ? 'ready' : stagePolling[4] ? 'polling' : 'pending'
+      case 4:
+        if (testCases.length === 0) return 'pending'
+        if (!regenerateTriggered) return 'awaiting'
+        if (stagePolling[4]) return 'polling'
+        return 'ready'
       case 5: return optimizeResult ? 'ready' : 'pending'
     }
-  }, [requirements, riskEntries, coverageItems, testCases, analysisResults, optimizeResult, stagePolling])
+  }, [requirements, riskEntries, coverageItems, testCases, analysisResults, optimizeResult, stagePolling, regenerateTriggered])
 
   // Update document title when polling
   useEffect(() => {
@@ -94,7 +101,8 @@ function App() {
                   className={`route-status ${
                     dataStatus === 'ready' ? 'route-status-done'
                       : dataStatus === 'polling' ? 'route-status-running'
-                        : 'route-status-pending'
+                        : dataStatus === 'awaiting' ? 'route-status-awaiting'
+                          : 'route-status-pending'
                   }`}
                   aria-hidden="true"
                 >
@@ -116,6 +124,11 @@ function App() {
               </Tag>
               {highRiskCount > 0 && <Tag color="red">高风险 {highRiskCount}</Tag>}
               {approvedCount > 0 && <Tag color="green">通过 {approvedCount}</Tag>}
+              {pendingRevisions.length > 0 && (
+                <Button type="primary" size="small" danger onClick={commitPendingRevisions}>
+                  修订待提交 ({pendingRevisions.length})
+                </Button>
+              )}
             </Space>
           </div>
           <PipelineSummary />

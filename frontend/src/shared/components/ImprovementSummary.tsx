@@ -9,18 +9,19 @@ export function ImprovementSummary() {
   const testCases = useAppStore((s) => s.testCases)
   const requirements = useAppStore((s) => s.requirements)
 
-  const designerAddedCov = coverageItems.filter((c) => c.designer_added).length
+  const savedRevisions = revisions.filter((r) => r.syncStatus === 'saved')
+  const designerAddedCov = coverageItems.filter((c) => c.designer_added || c.status === 'human_added').length
   const approved = testCases.filter((t) => t.status === 'Approved').length
   const confirmedReq = requirements.filter((r) => r.designer_confirmed).length
-  const byStep = [0, 1, 2, 3, 4].map((s) => revisions.filter((r) => r.step === s).length)
+  const byStep = [0, 1, 2, 3, 4].map((s) => savedRevisions.filter((r) => r.step === s).length)
 
-  if (revisions.length === 0 && designerAddedCov === 0) return null
+  if (savedRevisions.length === 0 && designerAddedCov === 0) return null
 
   return (
     <Card title="基于证据的改进" size="small">
       <Row gutter={16}>
         <Col xs={12} sm={6}>
-          <Statistic title="人工修订" value={revisions.length} />
+          <Statistic title="人工修订" value={savedRevisions.length} />
         </Col>
         <Col xs={12} sm={6}>
           <Statistic title="已确认需求" value={confirmedReq} />

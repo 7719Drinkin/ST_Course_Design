@@ -213,7 +213,7 @@ export function CoverageStrategyPage() {
                           techniques,
                           technique: techniques[0],
                           status: 'human_revised',
-                        })
+                        }, undefined, true)
                       }
                       options={TECHNIQUE_OPTIONS.map((technique) => ({
                         value: technique,
@@ -231,7 +231,7 @@ export function CoverageStrategyPage() {
                       size="small"
                       value={value}
                       style={{ width: '100%' }}
-                      onChange={(status) => updateCoverageItem(record.coverage_item_id, { status })}
+                      onChange={(status) => updateCoverageItem(record.coverage_item_id, { status }, undefined, true)}
                       options={[
                         { value: 'ai_generated', label: '系统生成' },
                         { value: 'human_revised', label: '人工修订' },
@@ -284,7 +284,7 @@ export function CoverageStrategyPage() {
                           technique,
                           techniques: [technique],
                           status: 'human_revised',
-                        })
+                        }, undefined, true)
                       }
                       options={TECHNIQUE_OPTIONS.map((technique) => ({
                         value: technique,

@@ -260,6 +260,7 @@ export interface RevisionLog {
   new_value: string
   reason?: string
   timestamp: string
+  syncStatus?: 'pending' | 'saving' | 'saved' | 'failed'
 }
 
 export interface ExportRevisionRecord {

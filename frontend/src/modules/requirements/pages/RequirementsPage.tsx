@@ -51,6 +51,7 @@ export function RequirementsPage() {
   const setHighlightedRequirementId = useAppStore((s) => s.setHighlightedRequirementId)
   const setStagePolling = useAppStore((s) => s.setStagePolling)
   const resetStagePolling = useAppStore((s) => s.resetStagePolling)
+  const clearPendingRevisions = useAppStore((s) => s.clearPendingRevisions)
 
   const selectedFile = fileList[0]?.originFileObj as File | undefined
   const hasInput = Boolean(selectedFile || pasteText.trim())
@@ -130,6 +131,7 @@ export function RequirementsPage() {
     setInputError(undefined)
     setSuccessMessage(undefined)
     resetStagePolling()
+    clearPendingRevisions()
   }
 
   return (
@@ -340,7 +342,7 @@ export function RequirementsPage() {
                         updateRequirement(record.requirement_id, {
                           designer_confirmed: !record.designer_confirmed,
                           missing_fields: record.designer_confirmed ? record.missing_fields : [],
-                        })
+                        }, undefined, true)
                       }
                     >
                       {record.designer_confirmed ? '已确认' : '确认'}

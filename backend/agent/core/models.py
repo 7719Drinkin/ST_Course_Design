@@ -52,7 +52,7 @@ class ParsedRequirement(AgentModel):
     """需求解析结果。"""
 
     requirement_id: str
-    module: str
+    module: str = "General"
     raw_text: str
     description: str
 
@@ -61,7 +61,7 @@ class AnalyzedRequirement(AgentModel):
     """需求语义分析结果。"""
 
     requirement_id: str
-    module: str
+    module: str = "General"
     description: str
     input_fields: list[str] = Field(default_factory=list)
     data_ranges: list[str] = Field(default_factory=list)
@@ -287,12 +287,6 @@ class FsmGenerationResult(AgentModel):
     fsm: FsmResult
     test_cases: list[FsmTestCaseDraft] = Field(default_factory=list)
     prompts_used: list[PromptRecord] = Field(default_factory=list)
-
-    @model_validator(mode="after")
-    def validate_cases_are_non_empty(self) -> "FsmGenerationResult":
-        if not self.test_cases:
-            raise ValueError("test_cases 不能为空")
-        return self
 
 
 class OracleGenerationResult(AgentModel):

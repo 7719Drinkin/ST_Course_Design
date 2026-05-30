@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Button, Card, Select, Space, Table, Tag, Typography } from 'antd'
+import { Button, Card, InputNumber, Select, Space, Table, Tag, Typography } from 'antd'
 import { useAppStore } from '@/app/store/appStore'
 import { getRiskData } from '@/modules/risk-analysis/api/riskApi'
 import { RevisionPanel } from '@/shared/components/RevisionPanel'
@@ -128,9 +128,23 @@ export function RiskAnalysisPage() {
               dataSource={displayedRisk}
               columns={[
                 { title: '目标', dataIndex: 'requirement_id', width: 130 },
-                { title: '影响', dataIndex: 'impact', width: 90 },
-                { title: '可能性', dataIndex: 'likelihood', width: 110 },
-                { title: '分数', dataIndex: 'score', width: 90 },
+                {
+                  title: '影响', dataIndex: 'impact', width: 100,
+                  render: (value: number, record: RiskEntry) => (
+                    <InputNumber size="small" min={1} max={5} value={value} style={{ width: '100%' }}
+                      onChange={(v) => updateRiskEntry(record.requirement_id, { impact: v ?? value })}
+                    />
+                  ),
+                },
+                {
+                  title: '可能性', dataIndex: 'likelihood', width: 100,
+                  render: (value: number, record: RiskEntry) => (
+                    <InputNumber size="small" min={1} max={5} value={value} style={{ width: '100%' }}
+                      onChange={(v) => updateRiskEntry(record.requirement_id, { likelihood: v ?? value })}
+                    />
+                  ),
+                },
+                { title: '分数', dataIndex: 'score', width: 80 },
                 {
                   title: '风险等级',
                   dataIndex: 'level',
@@ -140,7 +154,7 @@ export function RiskAnalysisPage() {
                       size="small"
                       value={value}
                       style={{ width: '100%' }}
-                      onChange={(level) => updateRiskEntry(record.requirement_id, { level })}
+                      onChange={(level) => updateRiskEntry(record.requirement_id, { level }, undefined, true)}
                       options={[
                         { value: 'High', label: 'High' },
                         { value: 'Medium', label: 'Medium' },
@@ -159,7 +173,7 @@ export function RiskAnalysisPage() {
                       value={value ?? 'P2'}
                       style={{ width: '100%' }}
                       onChange={(testPriority) =>
-                        updateRiskEntry(record.requirement_id, { test_priority: testPriority })
+                        updateRiskEntry(record.requirement_id, { test_priority: testPriority }, undefined, true)
                       }
                       options={[
                         { value: 'P1', label: 'P1' },

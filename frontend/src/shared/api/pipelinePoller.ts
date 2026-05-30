@@ -67,6 +67,9 @@ export function startPollRisk() {
       })
       if (response.risk_analysis?.length > 0) {
         store.setRiskEntries(normalizeRiskEntries(response.risk_analysis))
+        if (response.prompts_used?.length > 0) {
+          store.setPromptEvidence(response.prompts_used)
+        }
         store.setStagePolling(1, false)
         clearInterval(timer)
         startPollCoverage()
@@ -115,7 +118,6 @@ function startPollCoverage() {
         })
         if (response.coverage_items?.length > 0) {
           store.setCoverageItems(normalizeCoverageItems(response.coverage_items))
-          store.setStrategies(response.coverage_items)
           strategyDone = true
         }
       }
@@ -172,6 +174,10 @@ function startPollCaseLab() {
         })
         if (response.fsm && (response.fsm as FSMResult).states?.length > 0) {
           store.setFsm(response.fsm)
+          if (response.test_cases?.length > 0) {
+            const existing = store.testCases.filter((t) => t.technique !== 'FSM')
+            store.setTestCases([...existing, ...response.test_cases.map((c) => ({ ...c, status: c.status ?? 'Draft' }))])
+          }
           fsmDone = true
         }
       }
