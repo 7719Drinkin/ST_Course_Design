@@ -1,4 +1,4 @@
-import { Card, List, Tag, Typography } from 'antd'
+import { Card, List, Typography } from 'antd'
 import { useAppStore } from '@/app/store/appStore'
 import { SyncOutlined, CheckCircleOutlined, CloseCircleOutlined } from '@ant-design/icons'
 

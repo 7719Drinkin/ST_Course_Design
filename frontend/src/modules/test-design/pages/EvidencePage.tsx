@@ -4,7 +4,7 @@ import { useAppStore } from '@/app/store/appStore'
 import { getAnalysisResults, regenerateFromRevision } from '@/modules/test-design/api/evidenceApi'
 import { RevisionPanel } from '@/shared/components/RevisionPanel'
 import { DataStatusTag, WorkflowEmptyState } from '@/shared/components/WorkflowFeedback'
-import type { AnalysisResult, PromptEvidence, RevisionLog, TestCase } from '@/shared/types'
+import type { AnalysisResult, RevisionLog } from '@/shared/types'
 
 const { Paragraph, Text } = Typography
 
@@ -15,20 +15,15 @@ export function EvidencePage() {
   const pollTimer = useRef<ReturnType<typeof setInterval> | null>(null)
 
   const promptEvidence = useAppStore((s) => s.promptEvidence)
-  const setPromptEvidence = useAppStore((s) => s.setPromptEvidence)
   const requirements = useAppStore((s) => s.requirements)
   const coverageItems = useAppStore((s) => s.coverageItems)
   const strategies = useAppStore((s) => s.strategies)
   const riskEntries = useAppStore((s) => s.riskEntries)
   const testCases = useAppStore((s) => s.testCases)
-  const setTestCases = useAppStore((s) => s.setTestCases)
   const revisions = useAppStore((s) => s.revisions)
-  const regenerateResult = useAppStore((s) => s.regenerateResult)
-  const setRegenerateResult = useAppStore((s) => s.setRegenerateResult)
   const analysisResults = useAppStore((s) => s.analysisResults)
   const setAnalysisResults = useAppStore((s) => s.setAnalysisResults)
   const pipelineActive = useAppStore((s) => s.pipelineActive)
-  const regenerateTriggered = useAppStore((s) => s.regenerateTriggered)
   const setRegenerateTriggered = useAppStore((s) => s.setRegenerateTriggered)
   const setStagePolling = useAppStore((s) => s.setStagePolling)
 
@@ -105,7 +100,6 @@ export function EvidencePage() {
         if (polls > 30) { clearInterval(timer); setStagePolling(4, false); return }
         try {
           const result = await getAnalysisResults()
-          const newIds = new Set(result.data.map((r) => r.test_id || r.coverage_item_id))
           const changed = result.data.some((r) => r.status === 'improved' && !prevIds.has(r.test_id || r.coverage_item_id))
             || result.data.length !== analysisResults.length
           if (changed) {
@@ -308,41 +302,4 @@ export function EvidencePage() {
       <RevisionPanel />
     </Space>
   )
-}
-
-function mergeRegeneratedTestCases(current: TestCase[], result: {
-  created: Record<string, unknown>
-  updated: Record<string, unknown>
-  deprecated: Record<string, unknown>
-}) {
-  const incoming = [
-    ...testCasesFromGroup(result.created),
-    ...testCasesFromGroup(result.updated),
-    ...testCasesFromGroup(result.deprecated),
-  ]
-  if (incoming.length === 0) return current
-
-  const byId = new Map(current.map((item) => [item.test_id, item]))
-  incoming.forEach((item) => {
-    if (item.test_id) byId.set(item.test_id, item)
-  })
-  return [...byId.values()]
-}
-
-function testCasesFromGroup(group: Record<string, unknown> | undefined): TestCase[] {
-  const value = group?.test_cases
-  return Array.isArray(value) ? value.filter(isTestCase) : []
-}
-
-function isTestCase(value: unknown): value is TestCase {
-  return Boolean(value && typeof value === 'object' && 'test_id' in value)
-}
-
-function mergePromptEvidence(current: PromptEvidence[], incoming: PromptEvidence[]) {
-  const byId = new Map(current.map((item) => [item.evidence_id ?? `${item.prompt_template_id}-${item.model_name}`, item]))
-  incoming.forEach((item) => {
-    const key = item.evidence_id ?? `${item.prompt_template_id}-${item.model_name}`
-    byId.set(key, item)
-  })
-  return [...byId.values()]
 }
