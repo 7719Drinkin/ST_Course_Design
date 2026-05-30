@@ -50,6 +50,7 @@ export function TestDesignPage() {
   const highlightedRequirementId = useAppStore((s) => s.highlightedRequirementId)
   const setHighlightedRequirementId = useAppStore((s) => s.setHighlightedRequirementId)
   const riskEntries = useAppStore((s) => s.riskEntries)
+  const pipelineActive = useAppStore((s) => s.pipelineActive)
 
   const reqIdsKey = requirements.map((r) => r.requirement_id).join(',')
   const coverageIdsKey = coverageItems.map((item) => item.coverage_item_id).join(',')
@@ -57,6 +58,7 @@ export function TestDesignPage() {
   const hasRequirements = requirements.length > 0
 
   useEffect(() => {
+    if (pipelineActive) return
     if (!reqIdsKey || coverageItems.length === 0) {
       setTestCases([])
       setOracleResults([])
@@ -105,6 +107,7 @@ export function TestDesignPage() {
       window.clearTimeout(slowTimer)
     }
   }, [
+    pipelineActive,
     reqIdsKey,
     coverageIdsKey,
     coverageItems,
@@ -189,7 +192,7 @@ export function TestDesignPage() {
         <Alert
           type="warning"
           showIcon
-          message="用例生成超过 2s（NFR 目标），请稍后；后端联调后可优化性能。"
+          title="用例生成超过 2s（NFR 目标），请稍后；后端联调后可优化性能。"
         />
       ) : null}
 
@@ -413,7 +416,7 @@ export function TestDesignPage() {
             className="top-gap"
             type="warning"
             showIcon
-            message={`${needsReviewCases.length} 条用例需人工复核 Oracle 结果`}
+            title={`${needsReviewCases.length} 条用例需人工复核 Oracle 结果`}
           />
         )}
       </Card>}
@@ -422,7 +425,7 @@ export function TestDesignPage() {
         <Alert
           type="info"
           showIcon
-          message={`已加载 ${coverageItems.length} 个覆盖项，用例生成将与之追溯（COV-*）。`}
+          title={`已加载 ${coverageItems.length} 个覆盖项，用例生成将与之追溯（COV-*）。`}
         />
       )}
 

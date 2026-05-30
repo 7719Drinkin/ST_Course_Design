@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useCallback } from 'react'
 import { Layout, Space, Tag, Typography } from 'antd'
 import heroImage from '@/assets/hero.png'
 import { PipelineSummary } from '@/app/components/PipelineSummary'
@@ -15,6 +15,10 @@ function App() {
   const sourceName = useAppStore((s) => s.sourceName)
   const testCases = useAppStore((s) => s.testCases)
   const riskEntries = useAppStore((s) => s.riskEntries)
+  const coverageItems = useAppStore((s) => s.coverageItems)
+  const analysisResults = useAppStore((s) => s.analysisResults)
+  const optimizeResult = useAppStore((s) => s.optimizeResult)
+  const stagePolling = useAppStore((s) => s.stagePolling)
 
   useEffect(() => {
     const syncHash = () => {
@@ -32,6 +36,23 @@ function App() {
     setCurrentStep(boundedStep)
     window.history.replaceState(null, '', `#/${workflowRoutes[boundedStep].id}`)
   }
+
+  const getStageDataStatus = useCallback((index: number): 'pending' | 'polling' | 'ready' => {
+    switch (index) {
+      case 0: return requirements.length > 0 ? 'ready' : stagePolling[0] ? 'polling' : 'pending'
+      case 1: return riskEntries.length > 0 ? 'ready' : stagePolling[1] ? 'polling' : 'pending'
+      case 2: return coverageItems.length > 0 ? 'ready' : stagePolling[2] ? 'polling' : 'pending'
+      case 3: return testCases.length > 0 ? 'ready' : stagePolling[3] ? 'polling' : 'pending'
+      case 4: return analysisResults.length > 0 ? 'ready' : stagePolling[4] ? 'polling' : 'pending'
+      case 5: return optimizeResult ? 'ready' : 'pending'
+    }
+  }, [requirements, riskEntries, coverageItems, testCases, analysisResults, optimizeResult, stagePolling])
+
+  // Update document title when polling
+  useEffect(() => {
+    const anyPolling = Object.values(stagePolling).some(Boolean)
+    document.title = anyPolling ? '\u27F3 AutoTestDesign' : 'AutoTestDesign'
+  }, [stagePolling])
 
   const currentRoute = workflowRoutes[currentStep] ?? workflowRoutes[0]
   const highRiskCount = riskEntries.filter((entry) => entry.level === 'High').length
@@ -55,32 +76,33 @@ function App() {
         </div>
 
         <nav className="route-rail" aria-label="AutoTestDesign workflow">
-          {workflowRoutes.map((route, index) => (
-            <button
-              key={route.id}
-              type="button"
-              className={`route-node ${index === currentStep ? 'route-node-active' : ''}`}
-              aria-current={index === currentStep ? 'step' : undefined}
-              onClick={() => navigateToStep(index)}
-            >
-              <span className="route-index">{String(index + 1).padStart(2, '0')}</span>
-              <span className="route-copy">
-                <strong>{route.short}</strong>
-              </span>
-              <span
-                className={`route-status ${
-                  index < currentStep
-                    ? 'route-status-done'
-                    : index === currentStep
-                      ? 'route-status-running'
-                      : 'route-status-pending'
-                }`}
-                aria-hidden="true"
+          {workflowRoutes.map((route, index) => {
+            const dataStatus = getStageDataStatus(index)
+            return (
+              <button
+                key={route.id}
+                type="button"
+                className={`route-node ${index === currentStep ? 'route-node-active' : ''}`}
+                aria-current={index === currentStep ? 'step' : undefined}
+                onClick={() => navigateToStep(index)}
               >
-                {index < currentStep ? '✔' : ''}
-              </span>
-            </button>
-          ))}
+                <span className="route-index">{String(index + 1).padStart(2, '0')}</span>
+                <span className="route-copy">
+                  <strong>{route.short}</strong>
+                </span>
+                <span
+                  className={`route-status ${
+                    dataStatus === 'ready' ? 'route-status-done'
+                      : dataStatus === 'polling' ? 'route-status-running'
+                        : 'route-status-pending'
+                  }`}
+                  aria-hidden="true"
+                >
+                  {dataStatus === 'ready' ? '\u2714' : ''}
+                </span>
+              </button>
+            )
+          })}
         </nav>
       </Sider>
 

@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import { saveRevisionLog } from '@/modules/test-design/api/revisionsApi'
 import type {
   AnalysisResult,
+  CoverageGoal,
   CoverageItem,
   DisplayRequirement,
   FSMResult,
@@ -25,6 +26,13 @@ type AppState = {
   sourceName: string | null
   setSourceName: (name: string | null) => void
 
+  stagePolling: Record<number, boolean>
+  setStagePolling: (index: number, polling: boolean) => void
+  resetStagePolling: () => void
+
+  pipelineActive: boolean
+  setPipelineActive: (active: boolean) => void
+
   requirements: DisplayRequirement[]
   setRequirements: (data: DisplayRequirement[]) => void
   updateRequirement: (id: string, patch: Partial<DisplayRequirement>, reason?: string) => void
@@ -37,6 +45,9 @@ type AppState = {
   setCoverageItems: (data: CoverageItem[]) => void
   updateCoverageItem: (coverageItemId: string, patch: Partial<CoverageItem>, reason?: string) => void
   addCoverageItem: (item: CoverageItem) => void
+
+  coverageGoals: CoverageGoal[]
+  setCoverageGoals: (data: CoverageGoal[]) => void
 
   strategies: StrategyItem[]
   setStrategies: (data: StrategyItem[]) => void
@@ -118,6 +129,15 @@ export const useAppStore = create<AppState>((set, get) => ({
   sourceName: null,
   setSourceName: (name) => set({ sourceName: name }),
 
+  stagePolling: { 0: false, 1: false, 2: false, 3: false, 4: false, 5: false },
+  setStagePolling: (index, polling) =>
+    set({ stagePolling: { ...get().stagePolling, [index]: polling } }),
+  resetStagePolling: () =>
+    set({ stagePolling: { 0: false, 1: false, 2: false, 3: false, 4: false, 5: false } }),
+
+  pipelineActive: false,
+  setPipelineActive: (active) => set({ pipelineActive: active }),
+
   requirements: [],
   setRequirements: (data) => set({ requirements: data }),
   updateRequirement: (id, patch, reason = '设计者修订结构化需求') => {
@@ -188,6 +208,9 @@ export const useAppStore = create<AppState>((set, get) => ({
       ],
     })
   },
+
+  coverageGoals: [],
+  setCoverageGoals: (data) => set({ coverageGoals: data }),
 
   strategies: [],
   setStrategies: (data) => set({ strategies: data }),

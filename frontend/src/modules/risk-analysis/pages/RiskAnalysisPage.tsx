@@ -40,11 +40,13 @@ export function RiskAnalysisPage() {
   const riskEntries = useAppStore((s) => s.riskEntries)
   const setRiskEntries = useAppStore((s) => s.setRiskEntries)
   const updateRiskEntry = useAppStore((s) => s.updateRiskEntry)
+  const pipelineActive = useAppStore((s) => s.pipelineActive)
 
   const reqIdsKey = requirements.map((requirement) => requirement.requirement_id).join(',')
   const hasRequirements = requirements.length > 0
 
   useEffect(() => {
+    if (pipelineActive) return
     if (!reqIdsKey) {
       setRiskEntries([])
       return
@@ -53,7 +55,7 @@ export function RiskAnalysisPage() {
       setRiskEntries(result.data.map(normalizeRisk))
       setRiskLive(result.isLive)
     })
-  }, [requirements, reqIdsKey, setRiskEntries])
+  }, [pipelineActive, requirements, reqIdsKey, setRiskEntries])
 
   const matrix = useMemo(() => buildHeatmapMatrix(riskEntries), [riskEntries])
   const displayedRisk = useMemo(() => {

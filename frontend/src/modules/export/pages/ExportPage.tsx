@@ -136,7 +136,7 @@ export function ExportPage() {
           <Alert
             type="info"
             showIcon
-            message={`将导出 ${approved.length} 条已批准用例、${riskEntries.length} 条风险分、${coverageItems.length} 个覆盖项，并附带 ${revisions.length} 条修订记录。`}
+            title={`将导出 ${approved.length} 条已批准用例、${riskEntries.length} 条风险分、${coverageItems.length} 个覆盖项，并附带 ${revisions.length} 条修订记录。`}
           />
 
           <Card title="套件优化">

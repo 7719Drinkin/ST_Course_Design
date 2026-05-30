@@ -37,7 +37,7 @@ class RiskAnalysisItem(FlexibleModel):
 class RiskRequest(FlexibleModel):
     session_id: str = "SESSION-CURRENT"
     requirement_text: str = ""
-    analyzed_requirements: list[AnalyzedRequirement]
+    analyzed_requirements: list[AnalyzedRequirement] = Field(default_factory=list)
     rag_context: str | None = None
 
 

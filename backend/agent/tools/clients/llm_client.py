@@ -19,7 +19,7 @@ class LLMClient:
 
         self.api_key = api_key or os.getenv("DEEPSEEK_API_KEY")
         self.base_url = base_url or os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
-        self.model = model or os.getenv("DEEPSEEK_MODEL", "deepseek-chat")
+        self.model = model or os.getenv("DEEPSEEK_MODEL", "deepseek-v4-flash")
         self._client: Any | None = None
 
     async def generate_text(self, prompt: str) -> str:
@@ -33,6 +33,7 @@ class LLMClient:
             model=self.model,
             messages=[{"role": "user", "content": prompt}],
             temperature=0.2,
+            max_tokens=384000,
         )
         content = response.choices[0].message.content
         if not content:

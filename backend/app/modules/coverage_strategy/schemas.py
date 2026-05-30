@@ -49,8 +49,8 @@ class Strategy(FlexibleModel):
 class CoverageRequest(FlexibleModel):
     session_id: str = "SESSION-CURRENT"
     requirement_text: str = ""
-    analyzed_requirements: list[AnalyzedRequirement]
-    risk_analysis: list[RiskAnalysisItem]
+    analyzed_requirements: list[AnalyzedRequirement] = Field(default_factory=list)
+    risk_analysis: list[RiskAnalysisItem] = Field(default_factory=list)
     rag_context: str | None = None
 
 
@@ -64,9 +64,9 @@ class CoverageResponse(FlexibleModel):
 class StrategyRequest(FlexibleModel):
     session_id: str = "SESSION-CURRENT"
     requirement_text: str = ""
-    coverage_goals: list[CoverageGoal]
-    analyzed_requirements: list[AnalyzedRequirement]
-    risk_analysis: list[RiskAnalysisItem]
+    coverage_goals: list[CoverageGoal] = Field(default_factory=list)
+    analyzed_requirements: list[AnalyzedRequirement] = Field(default_factory=list)
+    risk_analysis: list[RiskAnalysisItem] = Field(default_factory=list)
     rag_context: str | None = None
 
 

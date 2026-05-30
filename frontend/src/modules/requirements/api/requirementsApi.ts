@@ -23,7 +23,7 @@ export async function parseRequirements(
 ): Promise<DisplayRequirement[]> {
   const response = await postJson<ParseResponse>('/parse', {
     requirement_text: requirementText,
-  })
+  }, 120000) // /parse runs pipeline inline, needs long timeout
   const parsedById = new Map(response.requirements.map((item) => [item.requirement_id, item]))
   return response.analyzed_requirements.map((item) => {
     const parsed = parsedById.get(item.requirement_id)

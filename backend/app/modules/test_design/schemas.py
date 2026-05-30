@@ -88,7 +88,7 @@ class OracleResult(FlexibleModel):
 class GenerateRequest(FlexibleModel):
     session_id: str = "SESSION-CURRENT"
     requirement_text: str = ""
-    coverage_items: list[CoverageItem]
+    coverage_items: list[CoverageItem] = Field(default_factory=list)
     risk_analysis: list[RiskAnalysisItem] | None = None
     rag_context: str | None = None
 
@@ -150,7 +150,7 @@ class FsmResponse(FlexibleModel):
 # POST /oracle 请求体
 class OracleRequest(FlexibleModel):
     session_id: str
-    test_cases: list[TestCase]
+    test_cases: list[TestCase] = Field(default_factory=list)
     requirements: list[Requirement] | None = None
     source_context_ids: list[str] | None = None
     requirement_text: str = ""
