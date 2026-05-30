@@ -1,11 +1,13 @@
 """Step 1 business logic: requirement ingest and structural parsing."""
 
+import asyncio
 from pathlib import Path
 
 from fastapi import HTTPException
 
 from common.ingest import ingest_manager
 
+from ..pipeline_bg import _background_full_pipeline
 from ..store import workflow_store
 from ..util import (
     STAGE_PARSE,
@@ -39,6 +41,12 @@ class IntakeParseService:
             )
         save_requirement_input(request.session_id, requirement_text, request.rag_context)
         output = await _runner_parse_output(request.session_id, requirement_text, request.rag_context)
+
+        # Launch background full pipeline after parse returns
+        asyncio.create_task(
+            _background_full_pipeline(request.session_id, requirement_text, request.rag_context)
+        )
+
         return ParseResponse(
             requirements=output.get("requirements", []),
             analyzed_requirements=output.get("analyzed_requirements", []),

@@ -6,7 +6,7 @@ import { getCoverageItems } from '@/modules/risk-analysis/api/strategyApi'
 import { toAnalyzedRequirements } from '@/modules/risk-analysis/api/riskApi'
 import { RevisionPanel } from '@/shared/components/RevisionPanel'
 import { DataStatusTag, WorkflowEmptyState } from '@/shared/components/WorkflowFeedback'
-import type { CoverageGoal, CoverageItem, CoverageStatus, Technique } from '@/shared/types'
+import type { CoverageItem, CoverageStatus, Technique } from '@/shared/types'
 
 const { Paragraph, Text } = Typography
 
@@ -27,7 +27,6 @@ function normalizeCoverageItem(item: CoverageItem): CoverageItem {
 export function CoverageStrategyPage() {
   const [coverageLive, setCoverageLive] = useState<boolean>()
   const [strategyLive, setStrategyLive] = useState<boolean>()
-  const [coverageGoals, setCoverageGoals] = useState<CoverageGoal[]>([])
 
   const requirements = useAppStore((s) => s.requirements)
   const riskEntries = useAppStore((s) => s.riskEntries)
@@ -35,6 +34,9 @@ export function CoverageStrategyPage() {
   const setCoverageItems = useAppStore((s) => s.setCoverageItems)
   const updateCoverageItem = useAppStore((s) => s.updateCoverageItem)
   const addCoverageItem = useAppStore((s) => s.addCoverageItem)
+  const coverageGoals = useAppStore((s) => s.coverageGoals)
+  const setCoverageGoals = useAppStore((s) => s.setCoverageGoals)
+  const pipelineActive = useAppStore((s) => s.pipelineActive)
 
   const reqIdsKey = requirements.map((requirement) => requirement.requirement_id).join(',')
   const riskKey = riskEntries.map((entry) => `${entry.requirement_id}:${entry.risk_score ?? entry.score}`).join(',')
@@ -43,6 +45,7 @@ export function CoverageStrategyPage() {
   const analyzedRequirements = useMemo(() => toAnalyzedRequirements(requirements), [requirements])
 
   useEffect(() => {
+    if (pipelineActive) return
     if (!reqIdsKey) {
       queueMicrotask(() => {
         setCoverageGoals([])
@@ -54,9 +57,10 @@ export function CoverageStrategyPage() {
       setCoverageGoals(result.data)
       setCoverageLive(result.isLive)
     })
-  }, [analyzedRequirements, reqIdsKey, riskEntries, riskKey, setCoverageItems])
+  }, [pipelineActive, analyzedRequirements, reqIdsKey, riskEntries, riskKey, setCoverageItems, setCoverageGoals])
 
   useEffect(() => {
+    if (pipelineActive) return
     if (!goalsKey) {
       queueMicrotask(() => setCoverageItems([]))
       return
@@ -65,7 +69,7 @@ export function CoverageStrategyPage() {
       setCoverageItems(result.data.map(normalizeCoverageItem))
       setStrategyLive(result.isLive)
     })
-  }, [coverageGoals, goalsKey, analyzedRequirements, riskEntries, setCoverageItems])
+  }, [pipelineActive, coverageGoals, goalsKey, analyzedRequirements, riskEntries, setCoverageItems])
 
   const techniqueCounts = useMemo(() => {
     const counts: Record<Technique, number> = { EP: 0, BVA: 0, DT: 0, FSM: 0 }

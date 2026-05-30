@@ -22,6 +22,7 @@ import {
 } from '@/modules/requirements/api/requirementsApi'
 import { RevisionPanel } from '@/shared/components/RevisionPanel'
 import { WorkflowEmptyState } from '@/shared/components/WorkflowFeedback'
+import { startPollRisk, stopAllPolling } from '@/shared/api/pipelinePoller'
 import type { DisplayRequirement } from '@/shared/types'
 
 const { TextArea } = Input
@@ -48,6 +49,8 @@ export function RequirementsPage() {
   const setPromptEvidence = useAppStore((s) => s.setPromptEvidence)
   const setAnalysisResults = useAppStore((s) => s.setAnalysisResults)
   const setHighlightedRequirementId = useAppStore((s) => s.setHighlightedRequirementId)
+  const setStagePolling = useAppStore((s) => s.setStagePolling)
+  const resetStagePolling = useAppStore((s) => s.resetStagePolling)
 
   const selectedFile = fileList[0]?.originFileObj as File | undefined
   const hasInput = Boolean(selectedFile || pasteText.trim())
@@ -62,6 +65,8 @@ export function RequirementsPage() {
     setLoading(true)
     setInputError(undefined)
     setSuccessMessage(undefined)
+    // Mark stage 0 as polling (spinning in sidebar)
+    useAppStore.getState().setStagePolling(0, true)
 
     try {
       let parseInput = ''
@@ -89,11 +94,16 @@ export function RequirementsPage() {
       }
       const parsed = await parseRequirements(parseInput, sourceLabel)
       setRequirements(parsed)
+      setStagePolling(0, false) // stage 0 → ready
       setSuccessMessage(
         parsed.length > 0
           ? `已提交并解析 ${parsed.length} 条需求。`
           : '输入已提交，后端当前未返回结构化需求。',
       )
+      // Kick off cascading background polling
+      if (parsed.length > 0) {
+        startPollRisk()
+      }
     } catch {
       setInputError('提交失败，请检查服务是否可用，或稍后重试。')
     } finally {
@@ -102,6 +112,7 @@ export function RequirementsPage() {
   }
 
   const handleReset = () => {
+    stopAllPolling()
     setPasteText('')
     setFileList([])
     setSourceName(null)
@@ -118,6 +129,7 @@ export function RequirementsPage() {
     setHighlightedRequirementId(null)
     setInputError(undefined)
     setSuccessMessage(undefined)
+    resetStagePolling()
   }
 
   return (
@@ -169,8 +181,8 @@ export function RequirementsPage() {
               <p className="upload-hint">TXT / MD / PDF / DOCX</p>
             </Upload.Dragger>
 
-            {inputError && <Alert type="warning" showIcon message={inputError} />}
-            {successMessage && <Alert type="success" showIcon message={successMessage} />}
+            {inputError && <Alert type="warning" showIcon title={inputError} />}
+            {successMessage && <Alert type="success" showIcon title={successMessage} />}
 
             <Space wrap>
               <Button type="primary" onClick={handleIngest} loading={loading} disabled={!hasInput}>

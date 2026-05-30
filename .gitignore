@@ -242,3 +242,5 @@ external/
 .DS_Store
 
 /rag
+
+atd_ingest
