@@ -26,7 +26,7 @@ class TestDesignService:
     async def fsm(self, request: FsmRequest) -> FsmResponse:
         stored_fsm = workflow_store.get_object(request.session_id, "fsm")
         if stored_fsm and isinstance(stored_fsm, dict) and stored_fsm:
-            stored_cases = workflow_store.get_list(request.session_id, "test_cases")
+            stored_cases = workflow_store.get_list(request.session_id, "fsm_test_cases")
             return FsmResponse(
                 session_id=request.session_id,
                 fsm=stored_fsm,
