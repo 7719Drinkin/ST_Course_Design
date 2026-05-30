@@ -214,7 +214,7 @@ export function EvidencePage() {
       <Card title="生成依据明细">
         <Table
           size="small"
-          rowKey={(record: Record<string, unknown>) => `${record.prompt_template_id}-${record.model_name}`}
+          rowKey={(record) => `${(record as Record<string, unknown>).prompt_template_id}-${(record as Record<string, unknown>).model_name}`}
           pagination={{ pageSize: 6 }}
           scroll={{ x: 980 }}
           dataSource={promptEvidence}
