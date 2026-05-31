@@ -9,11 +9,13 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 from typing import Any
 
 from agent import AgentPipeline
 from agent.core.models import ParseResult
 from agent.pipeline.finalizer import finalize_pipeline_result
+from agent.tools.validation.id_normalizer import normalize_coverage_item_ids
 
 from .store import workflow_store
 from .util import (
@@ -75,6 +77,7 @@ async def _background_pipeline_after_parse(
             valid=parse_result.analyzed_requirements,
             items=strategy_result.coverage_items,
         )
+        normalize_coverage_item_ids(strategy_result.coverage_items)
         _save_strategy(session_id, strategy_result.model_dump(mode="json"))
 
         fsm_task = asyncio.create_task(
@@ -102,6 +105,11 @@ async def _background_pipeline_after_parse(
         _save_generate(session_id, generate_result.model_dump(mode="json"))
 
         fsm_result = await fsm_task
+        _coerce_known_requirement_ids(
+            stage=STAGE_FSM,
+            valid=parse_result.analyzed_requirements,
+            items=fsm_result.test_cases,
+        )
         _require_known_requirement_ids(
             stage=STAGE_FSM,
             valid=parse_result.analyzed_requirements,
@@ -382,6 +390,34 @@ def _require_known_requirement_ids(
         raise ValueError(f"{stage} produced unknown requirement_id values: {unknown}")
 
 
+def _coerce_known_requirement_ids(
+    *,
+    stage: str,
+    valid: list[Any],
+    items: list[Any],
+    field: str = "requirement_id",
+) -> None:
+    valid_ids = _ids(valid)
+    for item in items:
+        raw_id = str(_get(item, field) or "")
+        if not raw_id or raw_id in valid_ids:
+            continue
+        candidates = _extract_requirement_ids(raw_id)
+        known_candidates = [candidate for candidate in candidates if candidate in valid_ids]
+        if known_candidates:
+            _set(item, field, known_candidates[0])
+            logger.warning(
+                "%s normalized combined requirement_id %r to %r.",
+                stage,
+                raw_id,
+                known_candidates[0],
+            )
+
+
+def _extract_requirement_ids(value: str) -> list[str]:
+    return [match.group(0) for match in re.finditer(r"REQ-AUT-\d{3}", value)]
+
+
 def _ids(items: list[Any]) -> set[str]:
     return {str(_get(item, "requirement_id")) for item in items if _get(item, "requirement_id")}
 
@@ -390,6 +426,13 @@ def _get(item: Any, field: str) -> Any:
     if isinstance(item, dict):
         return item.get(field)
     return getattr(item, field, None)
+
+
+def _set(item: Any, field: str, value: Any) -> None:
+    if isinstance(item, dict):
+        item[field] = value
+    else:
+        setattr(item, field, value)
 
 
 def _test_cases_for_oracle(fr3_cases: list[Any], fsm_cases: list[Any]) -> list[dict[str, Any]]:

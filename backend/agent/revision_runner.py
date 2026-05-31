@@ -15,9 +15,17 @@ from .revision.revision_impact import (
     workflow_state,
 )
 from .revision.revision_reentry import ReentryContext, rerun_from_impact
-from .revision.revision_utils import RevisionRunnerError, dedupe, make_next_id, merge_grouped, prompt_evidence, renumber_evidence, string_list
+from .revision.revision_utils import (
+    RevisionRunnerError,
+    coverage_technique,
+    dedupe,
+    make_next_id,
+    merge_grouped,
+    prompt_evidence,
+    renumber_evidence,
+    string_list,
+)
 from .tools.clients.llm_client import LLMClient
-from .tools.validation.id_normalizer import normalize_coverage_item_ids
 
 
 async def regenerate_from_revision(
@@ -249,33 +257,55 @@ def _normalize_reentry_coverage_ids(
     updated: dict[str, Any],
     state: dict[str, list[dict[str, Any]]],
 ) -> None:
-    """Normalize coverage_item_id in reentry outputs to COV-AUT-xxx format.
+    """Repair invalid reentry coverage IDs without renumbering valid existing IDs."""
 
-    Without this the regenerate path produces LLM-generated raw IDs
-    (e.g. COV-CG-AUT-001-001-EP) that break traceability analysis.
-    """
     new_coverage = created.get("coverage_items", []) + updated.get("coverage_items", [])
     if not new_coverage:
         return
-    existing = state.get("coverage_items", [])
-    old_ids = [item.get("coverage_item_id", "") for item in new_coverage]
-    all_coverage = existing + new_coverage
-    normalize_coverage_item_ids(all_coverage)
-    mapping = {}
-    for old_id, item in zip(old_ids, new_coverage):
-        new_id = item.get("coverage_item_id", "")
-        if new_id != old_id:
+    mapping: dict[str, str] = {}
+    all_coverage = [*state.get("coverage_items", []), *new_coverage]
+    for item in new_coverage:
+        old_id = str(item.get("coverage_item_id") or "")
+        if not _is_bad_reentry_coverage_id(old_id):
+            continue
+        new_id = _next_clean_reentry_coverage_id(item, all_coverage)
+        item["coverage_item_id"] = new_id
+        if old_id:
             mapping[old_id] = new_id
     if not mapping:
         return
-    for tc in created.get("test_cases", []):
-        old = tc.get("coverage_item_id", "")
-        if old in mapping:
-            tc["coverage_item_id"] = mapping[old]
-    for tc in updated.get("test_cases", []):
-        old = tc.get("coverage_item_id", "")
-        if old in mapping:
-            tc["coverage_item_id"] = mapping[old]
+    for group in (created, updated):
+        for collection in ("strategies", "test_design_specs", "test_cases"):
+            for item in group.get(collection, []):
+                old = str(item.get("coverage_item_id") or "")
+                if old in mapping:
+                    item["coverage_item_id"] = mapping[old]
+                if isinstance(item.get("coverage_item_ids"), list):
+                    item["coverage_item_ids"] = [
+                        mapping.get(str(coverage_id), str(coverage_id))
+                        for coverage_id in item["coverage_item_ids"]
+                    ]
+
+
+def _is_bad_reentry_coverage_id(coverage_id: str) -> bool:
+    return not coverage_id or coverage_id.startswith("COV-CG-") or "-CG-AUT-" in coverage_id
+
+
+def _next_clean_reentry_coverage_id(item: dict[str, Any], existing_items: list[dict[str, Any]]) -> str:
+    requirement_id = str(item.get("requirement_id") or "REQ-AUT-000")
+    req_number = requirement_id.rsplit("-", 1)[-1] if "-" in requirement_id else "000"
+    technique = coverage_technique(item)
+    existing_ids = {
+        str(existing.get("coverage_item_id") or "")
+        for existing in existing_items
+        if existing.get("coverage_item_id")
+    }
+    index = 1
+    while True:
+        candidate = f"COV-AUT-{req_number}-{technique}-{index:03d}"
+        if candidate not in existing_ids:
+            return candidate
+        index += 1
 
 
 __all__ = ["RevisionRunnerError", "regenerate_from_revision"]

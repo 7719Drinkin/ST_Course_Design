@@ -142,6 +142,8 @@ class OptimizeExportService:
             raw["oracle_results"] = [
                 item for item in raw.get("oracle_results", []) if str(item.get("test_id")) in approved_ids
             ]
+        if _analysis_results_stale(raw):
+            raw["analysis_results"] = _build_analysis_results(raw)
         if not request.include_revisions:
             raw["revisions"] = []
         if not request.include_prompt_evidence:
@@ -274,6 +276,184 @@ def _covered_ids(test_cases: list[dict[str, Any]]) -> set[str]:
     for test_case in test_cases:
         covered.update(_coverage_ids(test_case))
     return covered
+
+
+def _analysis_results_stale(bundle: dict[str, Any]) -> bool:
+    analysis_results = bundle.get("analysis_results") or []
+    coverage_items = bundle.get("coverage_items") or []
+    test_cases = bundle.get("test_cases") or []
+    coverage_ids = {
+        str(item.get("coverage_item_id") or "")
+        for item in coverage_items
+        if item.get("coverage_item_id")
+    }
+    test_covered_ids = _covered_ids(test_cases)
+    if not analysis_results:
+        return bool(coverage_items or test_cases)
+    if any(_is_bad_coverage_item_id(str(item.get("coverage_item_id") or "")) for item in coverage_items):
+        return True
+    for result in analysis_results:
+        coverage_id = str(result.get("coverage_item_id") or "")
+        status = str(result.get("status") or "")
+        if coverage_id and coverage_id not in coverage_ids:
+            return True
+        if coverage_id in test_covered_ids and status == "missing":
+            return True
+    analyzed_pairs = {
+        (str(item.get("coverage_item_id") or ""), str(item.get("test_id") or ""))
+        for item in analysis_results
+        if item.get("coverage_item_id") and item.get("test_id")
+    }
+    for test_case in test_cases:
+        test_id = str(test_case.get("test_id") or "")
+        for coverage_id in _coverage_ids(test_case):
+            if coverage_id in coverage_ids and (coverage_id, test_id) not in analyzed_pairs:
+                return True
+    return False
+
+
+def _build_analysis_results(bundle: dict[str, Any]) -> list[dict[str, Any]]:
+    requirements = bundle.get("requirements") or []
+    coverage_items = bundle.get("coverage_items") or []
+    strategies = bundle.get("strategies") or []
+    test_cases = bundle.get("test_cases") or []
+    revisions = bundle.get("revisions") or []
+    revised_ids = _revised_ids(revisions)
+
+    strategies_by_coverage: dict[str, list[dict[str, Any]]] = {}
+    for strategy in strategies:
+        coverage_id = str(strategy.get("coverage_item_id") or "")
+        if coverage_id:
+            strategies_by_coverage.setdefault(coverage_id, []).append(strategy)
+
+    tests_by_coverage: dict[str, list[dict[str, Any]]] = {}
+    for test_case in test_cases:
+        for coverage_id in _coverage_ids(test_case):
+            tests_by_coverage.setdefault(coverage_id, []).append(test_case)
+
+    results: list[dict[str, Any]] = []
+    for requirement in requirements:
+        requirement_id = str(requirement.get("requirement_id") or "")
+        related_coverage = [
+            item for item in coverage_items if str(item.get("requirement_id") or "") == requirement_id
+        ]
+        if not related_coverage:
+            results.append(
+                {
+                    "requirement_id": requirement_id,
+                    "coverage_item_id": "",
+                    "strategy_id": "",
+                    "test_id": "",
+                    "status": "missing",
+                    "gap": "No coverage item is mapped to this requirement.",
+                    "improvement": "",
+                }
+            )
+            continue
+
+        for coverage in related_coverage:
+            coverage_id = str(coverage.get("coverage_item_id") or "")
+            related_tests = tests_by_coverage.get(coverage_id, [])
+            strategy_id = str((strategies_by_coverage.get(coverage_id, [{}])[0]).get("strategy_id") or "")
+            if not related_tests:
+                results.append(
+                    {
+                        "requirement_id": requirement_id,
+                        "coverage_item_id": coverage_id,
+                        "strategy_id": strategy_id,
+                        "test_id": "",
+                        "status": "missing",
+                        "gap": "Coverage item has no generated test case.",
+                        "improvement": "",
+                    }
+                )
+                continue
+            for test_case in related_tests:
+                test_id = str(test_case.get("test_id") or "")
+                improved = bool({requirement_id, coverage_id, test_id} & revised_ids)
+                results.append(
+                    {
+                        "requirement_id": requirement_id,
+                        "coverage_item_id": coverage_id,
+                        "strategy_id": str(test_case.get("strategy_id") or strategy_id),
+                        "test_id": test_id,
+                        "status": "improved" if improved else "covered",
+                        "gap": "",
+                        "improvement": "Human revision affected this mapping." if improved else "",
+                    }
+                )
+
+    known_requirement_ids = {
+        str(item.get("requirement_id") or "")
+        for item in requirements
+        if item.get("requirement_id")
+    }
+    covered_coverage_ids = {
+        str(item.get("coverage_item_id") or "")
+        for item in coverage_items
+        if item.get("coverage_item_id")
+    }
+    analyzed_coverage_ids = {
+        str(item.get("coverage_item_id") or "")
+        for item in results
+        if item.get("coverage_item_id")
+    }
+    for coverage in coverage_items:
+        coverage_id = str(coverage.get("coverage_item_id") or "")
+        requirement_id = str(coverage.get("requirement_id") or "")
+        if coverage_id in analyzed_coverage_ids:
+            continue
+        status = "needs_review" if requirement_id not in known_requirement_ids else "missing"
+        results.append(
+            {
+                "requirement_id": requirement_id,
+                "coverage_item_id": coverage_id,
+                "strategy_id": str((strategies_by_coverage.get(coverage_id, [{}])[0]).get("strategy_id") or ""),
+                "test_id": "",
+                "status": status,
+                "gap": "Coverage item has no mapped requirement." if status == "needs_review" else "Coverage item is not linked to a generated test case.",
+                "improvement": "",
+            }
+        )
+
+    analyzed_test_ids = {str(item.get("test_id") or "") for item in results if item.get("test_id")}
+    for test_case in test_cases:
+        test_id = str(test_case.get("test_id") or "")
+        if test_id in analyzed_test_ids:
+            continue
+        coverage_ids = _coverage_ids(test_case)
+        coverage_id = next(iter(coverage_ids), str(test_case.get("coverage_item_id") or ""))
+        known = bool(coverage_ids) and coverage_ids <= covered_coverage_ids
+        results.append(
+            {
+                "requirement_id": str(test_case.get("requirement_id") or ""),
+                "coverage_item_id": coverage_id,
+                "strategy_id": str(test_case.get("strategy_id") or ""),
+                "test_id": test_id,
+                "status": "covered" if known else "needs_review",
+                "gap": "" if known else "Test case references an unknown coverage item.",
+                "improvement": "",
+            }
+        )
+    return results
+
+
+def _revised_ids(revisions: list[dict[str, Any]]) -> set[str]:
+    result: set[str] = set()
+    for revision in revisions:
+        for key in ("target_id",):
+            value = revision.get(key)
+            if value:
+                result.add(str(value))
+        for field in ("affected_ids", "related_ids"):
+            values = revision.get(field)
+            if isinstance(values, list):
+                result.update(str(value) for value in values if str(value).strip())
+    return result
+
+
+def _is_bad_coverage_item_id(coverage_id: str) -> bool:
+    return bool(coverage_id) and (coverage_id.startswith("COV-CG-") or "-CG-AUT-" in coverage_id)
 
 
 def _tests_for_coverage(test_cases: list[dict[str, Any]], coverage_id: str) -> list[dict[str, Any]]:
