@@ -7,20 +7,21 @@ from fastapi import HTTPException
 
 from common.ingest import ingest_manager
 
-from ..pipeline_bg import _background_full_pipeline
+from ..pipeline_bg import _background_pipeline_after_parse
 from ..store import workflow_store
 from ..util import (
     STAGE_PARSE,
     effective_rag_context,
-    normalize_stage_output,
-    parse_sse_event,
+    normalize_prompt_records,
     prompt_records_to_evidence,
     save_requirement_input,
     stage_output_summary,
 )
 from .schemas import ParseRequest, ParseResponse
 
-from agent import generate_blackbox_tests_stream
+from agent import AgentPipeline
+from agent.core.models import ParseResult
+from agent.pipeline.errors import StageExecutionError
 
 
 class IntakeParseService:
@@ -40,11 +41,25 @@ class IntakeParseService:
                 prompts_used=[],
             )
         save_requirement_input(request.session_id, requirement_text, request.rag_context)
-        output = await _runner_parse_output(request.session_id, requirement_text, request.rag_context)
+        pipeline = AgentPipeline()
+        pipeline_context = effective_rag_context(request.session_id, request.rag_context)
+        parse_result = await _runner_parse_result(
+            request.session_id,
+            pipeline,
+            requirement_text,
+            pipeline_context,
+        )
+        output = parse_result.model_dump(mode="json")
+        output["prompts_used"] = normalize_prompt_records(output.get("prompts_used"))
 
-        # Launch background full pipeline after parse returns
+        # Continue the same pipeline from the already returned parse_result.
         asyncio.create_task(
-            _background_full_pipeline(request.session_id, requirement_text, request.rag_context)
+            _background_pipeline_after_parse(
+                request.session_id,
+                pipeline,
+                parse_result,
+                pipeline_context,
+            )
         )
 
         return ParseResponse(
@@ -60,30 +75,24 @@ class IntakeParseService:
         return ingest_manager.load_text().strip()
 
 
-async def _runner_parse_output(
+async def _runner_parse_result(
     session_id: str,
+    pipeline: AgentPipeline,
     requirement_text: str,
     rag_context: str | None,
-) -> dict:
-    stream = generate_blackbox_tests_stream(
-        requirement_text=requirement_text,
-        rag_context=effective_rag_context(session_id, rag_context),
-    )
+) -> ParseResult:
     try:
-        async for raw_event in stream:
-            event, data = parse_sse_event(raw_event)
-            if event == "stage" and data.get("stage") == STAGE_PARSE:
-                output = normalize_stage_output(data.get("output") or {})
-                _normalize_parse_output_ids(output)
-                _save_parse_output(session_id, output)
-                return output
-            if event == "stage_error":
-                _raise_stage_error(data)
-    finally:
-        aclose = getattr(stream, "aclose", None)
-        if aclose is not None:
-            await aclose()
-    raise HTTPException(status_code=502, detail="Runner did not emit parse_requirements stage")
+        parse_result = await pipeline.parse_requirements(requirement_text, rag_context)
+    except StageExecutionError as exc:
+        _raise_stage_error({"stage": exc.stage, "error": exc.error})
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+    _normalize_parse_result_ids(parse_result)
+    output = parse_result.model_dump(mode="json")
+    output["prompts_used"] = normalize_prompt_records(output.get("prompts_used"))
+    _save_parse_output(session_id, output)
+    return parse_result
 
 
 def _save_parse_output(session_id: str, output: dict) -> None:
@@ -119,27 +128,20 @@ def _save_parse_output(session_id: str, output: dict) -> None:
     workflow_store.save_many(session_id, "prompt_evidence", prompt_evidence, "evidence_id")
 
 
-def _normalize_parse_output_ids(output: dict) -> None:
-    """Keep the first visible parse response on the same REQ-AUT-* ID system."""
+def _normalize_parse_result_ids(parse_result: ParseResult) -> None:
+    """Normalize the parse_result object used by both frontend response and background stages."""
 
-    requirements = output.get("requirements") or []
-    analyzed = output.get("analyzed_requirements") or []
     id_map: dict[str, str] = {}
-
-    for index, item in enumerate(requirements, start=1):
-        if not isinstance(item, dict):
-            continue
-        old_id = str(item.get("requirement_id") or "")
+    for index, requirement in enumerate(parse_result.requirements, start=1):
+        old_id = str(requirement.requirement_id or "")
         new_id = f"REQ-AUT-{index:03d}"
         if old_id:
             id_map[old_id] = new_id
-        item["requirement_id"] = new_id
+        requirement.requirement_id = new_id
 
-    for index, item in enumerate(analyzed, start=1):
-        if not isinstance(item, dict):
-            continue
-        old_id = str(item.get("requirement_id") or "")
-        item["requirement_id"] = id_map.get(old_id, f"REQ-AUT-{index:03d}")
+    for index, requirement in enumerate(parse_result.analyzed_requirements, start=1):
+        old_id = str(requirement.requirement_id or "")
+        requirement.requirement_id = id_map.get(old_id, f"REQ-AUT-{index:03d}")
 
 
 def _raise_stage_error(data: dict) -> None:
