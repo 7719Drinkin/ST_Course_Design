@@ -6,7 +6,16 @@ from typing import Any
 import io
 import zipfile
 
-from ..util import csv_bytes, json_bytes, to_dicts
+from ..util import (
+    csv_bytes,
+    dedupe_oracle_results,
+    fsm_coverage_summary,
+    fsm_coverage_items_from_test_cases,
+    json_bytes,
+    merge_by_id,
+    strategies_from_coverage_items,
+    to_dicts,
+)
 from ..store import workflow_store
 from .schemas import (
     ExportBundle,
@@ -95,6 +104,7 @@ class OptimizeExportService:
             "coverage_items": request.coverage_items,
             "strategies": request.strategies,
             "test_cases": request.test_cases,
+            "fsm_test_cases": request.fsm_test_cases,
             "oracle_results": request.oracle_results,
             "revisions": request.revisions,
             "prompt_evidence": request.prompt_evidence,
@@ -104,12 +114,33 @@ class OptimizeExportService:
             if value is not None:
                 raw[key] = to_dicts(value)
                 workflow_store.save_many(request.session_id, key, value, _export_id_field(key), replace_all=True)
+        if request.fsm is not None:
+            raw["fsm"] = request.fsm
+            workflow_store.save_object(request.session_id, "fsm", request.fsm)
         if request.optimization_result is not None:
             raw["optimization_result"] = request.optimization_result.model_dump(mode="json")
             workflow_store.save_object(request.session_id, "optimization_result", request.optimization_result)
+        raw["test_cases"] = merge_by_id(
+            raw.get("test_cases", []),
+            raw.get("fsm_test_cases", []),
+            "test_id",
+        )
+        raw["coverage_items"] = merge_by_id(
+            raw.get("coverage_items", []),
+            fsm_coverage_items_from_test_cases(raw.get("test_cases", [])),
+            "coverage_item_id",
+        )
+        raw["oracle_results"] = dedupe_oracle_results(raw.get("oracle_results", []))
+        raw["fsm_coverage_summary"] = fsm_coverage_summary(raw.get("fsm"), raw.get("test_cases", []))
+        if not raw.get("strategies"):
+            raw["strategies"] = strategies_from_coverage_items(raw.get("coverage_items", []))
         if request.test_case_status == "approved_only":
             raw["test_cases"] = [
                 item for item in raw.get("test_cases", []) if item.get("status") == "Approved"
+            ]
+            approved_ids = {str(item.get("test_id")) for item in raw.get("test_cases", [])}
+            raw["oracle_results"] = [
+                item for item in raw.get("oracle_results", []) if str(item.get("test_id")) in approved_ids
             ]
         if not request.include_revisions:
             raw["revisions"] = []
@@ -307,6 +338,8 @@ def _xlsx_bytes(bundle: dict[str, Any]) -> bytes:
         "coverage_items": bundle.get("coverage_items", []),
         "strategies": bundle.get("strategies", []),
         "test_cases": bundle.get("test_cases", []),
+        "fsm_test_cases": bundle.get("fsm_test_cases", []),
+        "fsm_coverage_summary": [bundle.get("fsm_coverage_summary", {})],
         "oracle_results": bundle.get("oracle_results", []),
         "revisions": bundle.get("revisions", []),
         "analysis_results": bundle.get("analysis_results", []),
@@ -442,6 +475,7 @@ def _export_id_field(key: str) -> str | None:
         "coverage_items": "coverage_item_id",
         "strategies": "strategy_id",
         "test_cases": "test_id",
+        "fsm_test_cases": "test_id",
         "oracle_results": "test_id",
         "revisions": "revision_id",
         "prompt_evidence": "evidence_id",

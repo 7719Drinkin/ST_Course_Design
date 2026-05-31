@@ -25,12 +25,7 @@ export function isBackendRevisionSupported(revision: RevisionLog): boolean {
 export async function saveRevisionLog(revision: RevisionLog) {
   const targetType = backendRevisionTargetType(revision)
   if (!targetType) return undefined
-  return postJson<{
-    revision: {
-      revision_id: string
-    }
-    affected_ids: string[]
-  }>('/revisions', {
+  return postJson<RevisionSaveResponse>('/revisions', {
     session_id: DESIGN_SESSION_ID,
     target_type: targetType,
     target_id: revision.entity_id,
@@ -39,4 +34,19 @@ export async function saveRevisionLog(revision: RevisionLog) {
     reason: revision.reason ?? 'designer revision',
     created_by: 'designer',
   })
+}
+
+export type RevisionSaveResponse = {
+  revision: {
+    revision_id: string
+    session_id?: string
+    target_type?: string
+    target_id?: string
+    before?: Record<string, unknown>
+    after?: Record<string, unknown>
+    reason?: string
+    created_by?: string
+    created_at?: string
+  }
+  affected_ids: string[]
 }

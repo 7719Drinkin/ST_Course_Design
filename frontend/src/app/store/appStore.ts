@@ -157,8 +157,10 @@ export const useAppStore = create<AppState>((set, get) => ({
       }
       set({ revisions: [...get().revisions, rev] })
       try {
-        await saveRevisionLog(rev)
-        set({ revisions: get().revisions.map((r) => r.id === rev.id ? { ...r, syncStatus: 'saved' as RevisionSyncStatus } : r) })
+        const response = await saveRevisionLog(rev)
+        if (!response?.revision.revision_id) throw new Error('revision is not supported by backend')
+        const savedId = response.revision.revision_id
+        set({ revisions: get().revisions.map((r) => r.id === rev.id ? { ...r, id: savedId, syncStatus: 'saved' as RevisionSyncStatus } : r) })
       } catch {
         set({ revisions: get().revisions.map((r) => r.id === rev.id ? { ...r, syncStatus: 'failed' as RevisionSyncStatus } : r) })
       }
@@ -285,8 +287,10 @@ export const useAppStore = create<AppState>((set, get) => ({
       syncStatus: 'saving',
     }
     set({ revisions: [...get().revisions, revision] })
-    void saveRevisionLog(revision).then(() => {
-      set({ revisions: get().revisions.map((r) => r.id === revision.id ? { ...r, syncStatus: 'saved' as RevisionSyncStatus } : r) })
+    void saveRevisionLog(revision).then((response) => {
+      if (!response?.revision.revision_id) throw new Error('revision is not supported by backend')
+      const savedId = response.revision.revision_id
+      set({ revisions: get().revisions.map((r) => r.id === revision.id ? { ...r, id: savedId, syncStatus: 'saved' as RevisionSyncStatus } : r) })
     }).catch(() => {
       set({ revisions: get().revisions.map((r) => r.id === revision.id ? { ...r, syncStatus: 'failed' as RevisionSyncStatus } : r) })
     })

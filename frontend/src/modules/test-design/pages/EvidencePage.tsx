@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Button, Card, Descriptions, List, Select, Space, Table, Tag, Typography, message } from 'antd'
 import { useAppStore } from '@/app/store/appStore'
+import { mapRevisionsForExport } from '@/modules/export/api/exportApi'
 import { getAnalysisResults, regenerateFromRevision } from '@/modules/test-design/api/evidenceApi'
 import { RevisionPanel } from '@/shared/components/RevisionPanel'
 import { DataStatusTag, WorkflowEmptyState } from '@/shared/components/WorkflowFeedback'
@@ -91,6 +92,7 @@ export function EvidencePage() {
         strategies,
         risk_results: riskEntries,
         test_cases: testCases,
+        revisions: mapRevisionsForExport(revisions),
       })
       // Poll /analysis until results update
       const prevIds = new Set(analysisResults.map((r) => r.test_id || r.coverage_item_id))

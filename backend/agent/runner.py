@@ -114,12 +114,7 @@ async def generate_blackbox_tests_stream(
             "final",
             {
                 "status": "completed",
-                "final_output": {
-                    "test_cases": [item.model_dump(mode="json") for item in final_result.test_cases],
-                    "fsm_test_cases": [item.model_dump(mode="json") for item in final_result.fsm_test_cases],
-                    "all_test_cases": [item.model_dump(mode="json") for item in final_result.all_test_cases],
-                    "oracle_results": [item.model_dump(mode="json") for item in final_result.oracle_results],
-                },
+                "final_output": final_result.model_dump(mode="json"),
             },
         )
     else:

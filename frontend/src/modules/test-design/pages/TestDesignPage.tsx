@@ -148,15 +148,17 @@ export function TestDesignPage() {
   const needsReviewCases = oracleResults.filter((o) => o.needs_review)
 
   const handleApproveAll = () => {
-    filteredCases.forEach((tc) => {
-      if (tc.status !== 'Approved') updateTestCase(tc.test_id, { status: 'Approved' }, undefined, true)
-    })
+    const targetIds = new Set(filteredCases.map((tc) => tc.test_id))
+    setTestCases(testCases.map((tc) => (
+      targetIds.has(tc.test_id) ? { ...tc, status: 'Approved' } : tc
+    )))
   }
 
   const handleRejectAll = () => {
-    filteredCases.forEach((tc) => {
-      if (tc.status !== 'Rejected') updateTestCase(tc.test_id, { status: 'Rejected' }, undefined, true)
-    })
+    const targetIds = new Set(filteredCases.map((tc) => tc.test_id))
+    setTestCases(testCases.map((tc) => (
+      targetIds.has(tc.test_id) ? { ...tc, status: 'Rejected' } : tc
+    )))
   }
 
   return (

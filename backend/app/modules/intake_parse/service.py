@@ -74,6 +74,7 @@ async def _runner_parse_output(
             event, data = parse_sse_event(raw_event)
             if event == "stage" and data.get("stage") == STAGE_PARSE:
                 output = normalize_stage_output(data.get("output") or {})
+                _normalize_parse_output_ids(output)
                 _save_parse_output(session_id, output)
                 return output
             if event == "stage_error":
@@ -116,6 +117,29 @@ def _save_parse_output(session_id: str, output: dict) -> None:
         note="Agent runner stage parse_requirements prompt evidence.",
     )
     workflow_store.save_many(session_id, "prompt_evidence", prompt_evidence, "evidence_id")
+
+
+def _normalize_parse_output_ids(output: dict) -> None:
+    """Keep the first visible parse response on the same REQ-AUT-* ID system."""
+
+    requirements = output.get("requirements") or []
+    analyzed = output.get("analyzed_requirements") or []
+    id_map: dict[str, str] = {}
+
+    for index, item in enumerate(requirements, start=1):
+        if not isinstance(item, dict):
+            continue
+        old_id = str(item.get("requirement_id") or "")
+        new_id = f"REQ-AUT-{index:03d}"
+        if old_id:
+            id_map[old_id] = new_id
+        item["requirement_id"] = new_id
+
+    for index, item in enumerate(analyzed, start=1):
+        if not isinstance(item, dict):
+            continue
+        old_id = str(item.get("requirement_id") or "")
+        item["requirement_id"] = id_map.get(old_id, f"REQ-AUT-{index:03d}")
 
 
 def _raise_stage_error(data: dict) -> None:

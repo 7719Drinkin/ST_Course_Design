@@ -59,6 +59,8 @@ class EvidenceImproveService:
     async def regenerate(self, request: RegenerateRequest) -> dict:
         revision = workflow_store.find_revision(request.session_id, request.revision_id)
         if revision is None:
+            revision = _find_revision_in_current_state(request.session_id, request.revision_id, request.current_state)
+        if revision is None:
             raise HTTPException(status_code=404, detail=f"revision_id not found: {request.revision_id}")
 
         state = _workflow_state(request.session_id, request.current_state)
@@ -76,7 +78,7 @@ class EvidenceImproveService:
         revisions = to_dicts(request.revisions) or workflow_store.get_list(request.session_id, "revisions")
         _save_analysis_inputs(request, requirements, coverage_items, strategies, test_cases, revisions)
 
-        revised_ids = _revised_ids(revisions, coverage_items, strategies, test_cases)
+        revised_ids = _meaningful_revised_ids(revisions, coverage_items, strategies, test_cases)
         strategies_by_coverage: dict[str, list[dict[str, Any]]] = {}
         for strategy in strategies:
             strategies_by_coverage.setdefault(str(strategy.get("coverage_item_id")), []).append(strategy)
@@ -381,6 +383,92 @@ def _revised_ids(
         ).values():
             ids.update(values)
     return {item for item in ids if item}
+
+
+def _meaningful_revised_ids(
+    revisions: list[dict[str, Any]],
+    coverage_items: list[dict[str, Any]],
+    strategies: list[dict[str, Any]],
+    test_cases: list[dict[str, Any]],
+) -> set[str]:
+    return _revised_ids(
+        [revision for revision in revisions if _is_meaningful_revision(revision)],
+        coverage_items,
+        strategies,
+        test_cases,
+    )
+
+
+def _is_meaningful_revision(revision: dict[str, Any]) -> bool:
+    before = revision.get("before") if isinstance(revision.get("before"), dict) else {}
+    after = revision.get("after") if isinstance(revision.get("after"), dict) else {}
+    target_type = str(revision.get("target_type") or "")
+    if not before and after:
+        return True
+
+    changed_fields = {
+        field
+        for field in set(before) | set(after)
+        if str(before.get(field, "")) != str(after.get(field, ""))
+    }
+    if not changed_fields:
+        return False
+
+    review_only_fields = {"status", "review_status"}
+    if target_type == "test_case" and changed_fields <= review_only_fields:
+        return False
+    if target_type in {"coverage_item", "strategy"} and changed_fields <= {"status", "review_status", "designer_confirmed"}:
+        return False
+    return True
+
+
+def _find_revision_in_current_state(
+    session_id: str,
+    revision_id: str,
+    current_state: dict[str, Any] | None,
+) -> dict[str, Any] | None:
+    state = current_state or {}
+    for item in to_dicts(state.get("revisions")):
+        item_id = str(item.get("revision_id") or item.get("id") or "")
+        if item_id != revision_id:
+            continue
+        return _normalize_current_state_revision(session_id, item)
+    return None
+
+
+def _normalize_current_state_revision(session_id: str, item: dict[str, Any]) -> dict[str, Any]:
+    if item.get("revision_id") and item.get("target_type") and item.get("target_id"):
+        return {
+            **item,
+            "session_id": item.get("session_id") or session_id,
+            "target_type": _revision_target_type(str(item.get("target_type") or "")),
+        }
+
+    field = str(item.get("field") or "")
+    return {
+        "revision_id": str(item.get("revision_id") or item.get("id") or ""),
+        "session_id": session_id,
+        "target_type": _revision_target_type(str(item.get("entity_type") or "")),
+        "target_id": str(item.get("target_id") or item.get("entity_id") or ""),
+        "before": item.get("before") if isinstance(item.get("before"), dict) else {field: item.get("old_value", "")},
+        "after": item.get("after") if isinstance(item.get("after"), dict) else {field: item.get("new_value", "")},
+        "reason": str(item.get("reason") or "designer revision"),
+        "created_by": str(item.get("created_by") or "designer"),
+        "created_at": str(item.get("created_at") or item.get("timestamp") or now_iso()),
+    }
+
+
+def _revision_target_type(entity_type: str) -> str:
+    return {
+        "requirement": "requirement",
+        "parsed_requirement": "parsed_requirement",
+        "risk": "risk_result",
+        "risk_result": "risk_result",
+        "coverage": "coverage_item",
+        "coverage_item": "coverage_item",
+        "strategy": "strategy",
+        "test_case": "test_case",
+    }.get(entity_type, entity_type)
 
 
 async def _background_regenerate(

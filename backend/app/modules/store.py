@@ -178,6 +178,8 @@ class WorkflowStore:
             "coverage_items": session.get("coverage_items", []),
             "strategies": session.get("strategies", []),
             "test_cases": session.get("test_cases", []),
+            "fsm": session.get("fsm"),
+            "fsm_test_cases": session.get("fsm_test_cases", []),
             "optimization_result": session.get("optimization_result"),
             "revisions": session.get("revisions", []),
             "prompt_evidence": session.get("prompt_evidence", []),

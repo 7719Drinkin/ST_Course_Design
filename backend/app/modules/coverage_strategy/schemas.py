@@ -25,7 +25,7 @@ class CoverageItem(FlexibleModel):
     coverage_item_id: str          # COV-AUT-*
     coverage_goal_id: str = ""     # 来源覆盖目标
     requirement_id: str            # 来源需求
-    technique: Literal["EP", "BVA", "DT"]
+    technique: Literal["EP", "BVA", "DT", "FSM"]
     description: str = ""
     conditions: list[str] = Field(default_factory=list)
     data_ranges: list[str] = Field(default_factory=list)
@@ -39,7 +39,7 @@ class CoverageItem(FlexibleModel):
 class Strategy(FlexibleModel):
     strategy_id: str
     coverage_item_id: str
-    technique: Literal["EP", "BVA", "DT"]
+    technique: Literal["EP", "BVA", "DT", "FSM"]
     standard_ref: str
     reason: str
     algorithm_params: dict[str, Any] = Field(default_factory=dict)

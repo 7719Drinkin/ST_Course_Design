@@ -19,11 +19,15 @@ from .util import (
     STAGE_RISK,
     STAGE_STRATEGY,
     effective_rag_context,
+    dedupe_oracle_results,
+    fsm_coverage_items_from_test_cases,
+    merge_by_id,
     normalize_stage_output,
     parse_sse_event,
     prompt_records_to_evidence,
     risk_analysis_to_risk_results,
     stage_output_summary,
+    strategies_from_coverage_items,
 )
 
 from agent import generate_blackbox_tests_stream
@@ -53,6 +57,8 @@ async def _background_full_pipeline(
                 elif event == "stage_error":
                     logger.warning("Background pipeline stage_error: %s", data)
                 elif event == "final":
+                    if data.get("status") == "completed":
+                        _save_final_output(session_id, data.get("final_output") or {})
                     logger.info("Background pipeline completed for session %s", session_id)
         finally:
             aclose = getattr(stream, "aclose", None)
@@ -141,11 +147,19 @@ def _save_coverage(session_id: str, output: dict[str, Any]) -> None:
 
 
 def _save_strategy(session_id: str, output: dict[str, Any]) -> None:
+    coverage_items = output.get("coverage_items", [])
     workflow_store.save_many(
         session_id,
         "coverage_items",
-        output.get("coverage_items", []),
+        coverage_items,
         "coverage_item_id",
+        replace_all=True,
+    )
+    workflow_store.save_many(
+        session_id,
+        "strategies",
+        strategies_from_coverage_items(coverage_items),
+        "strategy_id",
         replace_all=True,
     )
     _save_prompt_evidence(session_id, output, "coverage_items", STAGE_STRATEGY)
@@ -169,11 +183,22 @@ def _save_fsm(session_id: str, output: dict[str, Any]) -> None:
     workflow_store.save_object(session_id, "fsm", fsm)
     test_cases = output.get("test_cases", [])
     workflow_store.save_many(session_id, "fsm_test_cases", test_cases, "test_id")
+    fsm_coverage_items = fsm_coverage_items_from_test_cases(test_cases)
+    if fsm_coverage_items:
+        workflow_store.save_many(session_id, "coverage_items", fsm_coverage_items, "coverage_item_id")
+        all_coverage = workflow_store.get_list(session_id, "coverage_items")
+        workflow_store.save_many(
+            session_id,
+            "strategies",
+            strategies_from_coverage_items(all_coverage),
+            "strategy_id",
+            replace_all=True,
+        )
     _save_prompt_evidence(session_id, output, "fsm", STAGE_FSM)
 
 
 def _save_oracle(session_id: str, output: dict[str, Any]) -> None:
-    oracle_results = output.get("oracle_results", [])
+    oracle_results = dedupe_oracle_results(output.get("oracle_results", []))
     workflow_store.save_many(
         session_id,
         "oracle_results",
@@ -182,6 +207,53 @@ def _save_oracle(session_id: str, output: dict[str, Any]) -> None:
         replace_all=True,
     )
     _save_prompt_evidence(session_id, output, "oracle_results", STAGE_ORACLE)
+
+
+def _save_final_output(session_id: str, output: dict[str, Any]) -> None:
+    """Persist the final normalized artifacts after finalizer ID alignment."""
+
+    workflow_store.save_many(session_id, "requirements", output.get("requirements", []), "requirement_id", replace_all=True)
+    analyzed = output.get("analyzed_requirements", [])
+    workflow_store.save_many(session_id, "parsed_requirements", analyzed, "requirement_id", replace_all=True)
+    workflow_store.save_many(session_id, "analyzed_requirements", analyzed, "requirement_id", replace_all=True)
+
+    risk_analysis = output.get("risk_analysis", [])
+    workflow_store.save_many(session_id, "risk_analysis", risk_analysis, "requirement_id", replace_all=True)
+    workflow_store.save_many(
+        session_id,
+        "risk_results",
+        risk_analysis_to_risk_results(risk_analysis),
+        "target_id",
+        replace_all=True,
+    )
+    workflow_store.save_many(session_id, "coverage_goals", output.get("coverage_goals", []), "coverage_goal_id", replace_all=True)
+
+    fsm_test_cases = output.get("fsm_test_cases", [])
+    coverage_items = merge_by_id(
+        output.get("coverage_items", []),
+        fsm_coverage_items_from_test_cases(fsm_test_cases),
+        "coverage_item_id",
+    )
+    workflow_store.save_many(session_id, "coverage_items", coverage_items, "coverage_item_id", replace_all=True)
+    workflow_store.save_many(
+        session_id,
+        "strategies",
+        strategies_from_coverage_items(coverage_items),
+        "strategy_id",
+        replace_all=True,
+    )
+
+    workflow_store.save_many(session_id, "test_design_specs", output.get("test_design_specs", []), "spec_id", replace_all=True)
+    workflow_store.save_many(session_id, "test_cases", output.get("test_cases", []), "test_id", replace_all=True)
+    workflow_store.save_object(session_id, "fsm", output.get("fsm") or {})
+    workflow_store.save_many(session_id, "fsm_test_cases", fsm_test_cases, "test_id", replace_all=True)
+    workflow_store.save_many(
+        session_id,
+        "oracle_results",
+        dedupe_oracle_results(output.get("oracle_results", [])),
+        "test_id",
+        replace_all=True,
+    )
 
 
 def _save_prompt_evidence(
