@@ -17,6 +17,7 @@ from .revision.revision_impact import (
 from .revision.revision_reentry import ReentryContext, rerun_from_impact
 from .revision.revision_utils import RevisionRunnerError, dedupe, make_next_id, merge_grouped, prompt_evidence, renumber_evidence, string_list
 from .tools.clients.llm_client import LLMClient
+from .tools.validation.id_normalizer import normalize_coverage_item_ids
 
 
 async def regenerate_from_revision(
@@ -93,6 +94,12 @@ async def _regenerate_impacted_items(
         raise
     except Exception as exc:
         raise RevisionRunnerError(f"AgentPipeline revision rerun failed: {exc}", 503) from exc
+
+    _normalize_reentry_coverage_ids(
+        reentry_result.changes.created,
+        reentry_result.changes.updated,
+        state,
+    )
 
     return (
         reentry_result.changes.created,
@@ -235,6 +242,40 @@ def _revision_regenerate_evidence(
             "LLM-based revision impact interpretation for scoped AgentPipeline rerun.",
         )
     ]
+
+
+def _normalize_reentry_coverage_ids(
+    created: dict[str, Any],
+    updated: dict[str, Any],
+    state: dict[str, list[dict[str, Any]]],
+) -> None:
+    """Normalize coverage_item_id in reentry outputs to COV-AUT-xxx format.
+
+    Without this the regenerate path produces LLM-generated raw IDs
+    (e.g. COV-CG-AUT-001-001-EP) that break traceability analysis.
+    """
+    new_coverage = created.get("coverage_items", []) + updated.get("coverage_items", [])
+    if not new_coverage:
+        return
+    existing = state.get("coverage_items", [])
+    old_ids = [item.get("coverage_item_id", "") for item in new_coverage]
+    all_coverage = existing + new_coverage
+    normalize_coverage_item_ids(all_coverage)
+    mapping = {}
+    for old_id, item in zip(old_ids, new_coverage):
+        new_id = item.get("coverage_item_id", "")
+        if new_id != old_id:
+            mapping[old_id] = new_id
+    if not mapping:
+        return
+    for tc in created.get("test_cases", []):
+        old = tc.get("coverage_item_id", "")
+        if old in mapping:
+            tc["coverage_item_id"] = mapping[old]
+    for tc in updated.get("test_cases", []):
+        old = tc.get("coverage_item_id", "")
+        if old in mapping:
+            tc["coverage_item_id"] = mapping[old]
 
 
 __all__ = ["RevisionRunnerError", "regenerate_from_revision"]

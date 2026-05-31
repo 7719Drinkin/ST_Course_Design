@@ -6,7 +6,7 @@ from typing import Any
 from fastapi import HTTPException
 
 from ..store import workflow_store
-from ..util import make_id, next_index, now_iso, to_dicts
+from ..util import make_id, merge_by_id, next_index, now_iso, to_dicts
 from .schemas import (
     AnalysisRequest,
     AnalysisResponse,
@@ -75,6 +75,9 @@ class EvidenceImproveService:
         coverage_items = to_dicts(request.coverage_items) or workflow_store.get_list(request.session_id, "coverage_items")
         strategies = to_dicts(request.strategies) or workflow_store.get_list(request.session_id, "strategies")
         test_cases = to_dicts(request.test_cases) or workflow_store.get_list(request.session_id, "test_cases")
+        if request.test_cases is None:
+            fsm_cases = workflow_store.get_list(request.session_id, "fsm_test_cases")
+            test_cases = merge_by_id(test_cases, fsm_cases, "test_id")
         revisions = to_dicts(request.revisions) or workflow_store.get_list(request.session_id, "revisions")
         _save_analysis_inputs(request, requirements, coverage_items, strategies, test_cases, revisions)
 
