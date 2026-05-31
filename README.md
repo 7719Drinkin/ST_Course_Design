@@ -32,7 +32,7 @@ flowchart LR
     B --> C["/coverage<br/>覆盖目标"]
     C --> D["/strategy<br/>策略分配"]
     D --> E["/generate<br/>测试用例"]
-    E --> F["/fsm<br/>FSM 建模"]
+    D --> F["/fsm<br/>FSM 建模"]
     E --> G["/oracle<br/>预言生成"]
     F --> G
     G --> H["/revisions<br/>人工修订"]
