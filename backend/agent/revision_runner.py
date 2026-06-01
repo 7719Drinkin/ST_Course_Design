@@ -77,14 +77,17 @@ async def _regenerate_impacted_items(
             422,
         )
 
-    impact, prompt_evidence_items = await _llm_revision_impact(
-        revision,
-        state,
-        impacted_coverage,
-        impacted_tests,
-        current_state,
-        rag_context,
-    )
+    impact = _deterministic_revision_impact(revision, impacted_coverage, impacted_tests)
+    prompt_evidence_items: list[dict[str, Any]] = []
+    if impact is None:
+        impact, prompt_evidence_items = await _llm_revision_impact(
+            revision,
+            state,
+            impacted_coverage,
+            impacted_tests,
+            current_state,
+            rag_context,
+        )
     try:
         reentry_result = await rerun_from_impact(
             ReentryContext(
@@ -115,6 +118,113 @@ async def _regenerate_impacted_items(
         reentry_result.changes.deprecated,
         [*prompt_evidence_items, *reentry_result.evidence],
     )
+
+
+def _deterministic_revision_impact(
+    revision: dict[str, Any],
+    impacted_coverage: list[dict[str, Any]],
+    impacted_tests: list[dict[str, Any]],
+) -> dict[str, Any] | None:
+    target_type = str(revision.get("target_type") or "")
+    target_id = str(revision.get("target_id") or "")
+    if target_type == "test_case":
+        review_only = _is_review_only_revision(revision)
+        return {
+            "impact_analysis": [
+                {
+                    "target_type": target_type,
+                    "target_id": target_id,
+                    "reasoning": (
+                        "Only review status changed; no downstream generation is required."
+                        if review_only
+                        else "The designer changed test case content; rerun Oracle review for the affected test case."
+                    ),
+                    "affected_test_ids": [target_id] if target_id else [],
+                    "decision": "update",
+                }
+            ],
+            "reentry_stage": "analysis" if review_only else "oracle",
+            "affected_ids": _deterministic_affected_ids(impacted_coverage, impacted_tests, target_id),
+            "rationale": (
+                "A test case review status revision only affects traceability analysis."
+                if review_only
+                else "A test case content revision preserves the designer-edited case and only regenerates Oracle evidence."
+            ),
+            "warnings": [],
+            "revision_id": revision.get("revision_id"),
+        }
+    if target_type in {"oracle", "oracle_result"}:
+        return {
+            "impact_analysis": [
+                {
+                    "target_type": target_type,
+                    "target_id": target_id,
+                    "reasoning": "Oracle result revisions affect result analysis only.",
+                    "affected_test_ids": [target_id] if target_id else [],
+                    "decision": "update",
+                }
+            ],
+            "reentry_stage": "analysis",
+            "affected_ids": _deterministic_affected_ids(impacted_coverage, impacted_tests, target_id),
+            "rationale": "Oracle result revisions do not regenerate test cases.",
+            "warnings": [],
+            "revision_id": revision.get("revision_id"),
+        }
+    return None
+
+
+def _is_review_only_revision(revision: dict[str, Any]) -> bool:
+    before = revision.get("before") if isinstance(revision.get("before"), dict) else {}
+    after = revision.get("after") if isinstance(revision.get("after"), dict) else {}
+    changed_fields = {
+        field
+        for field in set(before) | set(after)
+        if before.get(field) != after.get(field)
+    }
+    return bool(changed_fields) and changed_fields <= {"status", "review_status"}
+
+
+def _deterministic_affected_ids(
+    impacted_coverage: list[dict[str, Any]],
+    impacted_tests: list[dict[str, Any]],
+    target_id: str,
+) -> dict[str, list[str]]:
+    requirement_ids = dedupe(
+        [
+            str(item.get("requirement_id"))
+            for item in [*impacted_coverage, *impacted_tests]
+            if item.get("requirement_id")
+        ]
+    )
+    coverage_ids = dedupe(
+        [
+            str(item.get("coverage_item_id"))
+            for item in [*impacted_coverage, *impacted_tests]
+            if item.get("coverage_item_id")
+        ]
+    )
+    strategy_ids = dedupe(
+        [
+            str(item.get("strategy_id"))
+            for item in impacted_tests
+            if item.get("strategy_id")
+        ]
+    )
+    test_ids = dedupe(
+        [
+            str(item.get("test_id"))
+            for item in impacted_tests
+            if item.get("test_id")
+        ] or ([target_id] if target_id else [])
+    )
+    return {
+        "requirements": requirement_ids,
+        "risk_results": requirement_ids,
+        "coverage_items": coverage_ids,
+        "strategies": strategy_ids,
+        "test_cases": test_ids,
+        "oracle_results": test_ids,
+    }
 
 
 async def _llm_revision_impact(

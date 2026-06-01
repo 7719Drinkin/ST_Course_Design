@@ -66,6 +66,7 @@ type AppState = {
   testCases: TestCase[]
   setTestCases: (data: TestCase[]) => void
   updateTestCase: (testId: string, patch: Partial<TestCase>, reason?: string, immediate?: boolean) => void
+  replaceTestCase: (testId: string, next: TestCase, reason?: string) => void
 
   oracleResults: OracleResult[]
   setOracleResults: (data: OracleResult[]) => void
@@ -244,6 +245,39 @@ export const useAppStore = create<AppState>((set, get) => ({
       step: 3, entity_type: 'test_case', entity_id: testId, reason,
     }, target)
     set({ testCases: get().testCases.map((t) => t.test_id === testId ? { ...t, ...patch } : t) })
+  },
+  replaceTestCase: (testId, next, reason = '设计者修订完整测试用例') => {
+    const prev = get().testCases.find((t) => t.test_id === testId)
+    if (!prev) return
+    const revised = { ...next, test_id: testId }
+    if (JSON.stringify(prev) === JSON.stringify(revised)) return
+    get().addRevision({
+      step: 3,
+      entity_type: 'test_case',
+      entity_id: testId,
+      field: 'test_case',
+      old_value: '完整测试用例修订前',
+      new_value: '完整测试用例修订后',
+      before: prev as unknown as Record<string, unknown>,
+      after: revised as unknown as Record<string, unknown>,
+      reason,
+    })
+    set({
+      testCases: get().testCases.map((t) => t.test_id === testId ? revised : t),
+      oracleResults: get().oracleResults.map((oracle) => (
+        oracle.test_id === testId
+          ? {
+              ...oracle,
+              needs_review: true,
+              confidence: Math.min(oracle.confidence, 0.69),
+              explanation: [
+                oracle.explanation,
+                'Designer changed the test case; rerun Oracle review before export.',
+              ].filter(Boolean).join(' '),
+            }
+          : oracle
+      )),
+    })
   },
 
   oracleResults: [],

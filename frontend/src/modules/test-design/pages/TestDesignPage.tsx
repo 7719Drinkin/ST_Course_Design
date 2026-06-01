@@ -4,7 +4,6 @@ import {
   Button,
   Card,
   Col,
-  Input,
   List,
   Row,
   Select,
@@ -13,17 +12,19 @@ import {
   Table,
   Tag,
   Typography,
+  message,
 } from 'antd'
 import { useAppStore } from '@/app/store/appStore'
 import { generateFSM } from '@/modules/test-design/api/fsmApi'
 import { MermaidView } from '@/modules/test-design/components/MermaidView'
+import { TestCaseEditorModal } from '@/modules/test-design/components/TestCaseEditorModal'
 import { TraceabilityPanel } from '@/modules/test-design/components/TraceabilityPanel'
 import { getOracleResults } from '@/modules/test-design/api/oracleApi'
 import { getTestCases } from '@/modules/test-design/api/testCasesApi'
 import { ImprovementSummary } from '@/shared/components/ImprovementSummary'
 import { RevisionPanel } from '@/shared/components/RevisionPanel'
 import { DataStatusTag, WorkflowEmptyState } from '@/shared/components/WorkflowFeedback'
-import type { Technique, TestCaseStatus } from '@/shared/types'
+import type { Technique, TestCase, TestCaseStatus } from '@/shared/types'
 
 const { Title, Text } = Typography
 const GENERATE_SLOW_MS = 2000
@@ -35,12 +36,14 @@ export function TestDesignPage() {
   const [slowWarning, setSlowWarning] = useState(false)
   const [statusFilter, setStatusFilter] = useState<TestCaseStatus | 'all'>('all')
   const [techniqueFilter, setTechniqueFilter] = useState<Technique | 'all'>('all')
+  const [editingCase, setEditingCase] = useState<TestCase | null>(null)
 
   const requirements = useAppStore((s) => s.requirements)
   const coverageItems = useAppStore((s) => s.coverageItems)
   const testCases = useAppStore((s) => s.testCases)
   const setTestCases = useAppStore((s) => s.setTestCases)
   const updateTestCase = useAppStore((s) => s.updateTestCase)
+  const replaceTestCase = useAppStore((s) => s.replaceTestCase)
   const oracleResults = useAppStore((s) => s.oracleResults)
   const setOracleResults = useAppStore((s) => s.setOracleResults)
   const fsm = useAppStore((s) => s.fsm)
@@ -161,6 +164,12 @@ export function TestDesignPage() {
     )))
   }
 
+  const handleSaveEditedCase = (next: TestCase, reason: string) => {
+    replaceTestCase(next.test_id, next, reason)
+    setEditingCase(null)
+    message.success('已保存完整测试用例修订，请在证据页重新审查 Oracle。')
+  }
+
   return (
     <Space direction="vertical" size={24} className="full-width">
       <div className="stage-toolbar stage-toolbar-wrap">
@@ -246,43 +255,22 @@ export function TestDesignPage() {
                     title: '标题',
                     dataIndex: 'title',
                     width: 140,
-                    render: (v, record) => (
-                      <Input
-                        size="small"
-                        value={v}
-                        onChange={(e) => updateTestCase(record.test_id, { title: e.target.value })}
-                      />
-                    ),
+                    ellipsis: true,
+                    render: (v: string) => <Text title={v}>{v}</Text>,
                   },
                   {
                     title: '步骤',
                     dataIndex: 'test_steps',
-                    width: 120,
-                    render: (steps: string[], record) => (
-                      <Input
-                        size="small"
-                        value={steps.join(' → ')}
-                        onChange={(e) =>
-                          updateTestCase(record.test_id, {
-                            test_steps: e.target.value.split('→').map((s) => s.trim()).filter(Boolean),
-                          })
-                        }
-                      />
-                    ),
+                    width: 180,
+                    ellipsis: true,
+                    render: (steps: string[]) => <Text title={(steps ?? []).join(' → ')}>{(steps ?? []).join(' → ')}</Text>,
                   },
                   {
                     title: '期望结果',
                     dataIndex: 'expected_result',
-                    width: 120,
-                    render: (v, record) => (
-                      <Input
-                        size="small"
-                        value={v}
-                        onChange={(e) =>
-                          updateTestCase(record.test_id, { expected_result: e.target.value })
-                        }
-                      />
-                    ),
+                    width: 200,
+                    ellipsis: true,
+                    render: (v: string) => <Text title={v}>{v}</Text>,
                   },
                   {
                     title: '覆盖项',
@@ -322,6 +310,15 @@ export function TestDesignPage() {
                           </Button>
                         ))}
                       </Space>
+                    ),
+                  },
+                  {
+                    title: '操作',
+                    width: 90,
+                    render: (_, record) => (
+                      <Button size="small" onClick={() => setEditingCase(record)}>
+                        编辑
+                      </Button>
                     ),
                   },
                 ]}
@@ -453,6 +450,12 @@ export function TestDesignPage() {
 
       <ImprovementSummary />
       <RevisionPanel />
+      <TestCaseEditorModal
+        open={Boolean(editingCase)}
+        testCase={editingCase}
+        onCancel={() => setEditingCase(null)}
+        onSave={handleSaveEditedCase}
+      />
     </Space>
   )
 }

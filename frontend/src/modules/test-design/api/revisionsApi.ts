@@ -29,8 +29,8 @@ export async function saveRevisionLog(revision: RevisionLog) {
     session_id: DESIGN_SESSION_ID,
     target_type: targetType,
     target_id: revision.entity_id,
-    before: { [revision.field]: revision.old_value },
-    after: { [revision.field]: revision.new_value },
+    before: revision.before ?? { [revision.field]: revision.old_value },
+    after: revision.after ?? { [revision.field]: revision.new_value },
     reason: revision.reason ?? 'designer revision',
     created_by: 'designer',
   })

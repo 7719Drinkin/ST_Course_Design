@@ -164,6 +164,9 @@ export interface TestCase {
   standard_ref: string
   priority?: TestPriority
   status: TestCaseStatus
+  review_status?: string
+  revision_status?: string
+  regenerated_from_revision?: string
 }
 
 export interface TestDesignSpec {
@@ -208,6 +211,8 @@ export interface OracleResult {
   rule_verdict?: Verdict
   confidence: number
   needs_review: boolean
+  revision_status?: string
+  regenerated_from_revision?: string
 }
 
 export interface RegenerateResult {
@@ -258,6 +263,8 @@ export interface RevisionLog {
   field: string
   old_value: string
   new_value: string
+  before?: Record<string, unknown>
+  after?: Record<string, unknown>
   reason?: string
   timestamp: string
   syncStatus?: 'pending' | 'saving' | 'saved' | 'failed'
@@ -268,8 +275,8 @@ export interface ExportRevisionRecord {
   session_id: string
   target_type: string
   target_id: string
-  before: Record<string, string>
-  after: Record<string, string>
+  before: Record<string, unknown>
+  after: Record<string, unknown>
   reason: string
   created_by: string
   created_at: string
