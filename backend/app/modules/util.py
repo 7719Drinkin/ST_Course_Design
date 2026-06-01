@@ -324,6 +324,13 @@ def fsm_coverage_summary(fsm: dict[str, Any] | None, test_cases: list[dict[str, 
     coverage = fsm.get("coverage") if isinstance(fsm.get("coverage"), dict) else {}
     covered_states = [str(item) for item in coverage.get("all_states", []) if str(item).strip()]
     covered_transitions = [str(item) for item in coverage.get("all_transitions", []) if str(item).strip()]
+    fsm_cases = [item for item in test_cases if str(item.get("technique") or "").upper() == "FSM"]
+
+    if fsm_cases and not covered_states:
+        covered_states = _covered_fsm_states(states, fsm.get("coverage_paths", []), fsm_cases)
+    if fsm_cases and not covered_transitions:
+        covered_transitions = _covered_fsm_transitions(transitions, fsm.get("coverage_paths", []), fsm_cases)
+
     transition_count = len(transitions)
     state_count = len(states)
     return {
@@ -333,9 +340,80 @@ def fsm_coverage_summary(fsm: dict[str, Any] | None, test_cases: list[dict[str, 
         "covered_transitions": covered_transitions,
         "state_coverage_rate": _coverage_rate(len(set(covered_states)), state_count),
         "transition_coverage_rate": _coverage_rate(len(set(covered_transitions)), transition_count),
-        "fsm_test_case_count": len([item for item in test_cases if str(item.get("technique") or "").upper() == "FSM"]),
+        "fsm_test_case_count": len(fsm_cases),
         "mermaid": str(fsm.get("mermaid") or ""),
     }
+
+
+def _covered_fsm_states(
+    states: list[str],
+    coverage_paths: Any,
+    fsm_cases: list[dict[str, Any]],
+) -> list[str]:
+    state_set = set(states)
+    covered: set[str] = set()
+    for path in coverage_paths if isinstance(coverage_paths, list) else []:
+        covered.update(_states_from_path(str(path), state_set))
+    text = "\n".join(_test_case_text(item) for item in fsm_cases)
+    covered.update(state for state in states if state and state in text)
+    return sorted(covered)
+
+
+def _covered_fsm_transitions(
+    transitions: list[Any],
+    coverage_paths: Any,
+    fsm_cases: list[dict[str, Any]],
+) -> list[str]:
+    normalized = [_transition_signature(item) for item in transitions]
+    normalized = [item for item in normalized if item]
+    by_pair: dict[tuple[str, str], list[str]] = {}
+    for signature in normalized:
+        from_state, to_state, _event = signature
+        by_pair.setdefault((from_state, to_state), []).append(_format_transition(signature))
+
+    covered: set[str] = set()
+    state_set = {item for signature in normalized for item in signature[:2]}
+    for path in coverage_paths if isinstance(coverage_paths, list) else []:
+        path_states = _states_from_path(str(path), state_set)
+        for left, right in zip(path_states, path_states[1:]):
+            covered.update(by_pair.get((left, right), []))
+
+    text = "\n".join(_test_case_text(item) for item in fsm_cases)
+    for signature in normalized:
+        from_state, to_state, event = signature
+        if from_state in text and to_state in text:
+            covered.add(_format_transition(signature))
+            continue
+        if event and event in text:
+            covered.add(_format_transition(signature))
+    return sorted(covered)
+
+
+def _states_from_path(path: str, state_set: set[str]) -> list[str]:
+    parts = [part.strip() for part in re.split(r"\s*->\s*", path) if part.strip()]
+    return [part for part in parts if part in state_set]
+
+
+def _transition_signature(item: Any) -> tuple[str, str, str] | None:
+    if hasattr(item, "model_dump"):
+        item = item.model_dump(mode="json", by_alias=True)
+    if not isinstance(item, dict):
+        return None
+    from_state = str(item.get("from") or item.get("from_state") or "").strip()
+    to_state = str(item.get("to") or "").strip()
+    event = str(item.get("event") or "").strip()
+    if not from_state or not to_state:
+        return None
+    return from_state, to_state, event
+
+
+def _format_transition(signature: tuple[str, str, str]) -> str:
+    from_state, to_state, event = signature
+    return f"{from_state}->{to_state}" + (f": {event}" if event else "")
+
+
+def _test_case_text(test_case: dict[str, Any]) -> str:
+    return json.dumps(test_case, ensure_ascii=False, default=str)
 
 
 def _coverage_rate(covered: int, total: int) -> float:

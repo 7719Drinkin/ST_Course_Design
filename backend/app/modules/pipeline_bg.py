@@ -15,7 +15,15 @@ from typing import Any
 from agent import AgentPipeline
 from agent.core.models import ParseResult
 from agent.pipeline.finalizer import finalize_pipeline_result
-from agent.tools.validation.id_normalizer import normalize_coverage_item_ids
+from agent.tools.validation.id_gate import (
+    CG_ID_RE,
+    COV_ID_RE,
+    SPEC_ID_RE,
+    TC_ID_RE,
+    require_id_format,
+    require_no_bad_coverage_ids,
+    require_unique_ids,
+)
 
 from .store import workflow_store
 from .util import (
@@ -42,18 +50,25 @@ async def _background_pipeline_after_parse(
     pipeline: AgentPipeline,
     parse_result: ParseResult,
     rag_context: str | None,
+    run_id: str,
 ) -> None:
     """Run risk and later stages using the exact parse_result returned to the frontend."""
 
+    current_stage = STAGE_RISK
     try:
+        if not _is_current_run(session_id, run_id):
+            return
         risk_result = await pipeline.analyze_risk(parse_result.analyzed_requirements, rag_context)
         _require_exact_requirement_ids(
             stage=STAGE_RISK,
             expected=parse_result.analyzed_requirements,
             actual=risk_result.risk_analysis,
         )
-        _save_risk(session_id, risk_result.model_dump(mode="json"))
+        if not _save_stage_if_current(session_id, run_id, _save_risk, risk_result.model_dump(mode="json")):
+            return
+        workflow_store.complete_pipeline_stage(session_id, run_id, STAGE_RISK, STAGE_COVERAGE)
 
+        current_stage = STAGE_COVERAGE
         coverage_result = await pipeline.identify_coverage(
             parse_result.analyzed_requirements,
             risk_result.risk_analysis,
@@ -64,8 +79,13 @@ async def _background_pipeline_after_parse(
             valid=parse_result.analyzed_requirements,
             items=coverage_result.coverage_goals,
         )
-        _save_coverage(session_id, coverage_result.model_dump(mode="json"))
+        require_id_format(coverage_result.coverage_goals, "coverage_goal_id", CG_ID_RE, "coverage_goals")
+        require_unique_ids(coverage_result.coverage_goals, "coverage_goal_id", "coverage_goals")
+        if not _save_stage_if_current(session_id, run_id, _save_coverage, coverage_result.model_dump(mode="json")):
+            return
+        workflow_store.complete_pipeline_stage(session_id, run_id, STAGE_COVERAGE, STAGE_STRATEGY)
 
+        current_stage = STAGE_STRATEGY
         strategy_result = await pipeline.assign_strategy(
             coverage_result.coverage_goals,
             parse_result.analyzed_requirements,
@@ -77,8 +97,12 @@ async def _background_pipeline_after_parse(
             valid=parse_result.analyzed_requirements,
             items=strategy_result.coverage_items,
         )
-        normalize_coverage_item_ids(strategy_result.coverage_items)
-        _save_strategy(session_id, strategy_result.model_dump(mode="json"))
+        require_id_format(strategy_result.coverage_items, "coverage_item_id", COV_ID_RE, "coverage_items")
+        require_no_bad_coverage_ids(strategy_result.coverage_items, "coverage_items")
+        require_unique_ids(strategy_result.coverage_items, "coverage_item_id", "coverage_items")
+        if not _save_stage_if_current(session_id, run_id, _save_strategy, strategy_result.model_dump(mode="json")):
+            return
+        workflow_store.complete_pipeline_stage(session_id, run_id, STAGE_STRATEGY, STAGE_GENERATE)
 
         fsm_task = asyncio.create_task(
             pipeline.generate_fsm(
@@ -87,6 +111,7 @@ async def _background_pipeline_after_parse(
                 rag_context=rag_context,
             )
         )
+        current_stage = STAGE_GENERATE
         generate_result = await pipeline.generate_tests(
             strategy_result.coverage_items,
             risk_result.risk_analysis,
@@ -102,8 +127,30 @@ async def _background_pipeline_after_parse(
             valid=parse_result.analyzed_requirements,
             items=generate_result.test_cases,
         )
-        _save_generate(session_id, generate_result.model_dump(mode="json"))
+        _require_known_coverage_ids(
+            stage=STAGE_GENERATE,
+            valid=strategy_result.coverage_items,
+            items=generate_result.test_design_specs,
+        )
+        _require_known_coverage_ids(
+            stage=STAGE_GENERATE,
+            valid=strategy_result.coverage_items,
+            items=generate_result.test_cases,
+        )
+        _require_known_spec_ids(
+            stage=STAGE_GENERATE,
+            valid=generate_result.test_design_specs,
+            items=generate_result.test_cases,
+        )
+        require_id_format(generate_result.test_design_specs, "spec_id", SPEC_ID_RE, "test_design_specs")
+        require_unique_ids(generate_result.test_design_specs, "spec_id", "test_design_specs")
+        require_id_format(generate_result.test_cases, "test_id", TC_ID_RE, "test_cases")
+        require_unique_ids(generate_result.test_cases, "test_id", "test_cases")
+        if not _save_stage_if_current(session_id, run_id, _save_generate, generate_result.model_dump(mode="json")):
+            return
+        workflow_store.complete_pipeline_stage(session_id, run_id, STAGE_GENERATE, STAGE_FSM)
 
+        current_stage = STAGE_FSM
         fsm_result = await fsm_task
         _coerce_known_requirement_ids(
             stage=STAGE_FSM,
@@ -115,15 +162,21 @@ async def _background_pipeline_after_parse(
             valid=parse_result.analyzed_requirements,
             items=fsm_result.test_cases,
         )
-        _save_fsm(session_id, fsm_result.model_dump(mode="json"))
+        if not _save_stage_if_current(session_id, run_id, _save_fsm, fsm_result.model_dump(mode="json")):
+            return
+        workflow_store.complete_pipeline_stage(session_id, run_id, STAGE_FSM, STAGE_ORACLE)
 
+        current_stage = STAGE_ORACLE
         oracle_result = await pipeline.generate_oracles(
             _test_cases_for_oracle(generate_result.test_cases, fsm_result.test_cases),
             requirements=parse_result.analyzed_requirements,
             rag_context=rag_context,
         )
-        _save_oracle(session_id, oracle_result.model_dump(mode="json"))
+        if not _save_stage_if_current(session_id, run_id, _save_oracle, oracle_result.model_dump(mode="json")):
+            return
+        workflow_store.complete_pipeline_stage(session_id, run_id, STAGE_ORACLE, "final_validation")
 
+        current_stage = "final_validation"
         final_result = finalize_pipeline_result(
             parse_result,
             risk_result,
@@ -133,10 +186,37 @@ async def _background_pipeline_after_parse(
             fsm_result,
             oracle_result,
         )
-        _save_final_output(session_id, final_result.model_dump(mode="json"))
+        saved_final = workflow_store.apply_if_current_pipeline_run(
+            session_id,
+            run_id,
+            lambda: (
+                _save_final_output(session_id, final_result.model_dump(mode="json")),
+                workflow_store.finish_pipeline_run(session_id, run_id),
+            ),
+        )
+        if not saved_final:
+            return
         logger.info("Background pipeline completed for session %s", session_id)
-    except Exception:
+    except Exception as exc:
+        workflow_store.fail_pipeline_run(session_id, run_id, current_stage, str(exc))
         logger.exception("Background pipeline failed for session %s", session_id)
+
+
+def _is_current_run(session_id: str, run_id: str) -> bool:
+    return workflow_store.is_current_pipeline_run(session_id, run_id)
+
+
+def _save_stage_if_current(
+    session_id: str,
+    run_id: str,
+    save_fn,
+    output: dict[str, Any],
+) -> bool:
+    return workflow_store.apply_if_current_pipeline_run(
+        session_id,
+        run_id,
+        lambda: save_fn(session_id, output),
+    )
 
 
 def _save_risk(session_id: str, output: dict[str, Any]) -> None:
@@ -336,6 +416,8 @@ def _save_final_output(session_id: str, output: dict[str, Any]) -> None:
         "test_id",
         replace_all=True,
     )
+    workflow_store.clear_keys(session_id, ["prompt_evidence"])
+    _save_prompt_evidence(session_id, output, "pipeline", "pipeline_final")
 
 
 def _save_prompt_evidence(
@@ -388,6 +470,52 @@ def _require_known_requirement_ids(
     )
     if unknown:
         raise ValueError(f"{stage} produced unknown requirement_id values: {unknown}")
+
+
+def _require_known_coverage_ids(
+    *,
+    stage: str,
+    valid: list[Any],
+    items: list[Any],
+    field: str = "coverage_item_id",
+) -> None:
+    valid_ids = {
+        str(_get(item, "coverage_item_id") or "")
+        for item in valid
+        if _get(item, "coverage_item_id")
+    }
+    unknown = sorted(
+        {
+            item_id
+            for item in items
+            if (item_id := str(_get(item, field) or "")) and item_id not in valid_ids
+        }
+    )
+    if unknown:
+        raise ValueError(f"{stage} produced unknown coverage_item_id values: {unknown}")
+
+
+def _require_known_spec_ids(
+    *,
+    stage: str,
+    valid: list[Any],
+    items: list[Any],
+    field: str = "spec_id",
+) -> None:
+    valid_ids = {
+        str(_get(item, "spec_id") or "")
+        for item in valid
+        if _get(item, "spec_id")
+    }
+    unknown = sorted(
+        {
+            item_id
+            for item in items
+            if (item_id := str(_get(item, field) or "")) and item_id not in valid_ids
+        }
+    )
+    if unknown:
+        raise ValueError(f"{stage} produced unknown spec_id values: {unknown}")
 
 
 def _coerce_known_requirement_ids(

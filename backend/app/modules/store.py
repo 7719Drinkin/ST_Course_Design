@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 from copy import deepcopy
+from datetime import datetime, timezone
 from threading import RLock
 from typing import Any
+from uuid import uuid4
 
 from pydantic import BaseModel
 
@@ -26,7 +28,7 @@ SESSION_LIST_KEYS = {
     "oracle_results",
 }
 
-SESSION_OBJECT_KEYS = {"optimization_result", "fsm", "requirement_input"}
+SESSION_OBJECT_KEYS = {"optimization_result", "fsm", "requirement_input", "pipeline_status"}
 
 ID_FIELDS = {
     "requirements": "requirement_id",
@@ -130,6 +132,127 @@ class WorkflowStore:
             self.session(session_id)[key] = normalized
             return deepcopy(normalized)
 
+    def clear_keys(self, session_id: str, keys: list[str]) -> None:
+        """Clear selected collections/objects in one session.
+
+        This is used when a new pipeline run starts so old downstream artifacts
+        cannot be mixed with fresh parse output.
+        """
+
+        with self._lock:
+            session = self.session(session_id)
+            for key in keys:
+                if key in SESSION_LIST_KEYS:
+                    session[key] = []
+                elif key in SESSION_OBJECT_KEYS:
+                    session[key] = None
+
+    def start_pipeline_run(self, session_id: str) -> str:
+        run_id = f"RUN-{uuid4().hex[:12]}"
+        now = _now_iso()
+        status = {
+            "run_id": run_id,
+            "status": "running",
+            "current_stage": "parse_requirements",
+            "completed_stages": [],
+            "failed_stage": "",
+            "error": "",
+            "started_at": now,
+            "updated_at": now,
+        }
+        with self._lock:
+            self.session(session_id)["pipeline_status"] = status
+        return run_id
+
+    def get_pipeline_status(self, session_id: str) -> dict[str, Any]:
+        with self._lock:
+            status = deepcopy(self.session(session_id).get("pipeline_status"))
+        if isinstance(status, dict) and status:
+            return status
+        return {
+            "run_id": "",
+            "status": "idle",
+            "current_stage": "",
+            "completed_stages": [],
+            "failed_stage": "",
+            "error": "",
+            "started_at": "",
+            "updated_at": "",
+        }
+
+    def is_current_pipeline_run(self, session_id: str, run_id: str) -> bool:
+        status = self.get_pipeline_status(session_id)
+        return bool(run_id) and status.get("run_id") == run_id and status.get("status") == "running"
+
+    def apply_if_current_pipeline_run(self, session_id: str, run_id: str, callback) -> bool:
+        """Run a store mutation only while the given run_id is still current."""
+
+        with self._lock:
+            status = self.session(session_id).get("pipeline_status")
+            if not isinstance(status, dict):
+                return False
+            if status.get("run_id") != run_id or status.get("status") != "running":
+                return False
+            callback()
+            return True
+
+    def complete_pipeline_stage(
+        self,
+        session_id: str,
+        run_id: str,
+        stage: str,
+        next_stage: str = "",
+    ) -> None:
+        with self._lock:
+            status = self.session(session_id).get("pipeline_status")
+            if not isinstance(status, dict) or status.get("run_id") != run_id:
+                return
+            completed = list(status.get("completed_stages") or [])
+            if stage not in completed:
+                completed.append(stage)
+            status.update(
+                {
+                    "status": "running",
+                    "current_stage": next_stage,
+                    "completed_stages": completed,
+                    "updated_at": _now_iso(),
+                }
+            )
+
+    def finish_pipeline_run(self, session_id: str, run_id: str) -> None:
+        with self._lock:
+            status = self.session(session_id).get("pipeline_status")
+            if not isinstance(status, dict) or status.get("run_id") != run_id:
+                return
+            completed = list(status.get("completed_stages") or [])
+            if "final_validation" not in completed:
+                completed.append("final_validation")
+            status.update(
+                {
+                    "status": "completed",
+                    "current_stage": "",
+                    "completed_stages": completed,
+                    "failed_stage": "",
+                    "error": "",
+                    "updated_at": _now_iso(),
+                }
+            )
+
+    def fail_pipeline_run(self, session_id: str, run_id: str, stage: str, error: str) -> None:
+        with self._lock:
+            status = self.session(session_id).get("pipeline_status")
+            if not isinstance(status, dict) or status.get("run_id") != run_id:
+                return
+            status.update(
+                {
+                    "status": "failed",
+                    "current_stage": "",
+                    "failed_stage": stage,
+                    "error": error,
+                    "updated_at": _now_iso(),
+                }
+            )
+
     def get_object(self, session_id: str, key: str) -> dict[str, Any] | None:
         with self._lock:
             return deepcopy(self.session(session_id).get(key))
@@ -177,6 +300,7 @@ class WorkflowStore:
             "risk_results": session.get("risk_results", []),
             "coverage_items": session.get("coverage_items", []),
             "strategies": session.get("strategies", []),
+            "test_design_specs": session.get("test_design_specs", []),
             "test_cases": session.get("test_cases", []),
             "fsm": session.get("fsm"),
             "fsm_test_cases": session.get("fsm_test_cases", []),
@@ -199,3 +323,7 @@ def _to_dict(item: Any) -> dict[str, Any]:
 
 
 workflow_store = WorkflowStore()
+
+
+def _now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()

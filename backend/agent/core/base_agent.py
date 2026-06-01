@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from collections.abc import Callable
+import json
 from typing import Any
 
 from ..prompts.prompt_builder import PromptBuilder
@@ -81,7 +82,27 @@ class BaseAgent(ABC):
         """
 
         payload = await self._run_json_prompt(prompt_name, variables, context)
-        return validator(payload.get(output_key))
+        try:
+            return validator(payload.get(output_key))
+        except Exception as exc:
+            prompt = self.prompt_builder.build(prompt_name, variables)
+            repair_prompt = (
+                f"{prompt}\n\n"
+                "Your previous JSON was rejected by backend schema validation.\n"
+                f"Validation error: {exc}\n"
+                "Previous JSON:\n"
+                f"{json.dumps(payload, ensure_ascii=False, indent=2, default=str)}\n\n"
+                "Return the corrected full JSON object only. Do not include markdown fences."
+            )
+            context.prompts_used.append(
+                self._build_prompt_record(
+                    f"{prompt_name}_validation_repair",
+                    repair_prompt,
+                    variables,
+                )
+            )
+            repaired_payload = await self.llm_client.generate_json(repair_prompt)
+            return validator(repaired_payload.get(output_key))
 
     def _build_prompt_record(
         self,

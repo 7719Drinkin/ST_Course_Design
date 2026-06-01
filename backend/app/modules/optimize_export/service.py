@@ -6,6 +6,8 @@ from typing import Any
 import io
 import zipfile
 
+from fastapi import HTTPException
+
 from ..util import (
     csv_bytes,
     dedupe_oracle_results,
@@ -28,15 +30,17 @@ from .schemas import (
 
 class OptimizeExportService:
     def optimize(self, request: OptimizeRequest) -> OptimizeResponse:
-        test_cases = to_dicts(request.test_cases) or workflow_store.get_list(request.session_id, "test_cases")
+        requested_test_cases = to_dicts(request.test_cases)
+        stored_test_cases = _stored_all_test_cases(request.session_id)
+        test_cases = (
+            _merge_test_case_snapshot(stored_test_cases, requested_test_cases, include_unmentioned=False)
+            if requested_test_cases
+            else stored_test_cases
+        )
         coverage_items = to_dicts(request.coverage_items) or workflow_store.get_list(request.session_id, "coverage_items")
         risk_results = to_dicts(request.risk_results) or workflow_store.get_list(request.session_id, "risk_results")
-        if request.test_cases:
-            workflow_store.save_many(request.session_id, "test_cases", request.test_cases, "test_id")
-        if request.coverage_items:
-            workflow_store.save_many(request.session_id, "coverage_items", request.coverage_items, "coverage_item_id")
-        if request.risk_results:
-            workflow_store.save_many(request.session_id, "risk_results", request.risk_results, "target_id")
+        if requested_test_cases:
+            _sync_existing_test_case_review_fields(request.session_id, requested_test_cases)
 
         optimization_coverage_items = _coverage_with_fsm_items(coverage_items, test_cases)
         kept_ids = self._kept_tests(
@@ -98,13 +102,14 @@ class OptimizeExportService:
 
     def export_bundle(self, request: ExportRequest) -> ExportBundle:
         raw = workflow_store.export_bundle(request.session_id)
+        requested_test_cases = to_dicts(request.test_cases) if request.test_cases is not None else None
+        requested_fsm_cases = to_dicts(request.fsm_test_cases) if request.fsm_test_cases is not None else None
         snapshot_fields = {
             "requirements": request.requirements,
             "risk_results": request.risk_results,
             "coverage_items": request.coverage_items,
             "strategies": request.strategies,
-            "test_cases": request.test_cases,
-            "fsm_test_cases": request.fsm_test_cases,
+            "test_design_specs": request.test_design_specs,
             "oracle_results": request.oracle_results,
             "revisions": request.revisions,
             "prompt_evidence": request.prompt_evidence,
@@ -113,13 +118,21 @@ class OptimizeExportService:
         for key, value in snapshot_fields.items():
             if value is not None:
                 raw[key] = to_dicts(value)
-                workflow_store.save_many(request.session_id, key, value, _export_id_field(key), replace_all=True)
         if request.fsm is not None:
             raw["fsm"] = request.fsm
-            workflow_store.save_object(request.session_id, "fsm", request.fsm)
         if request.optimization_result is not None:
             raw["optimization_result"] = request.optimization_result.model_dump(mode="json")
-            workflow_store.save_object(request.session_id, "optimization_result", request.optimization_result)
+        if requested_test_cases is not None:
+            fr3_snapshot = [item for item in requested_test_cases if not _is_fsm_test_case(item)]
+            fsm_from_test_snapshot = [item for item in requested_test_cases if _is_fsm_test_case(item)]
+            raw["test_cases"] = _merge_test_case_snapshot(raw.get("test_cases", []), fr3_snapshot)
+            requested_fsm_cases = merge_by_id(
+                requested_fsm_cases or [],
+                fsm_from_test_snapshot,
+                "test_id",
+            )
+        if requested_fsm_cases is not None:
+            raw["fsm_test_cases"] = _merge_test_case_snapshot(raw.get("fsm_test_cases", []), requested_fsm_cases)
         raw["test_cases"] = merge_by_id(
             raw.get("test_cases", []),
             raw.get("fsm_test_cases", []),
@@ -148,6 +161,7 @@ class OptimizeExportService:
             raw["revisions"] = []
         if not request.include_prompt_evidence:
             raw["prompt_evidence"] = []
+        _validate_export_consistency(raw)
         return ExportBundle(**raw)
 
     def export_bytes(self, request: ExportRequest) -> tuple[bytes, str, str]:
@@ -231,6 +245,111 @@ def _dedupe(items: list[str]) -> list[str]:
     return result
 
 
+TEST_CASE_TRACEABILITY_FIELDS = {
+    "test_id",
+    "requirement_id",
+    "coverage_item_id",
+    "coverage_item_ids",
+    "coverage_items",
+    "covered_coverage_item_ids",
+    "spec_id",
+    "strategy_id",
+    "technique",
+}
+TEST_CASE_REVIEW_FIELDS = {"status", "review_status"}
+
+
+def _stored_all_test_cases(session_id: str) -> list[dict[str, Any]]:
+    return merge_by_id(
+        workflow_store.get_list(session_id, "test_cases"),
+        workflow_store.get_list(session_id, "fsm_test_cases"),
+        "test_id",
+    )
+
+
+def _merge_test_case_snapshot(
+    official_cases: list[dict[str, Any]],
+    snapshot_cases: list[dict[str, Any]],
+    *,
+    include_unmentioned: bool = True,
+) -> list[dict[str, Any]]:
+    """Apply frontend edits without allowing stale snapshots to rewrite traceability IDs."""
+
+    snapshot_by_id = {
+        str(item.get("test_id") or ""): item
+        for item in snapshot_cases
+        if item.get("test_id")
+    }
+    result: list[dict[str, Any]] = []
+    used_ids: set[str] = set()
+    for official in official_cases:
+        test_id = str(official.get("test_id") or "")
+        incoming = snapshot_by_id.get(test_id)
+        if incoming:
+            result.append(_merge_test_case_editable_fields(official, incoming))
+            used_ids.add(test_id)
+        elif include_unmentioned:
+            result.append(dict(official))
+
+    for incoming in snapshot_cases:
+        test_id = str(incoming.get("test_id") or "")
+        if test_id and test_id in used_ids:
+            continue
+        result.append(dict(incoming))
+    return result
+
+
+def _merge_test_case_editable_fields(
+    official: dict[str, Any],
+    incoming: dict[str, Any],
+) -> dict[str, Any]:
+    merged = dict(official)
+    for field, value in incoming.items():
+        if field in TEST_CASE_TRACEABILITY_FIELDS:
+            continue
+        merged[field] = value
+    return merged
+
+
+def _sync_existing_test_case_review_fields(
+    session_id: str,
+    snapshot_cases: list[dict[str, Any]],
+) -> None:
+    snapshot_by_id = {
+        str(item.get("test_id") or ""): item
+        for item in snapshot_cases
+        if item.get("test_id")
+    }
+    _sync_test_case_collection_review_fields(session_id, "test_cases", snapshot_by_id)
+    _sync_test_case_collection_review_fields(session_id, "fsm_test_cases", snapshot_by_id)
+
+
+def _sync_test_case_collection_review_fields(
+    session_id: str,
+    key: str,
+    snapshot_by_id: dict[str, dict[str, Any]],
+) -> None:
+    updates: list[dict[str, Any]] = []
+    for item in workflow_store.get_list(session_id, key):
+        incoming = snapshot_by_id.get(str(item.get("test_id") or ""))
+        if not incoming:
+            continue
+        updated = dict(item)
+        changed = False
+        for field in TEST_CASE_REVIEW_FIELDS:
+            if field in incoming and incoming[field] != updated.get(field):
+                updated[field] = incoming[field]
+                changed = True
+        if changed:
+            updates.append(updated)
+    if updates:
+        workflow_store.save_many(session_id, key, updates, "test_id")
+
+
+def _is_fsm_test_case(test_case: dict[str, Any]) -> bool:
+    return str(test_case.get("technique") or "").upper() == "FSM"
+
+
 def _coverage_with_fsm_items(
     coverage_items: list[dict[str, Any]],
     test_cases: list[dict[str, Any]],
@@ -310,6 +429,137 @@ def _analysis_results_stale(bundle: dict[str, Any]) -> bool:
             if coverage_id in coverage_ids and (coverage_id, test_id) not in analyzed_pairs:
                 return True
     return False
+
+
+def _validate_export_consistency(bundle: dict[str, Any]) -> None:
+    requirements = bundle.get("requirements") or []
+    risk_results = bundle.get("risk_results") or []
+    coverage_items = bundle.get("coverage_items") or []
+    test_design_specs = bundle.get("test_design_specs") or []
+    test_cases = bundle.get("test_cases") or []
+    oracle_results = bundle.get("oracle_results") or []
+    fsm = bundle.get("fsm") or {}
+    fsm_summary = bundle.get("fsm_coverage_summary") or {}
+
+    errors: list[str] = []
+    requirement_ids = _ids(requirements, "requirement_id")
+    coverage_ids = _ids(coverage_items, "coverage_item_id")
+    spec_ids = _ids(test_design_specs, "spec_id")
+    test_ids = _ids(test_cases, "test_id")
+
+    errors.extend(_duplicate_id_errors(requirements, "requirement_id", "requirements"))
+    errors.extend(_duplicate_id_errors(coverage_items, "coverage_item_id", "coverage_items"))
+    errors.extend(_duplicate_id_errors(test_design_specs, "spec_id", "test_design_specs"))
+    errors.extend(_duplicate_id_errors(test_cases, "test_id", "test_cases"))
+    errors.extend(_missing_id_errors(test_cases, "test_id", "test_cases"))
+
+    if requirements:
+        risk_ids = {
+            str(item.get("requirement_id") or item.get("target_id") or "")
+            for item in risk_results
+            if item.get("requirement_id") or item.get("target_id")
+        }
+        missing_risk = sorted(requirement_ids - risk_ids)
+        if missing_risk:
+            errors.append("risk_results missing requirements: " + ", ".join(missing_risk))
+
+    bad_coverage_ids = sorted(
+        coverage_id for coverage_id in coverage_ids if _is_bad_coverage_item_id(coverage_id)
+    )
+    if bad_coverage_ids:
+        errors.append("coverage_items contain invalid IDs: " + ", ".join(bad_coverage_ids))
+
+    unknown_spec_refs = sorted(
+        {
+            str(item.get("coverage_item_id") or "")
+            for item in test_design_specs
+            if item.get("coverage_item_id") and str(item.get("coverage_item_id")) not in coverage_ids
+        }
+    )
+    if unknown_spec_refs:
+        errors.append("test_design_specs reference unknown coverage_item_id: " + ", ".join(unknown_spec_refs))
+
+    unknown_test_refs = sorted(
+        {
+            coverage_id
+            for test_case in test_cases
+            for coverage_id in _coverage_ids(test_case)
+            if coverage_id not in coverage_ids
+        }
+    )
+    if unknown_test_refs:
+        errors.append("test_cases reference unknown coverage_item_id: " + ", ".join(unknown_test_refs))
+
+    missing_spec_refs = sorted(
+        {
+            str(item.get("spec_id") or "")
+            for item in test_cases
+            if str(item.get("technique") or "").upper() != "FSM"
+            and item.get("spec_id")
+            and str(item.get("spec_id")) not in spec_ids
+        }
+    )
+    if missing_spec_refs:
+        errors.append("test_cases reference unknown spec_id: " + ", ".join(missing_spec_refs))
+
+    if coverage_items:
+        covered = _covered_ids(test_cases)
+        intentionally_uncovered = _intentionally_uncovered_coverage_ids(coverage_items)
+        uncovered = sorted(coverage_ids - covered - intentionally_uncovered)
+        if uncovered:
+            errors.append("coverage_items without generated test_cases: " + ", ".join(uncovered))
+
+    if test_cases:
+        oracle_ids = _ids(oracle_results, "test_id")
+        missing_oracles = sorted(test_ids - oracle_ids)
+        if missing_oracles:
+            errors.append("oracle_results missing test_ids: " + ", ".join(missing_oracles))
+
+    if fsm and [item for item in test_cases if str(item.get("technique") or "").upper() == "FSM"]:
+        if not fsm_summary.get("covered_states") or not fsm_summary.get("covered_transitions"):
+            errors.append("fsm_coverage_summary has no covered states or transitions")
+
+    if errors:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "message": "Export blocked because the design artifacts are not traceability-consistent. Rerun generation before exporting final evidence.",
+                "errors": errors,
+            },
+        )
+
+
+def _ids(items: list[dict[str, Any]], field: str) -> set[str]:
+    return {str(item.get(field) or "") for item in items if item.get(field)}
+
+
+def _duplicate_id_errors(items: list[dict[str, Any]], field: str, label: str) -> list[str]:
+    counts = Counter(str(item.get(field) or "") for item in items if item.get(field))
+    duplicated = sorted(item_id for item_id, count in counts.items() if count > 1)
+    return [f"{label} contain duplicate {field}: " + ", ".join(duplicated)] if duplicated else []
+
+
+def _missing_id_errors(items: list[dict[str, Any]], field: str, label: str) -> list[str]:
+    count = sum(1 for item in items if not item.get(field))
+    return [f"{label} contain {count} item(s) without {field}"] if count else []
+
+
+def _intentionally_uncovered_coverage_ids(coverage_items: list[dict[str, Any]]) -> set[str]:
+    allowed_statuses = {"intentionally_uncovered", "waived", "accepted_gap"}
+    result: set[str] = set()
+    for item in coverage_items:
+        coverage_id = str(item.get("coverage_item_id") or "")
+        if not coverage_id:
+            continue
+        status = str(
+            item.get("coverage_status")
+            or item.get("status")
+            or item.get("review_status")
+            or ""
+        ).lower()
+        if item.get("intentionally_uncovered") is True or status in allowed_statuses:
+            result.add(coverage_id)
+    return result
 
 
 def _build_analysis_results(bundle: dict[str, Any]) -> list[dict[str, Any]]:
@@ -517,6 +767,7 @@ def _xlsx_bytes(bundle: dict[str, Any]) -> bytes:
         "risk_results": bundle.get("risk_results", []),
         "coverage_items": bundle.get("coverage_items", []),
         "strategies": bundle.get("strategies", []),
+        "test_design_specs": bundle.get("test_design_specs", []),
         "test_cases": bundle.get("test_cases", []),
         "fsm_test_cases": bundle.get("fsm_test_cases", []),
         "fsm_coverage_summary": [bundle.get("fsm_coverage_summary", {})],

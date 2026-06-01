@@ -22,6 +22,7 @@ from .schemas import ParseRequest, ParseResponse
 from agent import AgentPipeline
 from agent.core.models import ParseResult
 from agent.pipeline.errors import StageExecutionError
+from agent.tools.validation.id_gate import REQ_ID_RE, require_id_format, require_unique_ids
 
 
 class IntakeParseService:
@@ -41,14 +42,25 @@ class IntakeParseService:
                 prompts_used=[],
             )
         save_requirement_input(request.session_id, requirement_text, request.rag_context)
+        run_id = workflow_store.start_pipeline_run(request.session_id)
         pipeline = AgentPipeline()
         pipeline_context = effective_rag_context(request.session_id, request.rag_context)
-        parse_result = await _runner_parse_result(
-            request.session_id,
-            pipeline,
-            requirement_text,
-            pipeline_context,
-        )
+        try:
+            parse_result = await _runner_parse_result(
+                request.session_id,
+                pipeline,
+                requirement_text,
+                pipeline_context,
+            )
+        except Exception as exc:
+            workflow_store.fail_pipeline_run(
+                request.session_id,
+                run_id,
+                "parse_requirements",
+                str(exc),
+            )
+            raise
+        workflow_store.complete_pipeline_stage(request.session_id, run_id, "parse_requirements", "analyze_risk")
         output = parse_result.model_dump(mode="json")
         output["prompts_used"] = normalize_prompt_records(output.get("prompts_used"))
 
@@ -59,6 +71,7 @@ class IntakeParseService:
                 pipeline,
                 parse_result,
                 pipeline_context,
+                run_id,
             )
         )
 
@@ -88,7 +101,28 @@ async def _runner_parse_result(
     except Exception as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
-    _normalize_parse_result_ids(parse_result)
+    require_id_format(parse_result.requirements, "requirement_id", REQ_ID_RE, "requirements")
+    require_unique_ids(parse_result.requirements, "requirement_id", "requirements")
+    require_id_format(
+        parse_result.analyzed_requirements,
+        "requirement_id",
+        REQ_ID_RE,
+        "analyzed_requirements",
+    )
+    require_unique_ids(
+        parse_result.analyzed_requirements,
+        "requirement_id",
+        "analyzed_requirements",
+    )
+    requirement_ids = {item.requirement_id for item in parse_result.requirements}
+    analyzed_ids = {item.requirement_id for item in parse_result.analyzed_requirements}
+    if requirement_ids != analyzed_ids:
+        missing = sorted(requirement_ids - analyzed_ids)
+        extra = sorted(analyzed_ids - requirement_ids)
+        raise ValueError(
+            "analyzed_requirements must preserve parsed requirement IDs. "
+            f"missing={missing or []}, extra={extra or []}"
+        )
     output = parse_result.model_dump(mode="json")
     output["prompts_used"] = normalize_prompt_records(output.get("prompts_used"))
     _save_parse_output(session_id, output)
@@ -96,6 +130,25 @@ async def _runner_parse_result(
 
 
 def _save_parse_output(session_id: str, output: dict) -> None:
+    workflow_store.clear_keys(
+        session_id,
+        [
+            "risk_analysis",
+            "risk_results",
+            "coverage_goals",
+            "coverage_items",
+            "strategies",
+            "test_design_specs",
+            "test_cases",
+            "fsm_test_cases",
+            "prompt_evidence",
+            "revisions",
+            "analysis_results",
+            "oracle_results",
+            "optimization_result",
+            "fsm",
+        ],
+    )
     workflow_store.save_many(
         session_id,
         "requirements",
@@ -126,22 +179,6 @@ def _save_parse_output(session_id: str, output: dict) -> None:
         note="Agent runner stage parse_requirements prompt evidence.",
     )
     workflow_store.save_many(session_id, "prompt_evidence", prompt_evidence, "evidence_id")
-
-
-def _normalize_parse_result_ids(parse_result: ParseResult) -> None:
-    """Normalize the parse_result object used by both frontend response and background stages."""
-
-    id_map: dict[str, str] = {}
-    for index, requirement in enumerate(parse_result.requirements, start=1):
-        old_id = str(requirement.requirement_id or "")
-        new_id = f"REQ-AUT-{index:03d}"
-        if old_id:
-            id_map[old_id] = new_id
-        requirement.requirement_id = new_id
-
-    for index, requirement in enumerate(parse_result.analyzed_requirements, start=1):
-        old_id = str(requirement.requirement_id or "")
-        requirement.requirement_id = id_map.get(old_id, f"REQ-AUT-{index:03d}")
 
 
 def _raise_stage_error(data: dict) -> None:

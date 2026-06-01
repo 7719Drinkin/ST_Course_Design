@@ -1,5 +1,10 @@
 from .final_quality_gate import run_final_quality_gate
-from .id_normalizer import normalize_all_ids
+from .id_gate import (
+    require_id_format,
+    require_no_bad_coverage_ids,
+    require_pipeline_id_formats,
+    require_unique_ids,
+)
 from .output_validator import (
     validate_analyzed_requirements,
     validate_coverage_goals,
@@ -17,7 +22,10 @@ from .traceability_checker import check_traceability
 
 __all__ = [
     "check_traceability",
-    "normalize_all_ids",
+    "require_id_format",
+    "require_no_bad_coverage_ids",
+    "require_pipeline_id_formats",
+    "require_unique_ids",
     "run_final_quality_gate",
     "validate_analyzed_requirements",
     "validate_coverage_goals",
