@@ -7,20 +7,22 @@ from fastapi import HTTPException
 
 from common.ingest import ingest_manager
 
-from ..pipeline_bg import _background_full_pipeline
+from ..pipeline_bg import _background_pipeline_after_parse
 from ..store import workflow_store
 from ..util import (
     STAGE_PARSE,
     effective_rag_context,
-    normalize_stage_output,
-    parse_sse_event,
+    normalize_prompt_records,
     prompt_records_to_evidence,
     save_requirement_input,
     stage_output_summary,
 )
 from .schemas import ParseRequest, ParseResponse
 
-from agent import generate_blackbox_tests_stream
+from agent import AgentPipeline
+from agent.core.models import ParseResult
+from agent.pipeline.errors import StageExecutionError
+from agent.tools.validation.id_gate import REQ_ID_RE, require_id_format, require_unique_ids
 
 
 class IntakeParseService:
@@ -40,11 +42,37 @@ class IntakeParseService:
                 prompts_used=[],
             )
         save_requirement_input(request.session_id, requirement_text, request.rag_context)
-        output = await _runner_parse_output(request.session_id, requirement_text, request.rag_context)
+        run_id = workflow_store.start_pipeline_run(request.session_id)
+        pipeline = AgentPipeline()
+        pipeline_context = effective_rag_context(request.session_id, request.rag_context)
+        try:
+            parse_result = await _runner_parse_result(
+                request.session_id,
+                pipeline,
+                requirement_text,
+                pipeline_context,
+            )
+        except Exception as exc:
+            workflow_store.fail_pipeline_run(
+                request.session_id,
+                run_id,
+                "parse_requirements",
+                str(exc),
+            )
+            raise
+        workflow_store.complete_pipeline_stage(request.session_id, run_id, "parse_requirements", "analyze_risk")
+        output = parse_result.model_dump(mode="json")
+        output["prompts_used"] = normalize_prompt_records(output.get("prompts_used"))
 
-        # Launch background full pipeline after parse returns
+        # Continue the same pipeline from the already returned parse_result.
         asyncio.create_task(
-            _background_full_pipeline(request.session_id, requirement_text, request.rag_context)
+            _background_pipeline_after_parse(
+                request.session_id,
+                pipeline,
+                parse_result,
+                pipeline_context,
+                run_id,
+            )
         )
 
         return ParseResponse(
@@ -60,32 +88,67 @@ class IntakeParseService:
         return ingest_manager.load_text().strip()
 
 
-async def _runner_parse_output(
+async def _runner_parse_result(
     session_id: str,
+    pipeline: AgentPipeline,
     requirement_text: str,
     rag_context: str | None,
-) -> dict:
-    stream = generate_blackbox_tests_stream(
-        requirement_text=requirement_text,
-        rag_context=effective_rag_context(session_id, rag_context),
-    )
+) -> ParseResult:
     try:
-        async for raw_event in stream:
-            event, data = parse_sse_event(raw_event)
-            if event == "stage" and data.get("stage") == STAGE_PARSE:
-                output = normalize_stage_output(data.get("output") or {})
-                _save_parse_output(session_id, output)
-                return output
-            if event == "stage_error":
-                _raise_stage_error(data)
-    finally:
-        aclose = getattr(stream, "aclose", None)
-        if aclose is not None:
-            await aclose()
-    raise HTTPException(status_code=502, detail="Runner did not emit parse_requirements stage")
+        parse_result = await pipeline.parse_requirements(requirement_text, rag_context)
+    except StageExecutionError as exc:
+        _raise_stage_error({"stage": exc.stage, "error": exc.error})
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+    require_id_format(parse_result.requirements, "requirement_id", REQ_ID_RE, "requirements")
+    require_unique_ids(parse_result.requirements, "requirement_id", "requirements")
+    require_id_format(
+        parse_result.analyzed_requirements,
+        "requirement_id",
+        REQ_ID_RE,
+        "analyzed_requirements",
+    )
+    require_unique_ids(
+        parse_result.analyzed_requirements,
+        "requirement_id",
+        "analyzed_requirements",
+    )
+    requirement_ids = {item.requirement_id for item in parse_result.requirements}
+    analyzed_ids = {item.requirement_id for item in parse_result.analyzed_requirements}
+    if requirement_ids != analyzed_ids:
+        missing = sorted(requirement_ids - analyzed_ids)
+        extra = sorted(analyzed_ids - requirement_ids)
+        raise ValueError(
+            "analyzed_requirements must preserve parsed requirement IDs. "
+            f"missing={missing or []}, extra={extra or []}"
+        )
+    output = parse_result.model_dump(mode="json")
+    output["prompts_used"] = normalize_prompt_records(output.get("prompts_used"))
+    _save_parse_output(session_id, output)
+    return parse_result
 
 
 def _save_parse_output(session_id: str, output: dict) -> None:
+    workflow_store.clear_keys(
+        session_id,
+        [
+            "risk_analysis",
+            "risk_results",
+            "coverage_goals",
+            "coverage_items",
+            "strategies",
+            "test_design_specs",
+            "test_cases",
+            "fsm_test_cases",
+            "prompt_evidence",
+            "revisions",
+            "analysis_results",
+            "oracle_results",
+            "optimization_result",
+            "fsm",
+        ],
+    )
     workflow_store.save_many(
         session_id,
         "requirements",

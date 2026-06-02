@@ -242,5 +242,5 @@ external/
 .DS_Store
 
 /rag
-
+/temp
 atd_ingest

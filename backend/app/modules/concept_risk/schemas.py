@@ -39,6 +39,7 @@ class RiskRequest(FlexibleModel):
     requirement_text: str = ""
     analyzed_requirements: list[AnalyzedRequirement] = Field(default_factory=list)
     rag_context: str | None = None
+    include_prompt_evidence: bool = True
 
 
 # POST /risk 响应体

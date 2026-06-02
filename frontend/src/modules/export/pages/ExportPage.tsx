@@ -37,6 +37,7 @@ export function ExportPage() {
   const coverageItems = useAppStore((s) => s.coverageItems)
   const requirements = useAppStore((s) => s.requirements)
   const strategies = useAppStore((s) => s.strategies)
+  const fsm = useAppStore((s) => s.fsm)
   const promptEvidence = useAppStore((s) => s.promptEvidence)
   const analysisResults = useAppStore((s) => s.analysisResults)
   const optimizeResult = useAppStore((s) => s.optimizeResult)
@@ -85,6 +86,7 @@ export function ExportPage() {
         coverageItems,
         strategies,
         testCases: approved,
+        fsm,
         revisions,
         optimizeResult,
         promptEvidence,

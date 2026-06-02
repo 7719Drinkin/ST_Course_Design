@@ -2,7 +2,10 @@ from .clients import LLMClient, RAGClient
 from .formatting import extract_json, format_error_result, format_success_result
 from .validation import (
     check_traceability,
-    normalize_all_ids,
+    require_id_format,
+    require_no_bad_coverage_ids,
+    require_pipeline_id_formats,
+    require_unique_ids,
     run_final_quality_gate,
     validate_model,
     validate_model_list,
@@ -22,7 +25,10 @@ __all__ = [
     "extract_json",
     "format_error_result",
     "format_success_result",
-    "normalize_all_ids",
+    "require_id_format",
+    "require_no_bad_coverage_ids",
+    "require_pipeline_id_formats",
+    "require_unique_ids",
     "run_final_quality_gate",
     "validate_model",
     "validate_model_list",

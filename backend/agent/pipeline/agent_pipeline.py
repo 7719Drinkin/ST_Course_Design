@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+import time
 from collections.abc import Sequence
 from typing import Any
 
@@ -34,6 +36,9 @@ from ..tools.clients.rag_client import RAGClient
 from ..tools.validation.output_validator import validate_model_list
 from .errors import StageExecutionError
 from .stages import StageName
+
+
+logger = logging.getLogger(__name__)
 
 
 class AgentPipeline:
@@ -190,11 +195,30 @@ class AgentPipeline:
             risk_analysis=_model_list(risk_analysis or [], RiskAnalysisItem),
             rag_context=rag_context,
         )
+        started = time.perf_counter()
+        logger.info(
+            "generate_tests started: coverage_item_count=%s risk_item_count=%s",
+            len(context.coverage_items),
+            len(context.risk_analysis),
+        )
         if not context.rag_context:
             # RAG 只服务测试设计阶段；失败时归属 generate_tests，便于前端定位。
             await self._retrieve_rag_context(context)
+        spec_started = time.perf_counter()
         await self._run_agent(StageName.GENERATE_TESTS, self.test_design_spec_agent, context)
+        logger.info(
+            "generate_tests spec stage completed: seconds=%.2f spec_count=%s",
+            time.perf_counter() - spec_started,
+            len(context.test_design_specs),
+        )
+        case_started = time.perf_counter()
         await self._run_agent(StageName.GENERATE_TESTS, self.test_case_draft_agent, context)
+        logger.info(
+            "generate_tests case stage completed: seconds=%.2f case_count=%s total_seconds=%.2f",
+            time.perf_counter() - case_started,
+            len(context.test_cases),
+            time.perf_counter() - started,
+        )
         return GenerateResult(
             test_design_specs=context.test_design_specs,
             test_cases=context.test_cases,

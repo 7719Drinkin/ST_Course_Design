@@ -24,6 +24,7 @@ from .revision_utils import (
     merge_items,
     model_dump_item,
     model_dump_list,
+    preserve_existing_coverage_ids,
     split_created_updated,
     string_list,
     dedupe_by_id,
@@ -219,27 +220,35 @@ async def rerun_strategy(ctx: ReentryContext) -> ReentryResult:
     if not coverage_items:
         raise RevisionRunnerError("strategy reentry requires affected coverage items", 422)
 
-    strategy_result = await run_pipeline_step(
-        ctx,
-        stage="assign_strategy",
-        call=lambda: ctx.pipeline.assign_strategy(
-            coverage_goals_from_coverage_items(coverage_items),
-            analyzed_requirements_for_items(ctx.state, coverage_items),
-            agent_risk_items(ctx.state, coverage_items),
-            ctx.effective_rag_context,
-        ),
-        outputs=[
-            OutputSpec(
-                collection="coverage_items",
-                attr="coverage_items",
-                id_field="coverage_item_id",
-                mode="split",
-            )
-        ],
-        evidence_summary=lambda pipeline_result, changes: {
-            "stage": "strategy",
-            "coverage_item_count": len(pipeline_result.coverage_items),
-        },
+    pipeline_result = await ctx.pipeline.assign_strategy(
+        coverage_goals_from_coverage_items(coverage_items),
+        analyzed_requirements_for_items(ctx.state, coverage_items),
+        agent_risk_items(ctx.state, coverage_items),
+        ctx.effective_rag_context,
+    )
+    regenerated_coverage = model_dump_list(list(pipeline_result.coverage_items))
+    regenerated_coverage = preserve_existing_coverage_ids(regenerated_coverage, coverage_items)
+    mark_revision(regenerated_coverage, ctx.revision, "pipeline_regenerated")
+
+    created, updated = split_created_updated(
+        regenerated_coverage,
+        ctx.state.get("coverage_items", []),
+        "coverage_item_id",
+    )
+    strategy_result = ReentryResult(pipeline_result=pipeline_result)
+    strategy_result.changes.add_created("coverage_items", created)
+    strategy_result.changes.add_updated("coverage_items", updated)
+    strategy_result.evidence.extend(
+        agent_prompt_records_to_evidence(
+            ctx.session_id,
+            pipeline_result.prompts_used,
+            ctx.revision_id,
+            {
+                "stage": "strategy",
+                "coverage_item_count": len(regenerated_coverage),
+            },
+            "Revision re-entered AgentPipeline.assign_strategy.",
+        )
     )
     new_coverage = _changed_items(strategy_result.changes, "coverage_items")
     next_state = {
@@ -355,20 +364,31 @@ async def rerun_parse(ctx: ReentryContext) -> ReentryResult:
     )
     result.merge(coverage_result)
 
-    strategy_result = await run_pipeline_step(
-        ctx,
-        stage="assign_strategy",
-        call=lambda: ctx.pipeline.assign_strategy(
-            coverage_result.pipeline_result.coverage_goals,
-            analyzed_requirements,
-            risk_result.pipeline_result.risk_analysis,
-            ctx.effective_rag_context,
-        ),
-        outputs=[OutputSpec("coverage_items", "coverage_items", "coverage_item_id", mode="update", mark_revision=False)],
-        evidence_summary=lambda pipeline_result, changes: {
-            "stage": "strategy",
-            "coverage_item_count": len(pipeline_result.coverage_items),
-        },
+    strategy_pipeline_result = await ctx.pipeline.assign_strategy(
+        coverage_result.pipeline_result.coverage_goals,
+        analyzed_requirements,
+        risk_result.pipeline_result.risk_analysis,
+        ctx.effective_rag_context,
+    )
+    regenerated_coverage = model_dump_list(list(strategy_pipeline_result.coverage_items))
+    regenerated_coverage = preserve_existing_coverage_ids(
+        regenerated_coverage,
+        selected_coverage_items(ctx.impact, ctx.state, []),
+    )
+    mark_revision(regenerated_coverage, ctx.revision, "pipeline_regenerated")
+    strategy_result = ReentryResult(pipeline_result=strategy_pipeline_result)
+    strategy_result.changes.add_updated("coverage_items", regenerated_coverage)
+    strategy_result.evidence.extend(
+        agent_prompt_records_to_evidence(
+            ctx.session_id,
+            strategy_pipeline_result.prompts_used,
+            ctx.revision_id,
+            {
+                "stage": "strategy",
+                "coverage_item_count": len(regenerated_coverage),
+            },
+            "Revision re-entered AgentPipeline.assign_strategy.",
+        )
     )
     result.merge(strategy_result)
 
@@ -376,7 +396,7 @@ async def rerun_parse(ctx: ReentryContext) -> ReentryResult:
         ctx,
         stage="generate_tests",
         call=lambda: ctx.pipeline.generate_tests(
-            strategy_result.pipeline_result.coverage_items,
+            regenerated_coverage,
             risk_result.pipeline_result.risk_analysis,
             ctx.effective_rag_context,
         ),

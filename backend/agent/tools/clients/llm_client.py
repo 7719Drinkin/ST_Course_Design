@@ -32,7 +32,7 @@ class LLMClient:
         response = await client.chat.completions.create(
             model=self.model,
             messages=[{"role": "user", "content": prompt}],
-            temperature=0.2,
+            temperature=float(os.getenv("DEEPSEEK_TEMPERATURE", "0")),
             max_tokens=384000,
         )
         content = response.choices[0].message.content

@@ -50,7 +50,7 @@ TestCaseDraftAgent
   - `rag_client.py`：只负责 RAG 检索。
 - `tools/validation/`
   - `output_validator.py`：只负责 `dict/list -> models.py` 强类型对象。
-  - `id_normalizer.py`：只负责 ID 规范化和跨层引用同步。
+  - `id_gate.py`: validates ID format and references without rewriting LLM output.
   - `traceability_checker.py`：检查重复 ID 和同一条 requirement 链是否串错。
   - `final_quality_gate.py`：检查最终交付物是否齐备、引用是否存在、用例优先级是否回到风险分析。
 - `tools/formatting/`
@@ -81,7 +81,7 @@ input_validation
 finalizer 中的收尾顺序固定为：
 
 ```text
-normalize_all_ids(result)
+require_pipeline_id_formats(result)
 check_traceability(result)
 run_final_quality_gate(result)
 ```

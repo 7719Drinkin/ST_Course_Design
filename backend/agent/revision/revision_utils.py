@@ -137,6 +137,116 @@ def coverage_technique(item: dict[str, Any]) -> str:
     return "EP"
 
 
+def preserve_existing_coverage_ids(
+    generated_items: list[dict[str, Any]],
+    source_items: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Keep revised coverage items on their original IDs after LLM strategy reruns."""
+
+    if not generated_items:
+        return []
+    sources_by_id = {
+        str(item.get("coverage_item_id") or ""): item
+        for item in source_items
+        if item.get("coverage_item_id")
+    }
+    sources_by_goal = {
+        str(item.get("coverage_goal_id") or ""): item
+        for item in source_items
+        if item.get("coverage_goal_id")
+    }
+    source_queues: dict[tuple[str, str], list[dict[str, Any]]] = {}
+    for item in source_items:
+        source_queues.setdefault(_coverage_match_key(item), []).append(item)
+
+    used_source_ids: set[str] = set()
+    preserved: list[dict[str, Any]] = []
+    for index, item in enumerate(generated_items):
+        normalized = dict(item)
+        source = _match_source_coverage(
+            normalized,
+            source_items,
+            sources_by_id,
+            sources_by_goal,
+            source_queues,
+            used_source_ids,
+            index,
+        )
+        if source:
+            source_id = str(source.get("coverage_item_id") or "")
+            used_source_ids.add(source_id)
+            normalized["coverage_item_id"] = source_id
+            if source.get("coverage_goal_id"):
+                normalized["coverage_goal_id"] = source.get("coverage_goal_id")
+            if source.get("requirement_id"):
+                normalized["requirement_id"] = source.get("requirement_id")
+        elif _is_bad_regenerated_coverage_id(str(normalized.get("coverage_item_id") or "")):
+            normalized["coverage_item_id"] = _next_clean_coverage_id(normalized, [*source_items, *preserved])
+        preserved.append(normalized)
+    return dedupe_by_id(preserved, "coverage_item_id")
+
+
+def _match_source_coverage(
+    generated: dict[str, Any],
+    source_items: list[dict[str, Any]],
+    sources_by_id: dict[str, dict[str, Any]],
+    sources_by_goal: dict[str, dict[str, Any]],
+    source_queues: dict[tuple[str, str], list[dict[str, Any]]],
+    used_source_ids: set[str],
+    index: int,
+) -> dict[str, Any] | None:
+    generated_id = str(generated.get("coverage_item_id") or "")
+    source = sources_by_id.get(generated_id)
+    if source and generated_id not in used_source_ids:
+        return source
+
+    goal_id = str(generated.get("coverage_goal_id") or "")
+    source = sources_by_goal.get(goal_id)
+    source_id = str((source or {}).get("coverage_item_id") or "")
+    if source and source_id not in used_source_ids:
+        return source
+
+    for candidate in source_queues.get(_coverage_match_key(generated), []):
+        candidate_id = str(candidate.get("coverage_item_id") or "")
+        if candidate_id not in used_source_ids:
+            return candidate
+
+    if index < len(source_items):
+        source = source_items[index]
+        source_id = str(source.get("coverage_item_id") or "")
+        if source_id and source_id not in used_source_ids:
+            return source
+    return None
+
+
+def _coverage_match_key(item: dict[str, Any]) -> tuple[str, str]:
+    return (
+        str(item.get("requirement_id") or ""),
+        coverage_technique(item),
+    )
+
+
+def _is_bad_regenerated_coverage_id(coverage_id: str) -> bool:
+    return not coverage_id or coverage_id.startswith("COV-CG-") or "-CG-AUT-" in coverage_id
+
+
+def _next_clean_coverage_id(item: dict[str, Any], existing_items: list[dict[str, Any]]) -> str:
+    requirement_id = str(item.get("requirement_id") or "REQ-AUT-000")
+    technique = coverage_technique(item)
+    existing = {
+        str(existing.get("coverage_item_id") or "")
+        for existing in existing_items
+        if existing.get("coverage_item_id")
+    }
+    req_number = requirement_id.rsplit("-", 1)[-1] if "-" in requirement_id else "000"
+    index = 1
+    while True:
+        candidate = f"COV-AUT-{req_number}-{technique}-{index:03d}"
+        if candidate not in existing:
+            return candidate
+        index += 1
+
+
 def bounded_int(value: Any, default: int) -> int:
     try:
         parsed = int(value)

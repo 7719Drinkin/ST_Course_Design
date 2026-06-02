@@ -66,6 +66,7 @@ type AppState = {
   testCases: TestCase[]
   setTestCases: (data: TestCase[]) => void
   updateTestCase: (testId: string, patch: Partial<TestCase>, reason?: string, immediate?: boolean) => void
+  replaceTestCase: (testId: string, next: TestCase, reason?: string) => void
 
   oracleResults: OracleResult[]
   setOracleResults: (data: OracleResult[]) => void
@@ -157,8 +158,10 @@ export const useAppStore = create<AppState>((set, get) => ({
       }
       set({ revisions: [...get().revisions, rev] })
       try {
-        await saveRevisionLog(rev)
-        set({ revisions: get().revisions.map((r) => r.id === rev.id ? { ...r, syncStatus: 'saved' as RevisionSyncStatus } : r) })
+        const response = await saveRevisionLog(rev)
+        if (!response?.revision.revision_id) throw new Error('revision is not supported by backend')
+        const savedId = response.revision.revision_id
+        set({ revisions: get().revisions.map((r) => r.id === rev.id ? { ...r, id: savedId, syncStatus: 'saved' as RevisionSyncStatus } : r) })
       } catch {
         set({ revisions: get().revisions.map((r) => r.id === rev.id ? { ...r, syncStatus: 'failed' as RevisionSyncStatus } : r) })
       }
@@ -243,6 +246,39 @@ export const useAppStore = create<AppState>((set, get) => ({
     }, target)
     set({ testCases: get().testCases.map((t) => t.test_id === testId ? { ...t, ...patch } : t) })
   },
+  replaceTestCase: (testId, next, reason = '设计者修订完整测试用例') => {
+    const prev = get().testCases.find((t) => t.test_id === testId)
+    if (!prev) return
+    const revised = { ...next, test_id: testId }
+    if (JSON.stringify(prev) === JSON.stringify(revised)) return
+    get().addRevision({
+      step: 3,
+      entity_type: 'test_case',
+      entity_id: testId,
+      field: 'test_case',
+      old_value: '完整测试用例修订前',
+      new_value: '完整测试用例修订后',
+      before: prev as unknown as Record<string, unknown>,
+      after: revised as unknown as Record<string, unknown>,
+      reason,
+    })
+    set({
+      testCases: get().testCases.map((t) => t.test_id === testId ? revised : t),
+      oracleResults: get().oracleResults.map((oracle) => (
+        oracle.test_id === testId
+          ? {
+              ...oracle,
+              needs_review: true,
+              confidence: Math.min(oracle.confidence, 0.69),
+              explanation: [
+                oracle.explanation,
+                'Designer changed the test case; rerun Oracle review before export.',
+              ].filter(Boolean).join(' '),
+            }
+          : oracle
+      )),
+    })
+  },
 
   oracleResults: [],
   setOracleResults: (data) => set({ oracleResults: data }),
@@ -285,8 +321,10 @@ export const useAppStore = create<AppState>((set, get) => ({
       syncStatus: 'saving',
     }
     set({ revisions: [...get().revisions, revision] })
-    void saveRevisionLog(revision).then(() => {
-      set({ revisions: get().revisions.map((r) => r.id === revision.id ? { ...r, syncStatus: 'saved' as RevisionSyncStatus } : r) })
+    void saveRevisionLog(revision).then((response) => {
+      if (!response?.revision.revision_id) throw new Error('revision is not supported by backend')
+      const savedId = response.revision.revision_id
+      set({ revisions: get().revisions.map((r) => r.id === revision.id ? { ...r, id: savedId, syncStatus: 'saved' as RevisionSyncStatus } : r) })
     }).catch(() => {
       set({ revisions: get().revisions.map((r) => r.id === revision.id ? { ...r, syncStatus: 'failed' as RevisionSyncStatus } : r) })
     })

@@ -3,7 +3,15 @@
 from fastapi import APIRouter, Depends, UploadFile
 from fastapi.responses import Response
 
-from .schemas import IngestRequest, ParseRequest, ParseResponse, PromptRecord
+from ..store import workflow_store
+from .schemas import (
+    IngestRequest,
+    ParseRequest,
+    ParseResponse,
+    PipelineStatusRequest,
+    PipelineStatusResponse,
+    PromptRecord,
+)
 from .service import IntakeParseService
 
 router = APIRouter(tags=["01 intake-parse"])
@@ -38,3 +46,8 @@ async def parse_requirements(
     svc: IntakeParseService = Depends(get_intake_parse_service),
 ) -> ParseResponse:
     return await svc.parse(req)
+
+
+@router.post("/pipeline/status", response_model=PipelineStatusResponse)
+async def pipeline_status(req: PipelineStatusRequest) -> PipelineStatusResponse:
+    return PipelineStatusResponse(**workflow_store.get_pipeline_status(req.session_id))

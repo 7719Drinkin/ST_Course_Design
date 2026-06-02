@@ -1,4 +1,5 @@
 import { postBlob } from '@/shared/api/apiClient'
+import { backendRevisionTargetType } from '@/modules/test-design/api/revisionsApi'
 import type {
   AnalysisResult,
   CoverageItem,
@@ -10,6 +11,7 @@ import type {
   RiskEntry,
   StrategyItem,
   TestCase,
+  FSMResult,
 } from '@/shared/types'
 
 const DESIGN_SESSION_ID = 'SESSION-CURRENT'
@@ -22,6 +24,7 @@ type ExportSnapshot = {
   coverageItems: CoverageItem[]
   strategies: StrategyItem[]
   testCases: TestCase[]
+  fsm?: FSMResult | null
   revisions: RevisionLog[]
   optimizeResult?: OptimizeResult | null
   promptEvidence?: PromptEvidence[]
@@ -32,10 +35,10 @@ export function mapRevisionsForExport(revisions: RevisionLog[]): ExportRevisionR
   return revisions.map((r) => ({
     revision_id: r.id,
     session_id: DESIGN_SESSION_ID,
-    target_type: r.entity_type,
+    target_type: backendRevisionTargetType(r) ?? r.entity_type,
     target_id: r.entity_id,
-    before: { [r.field]: r.old_value },
-    after: { [r.field]: r.new_value },
+    before: r.before ?? { [r.field]: r.old_value },
+    after: r.after ?? { [r.field]: r.new_value },
     reason: r.reason ?? 'designer revision',
     created_by: 'designer',
     created_at: r.timestamp,
@@ -58,6 +61,8 @@ export async function exportApproved(
     coverage_items: snapshot?.coverageItems.map(mapCoverageItem),
     strategies: snapshot?.strategies,
     test_cases: snapshot?.testCases,
+    fsm: snapshot?.fsm,
+    fsm_test_cases: snapshot?.testCases.filter((item) => item.technique === 'FSM'),
     revisions: snapshot ? mapRevisionsForExport(snapshot.revisions) : undefined,
     optimization_result: snapshot?.optimizeResult,
     prompt_evidence: snapshot?.promptEvidence?.map(mapPromptEvidence),

@@ -17,12 +17,13 @@ def test_list_books_returns_json_array(aut_session, aut_base_url):
     assert isinstance(response.json(), list)
 
 
-def test_create_and_get_book_by_id(aut_session, aut_base_url, unique_suffix):
-    created = create_book(aut_session, aut_base_url, unique_suffix, available_copies=3)
+@pytest.mark.parametrize("available_copies", [10, 5, 100], ids=["typical", "science-fiction", "high-copies"])
+def test_create_and_get_book_by_id(aut_session, aut_base_url, unique_suffix, available_copies):
+    created = create_book(aut_session, aut_base_url, unique_suffix, available_copies=available_copies)
 
     assert created["id"] > 0
     assert created["title"] == f"Test Book {unique_suffix}"
-    assert created["availableCopies"] == 3
+    assert created["availableCopies"] == available_copies
 
     response = aut_session.get(f"{aut_base_url}/api/books/{created['id']}", timeout=5)
 
@@ -75,3 +76,19 @@ def test_delete_missing_book_returns_404(aut_session, aut_base_url):
     response = aut_session.delete(f"{aut_base_url}/api/books/99999999", timeout=5)
 
     assert response.status_code == 404
+
+
+@pytest.mark.parametrize(
+    "malformed_body",
+    ["{\"title\":\"Missing brace\"", "{\"title\":\"Trailing comma\",}", "{title:\"Unquoted key\"}"],
+    ids=["missing-closing-brace", "trailing-comma", "unquoted-key"],
+)
+def test_book_malformed_json_request_returns_400(aut_session, aut_base_url, malformed_body):
+    response = aut_session.post(
+        f"{aut_base_url}/api/books",
+        data=malformed_body,
+        headers={"Content-Type": "application/json"},
+        timeout=5,
+    )
+
+    assert response.status_code == 400

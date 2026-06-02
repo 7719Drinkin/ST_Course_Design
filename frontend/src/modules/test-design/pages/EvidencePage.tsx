@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Button, Card, Descriptions, List, Select, Space, Table, Tag, Typography, message } from 'antd'
 import { useAppStore } from '@/app/store/appStore'
-import { getAnalysisResults, regenerateFromRevision } from '@/modules/test-design/api/evidenceApi'
+import { mapRevisionsForExport } from '@/modules/export/api/exportApi'
+import { getAnalysisResults, refreshDesignArtifacts, regenerateFromRevision } from '@/modules/test-design/api/evidenceApi'
 import { RevisionPanel } from '@/shared/components/RevisionPanel'
 import { DataStatusTag, WorkflowEmptyState } from '@/shared/components/WorkflowFeedback'
 import type { AnalysisResult, RevisionLog } from '@/shared/types'
@@ -20,8 +21,13 @@ export function EvidencePage() {
   const strategies = useAppStore((s) => s.strategies)
   const riskEntries = useAppStore((s) => s.riskEntries)
   const testCases = useAppStore((s) => s.testCases)
+  const oracleResults = useAppStore((s) => s.oracleResults)
   const revisions = useAppStore((s) => s.revisions)
   const analysisResults = useAppStore((s) => s.analysisResults)
+  const setTestCases = useAppStore((s) => s.setTestCases)
+  const setOracleResults = useAppStore((s) => s.setOracleResults)
+  const setFsm = useAppStore((s) => s.setFsm)
+  const setPromptEvidence = useAppStore((s) => s.setPromptEvidence)
   const setAnalysisResults = useAppStore((s) => s.setAnalysisResults)
   const pipelineActive = useAppStore((s) => s.pipelineActive)
   const setRegenerateTriggered = useAppStore((s) => s.setRegenerateTriggered)
@@ -80,6 +86,10 @@ export function EvidencePage() {
   const handleRegenerate = async () => {
     const revisionId = selectedRevisionId ?? latestRevision?.id
     if (!revisionId) return
+    const selectedRevision = savedRevisions.find((item) => item.id === revisionId)
+    const isReviewOnlyRevision =
+      selectedRevision?.entity_type === 'test_case'
+      && ['status', 'review_status'].includes(selectedRevision.field)
     try {
       setRegenerateTriggered(true)
       setStagePolling(4, true)
@@ -91,21 +101,37 @@ export function EvidencePage() {
         strategies,
         risk_results: riskEntries,
         test_cases: testCases,
+        oracle_results: oracleResults,
+        revisions: mapRevisionsForExport(revisions),
       })
-      // Poll /analysis until results update
-      const prevIds = new Set(analysisResults.map((r) => r.test_id || r.coverage_item_id))
+
       let polls = 0
       const timer = setInterval(async () => {
         polls++
-        if (polls > 30) { clearInterval(timer); setStagePolling(4, false); return }
+        if (polls > 30) {
+          clearInterval(timer)
+          setStagePolling(4, false)
+          setRegenerateLive(false)
+          return
+        }
         try {
-          const result = await getAnalysisResults()
-          const changed = result.data.some((r) => r.status === 'improved' && !prevIds.has(r.test_id || r.coverage_item_id))
-            || result.data.length !== analysisResults.length
-          if (changed) {
-            setAnalysisResults(result.data)
-            setAnalysisLive(result.isLive)
+          const snapshot = await refreshDesignArtifacts()
+          setTestCases(snapshot.testCases)
+          setOracleResults(snapshot.oracleResults)
+          setFsm(snapshot.fsm)
+          setPromptEvidence(snapshot.promptEvidence)
+          setAnalysisResults(snapshot.analysisResults)
+          setAnalysisLive(true)
+
+          const hasRegeneratedOracle = snapshot.oracleResults.some((item) => (
+            item.regenerated_from_revision === revisionId
+          ))
+          const hasRegeneratedTestCase = snapshot.testCases.some((item) => (
+            item.regenerated_from_revision === revisionId
+          ))
+          if (hasRegeneratedOracle || hasRegeneratedTestCase || isReviewOnlyRevision) {
             setStagePolling(4, false)
+            setRegenerateLive(false)
             clearInterval(timer)
           }
         } catch { /* retry */ }

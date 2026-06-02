@@ -1,0 +1,244 @@
+{
+  "gate": "PASS",
+  "sample_count": 16,
+  "model": "deepseek-v4-flash",
+  "embedding_model": "BAAI/bge-small-zh-v1.5",
+  "thresholds": {
+    "faithfulness": 0.75,
+    "context_recall": 0.65,
+    "llm_context_precision_with_reference": 0.65,
+    "answer_relevancy": 0.7
+  },
+  "summary": {
+    "answer_relevancy": 0.8161,
+    "context_recall": 0.9375,
+    "faithfulness": 0.9635,
+    "llm_context_precision_with_reference": 0.8646
+  },
+  "rows": [
+    {
+      "user_input": "What should the API return when a client requests all books?",
+      "retrieved_contexts": [
+        "[docs/srs/AUT_SRS_IEEE830_v1.md] | | Detail | |---|---| | **Endpoint** | `GET /api/books` | | **Input** | None | | **Processing** | Retrieve all items from the in-memory book list | | **Output** | JSON array of Book objects (may be empty `[]`) | | **Acceptance Criteria** | Response status is `200 OK`; response body is a JSON array |",
+        "[docs/srs/AUT_SRS_IEEE830_v1.md] | | Detail | |---|---| | **Endpoint** | `GET /api/borrowing-records` | | **Input** | None | | **Processing** | Retrieve all borrow records from the in-memory list | | **Output** | JSON array of BorrowingRecord objects | | **Acceptance Criteria** | Response status is `200 OK`; body is a JSON array |",
+        "[docs/srs/AUT_SRS_IEEE830_v1.md] | | Detail | |---|---| | **Endpoint** | `POST /api/books` | | **Input** | JSON body: `title` (string, required), `author` (string, required), `publicationYear` (integer, required), `genre` (string, required), `availableCopies` (integer, required) | | **Processing** | Assign a generated integer `id`; add to in-memory list | | **Output** | `201 Created` + Book JSON object including the generated `id` | | **Acceptance Criteria** | Response status is `201 Created`; response body contains all submitted fields and a server-generated `id`; subsequent `GET /api/books/{id}` returns the same record |"
+      ],
+      "response": "The API should return a `200 OK` status and a JSON array of all Book objects in the system, which may be an empty array `[]`.",
+      "reference": "GET /api/books returns 200 OK and the response body is a JSON array containing all book records.",
+      "faithfulness": 0.6666666667,
+      "llm_context_precision_with_reference": 0.9999999999,
+      "context_recall": 1.0,
+      "answer_relevancy": 0.8821981049
+    },
+    {
+      "user_input": "What should happen when a client queries an existing book by ID?",
+      "retrieved_contexts": [
+        "[docs/srs/AUT_SRS_IEEE830_v1.md] | | Detail | |---|---| | **Endpoint** | `PUT /api/books/{id}` | | **Input** | Path parameter `id`: positive integer; JSON body: same fields as FR-AUT-BOOK-003 | | **Processing** | Locate book by `id`; replace all fields with the provided values; use the path `id` as the resource ID | | **Output** | `200 OK` + updated Book JSON; `404 Not Found` if ID does not exist | | **Acceptance Criteria** | Existing `id` → `200 OK` + updated fields; response body `id` equals the path parameter; non-existing `id` → `404 Not Found` |",
+        "[docs/srs/AUT_SRS_IEEE830_v1.md] | | Detail | |---|---| | **Endpoint** | `DELETE /api/books/{id}` | | **Input** | Path parameter `id`: positive integer | | **Processing** | Locate book by `id`; remove from in-memory list | | **Output** | `204 No Content` if found and deleted; `404 Not Found` if ID does not exist | | **Acceptance Criteria** | Existing `id` → `204 No Content`; subsequent `GET /api/books/{id}` returns `404 Not Found`; non-existing `id` → `404 Not Found` |",
+        "[docs/srs/AUT_SRS_IEEE830_v1.md] | | Detail | |---|---| | **Endpoint** | `GET /api/books/{id}` | | **Input** | Path parameter `id`: positive integer | | **Processing** | Look up the book by `id` in the in-memory list | | **Output** | `200 OK` + Book JSON object if found; `404 Not Found` if not found | | **Acceptance Criteria** | Existing `id` → `200 OK` + matching Book object; non-existing `id` → `404 Not Found` |"
+      ],
+      "response": "When a client queries an existing book by ID, the server returns a `200 OK` response with the Book JSON object matching that ID.",
+      "reference": "GET /api/books/{bookId} for an existing book returns 200 OK and the selected book record. If the book does not exist, the request should return a not-found status.",
+      "faithfulness": 1.0,
+      "llm_context_precision_with_reference": 0.3333333333,
+      "context_recall": 1.0,
+      "answer_relevancy": 0.913233378
+    },
+    {
+      "user_input": "What fields must a client submit when creating a book?",
+      "retrieved_contexts": [
+        "[docs/srs/AUT_SRS_IEEE830_v1.md] | Field | Type | Required | Server-Generated | Description | |---|---|---|---|---| | `id` | integer | Response only | Yes | Unique book identifier, auto-assigned on creation | | `title` | string | Yes | No | Book title | | `author` | string | Yes | No | Author's full name | | `publicationYear` | integer | Yes | No | Four-digit year of publication | | `genre` | string | Yes | No | Genre or subject category | | `availableCopies` | integer | Yes | No | Count of copies available to borrow; managed by borrow/return operations |",
+        "[docs/srs/AUT_SRS_IEEE830_v1.md] | | Detail | |---|---| | **Endpoint** | `POST /api/books` | | **Input** | JSON body: `title` (string, required), `author` (string, required), `publicationYear` (integer, required), `genre` (string, required), `availableCopies` (integer, required) | | **Processing** | Assign a generated integer `id`; add to in-memory list | | **Output** | `201 Created` + Book JSON object including the generated `id` | | **Acceptance Criteria** | Response status is `201 Created`; response body contains all submitted fields and a server-generated `id`; subsequent `GET /api/books/{id}` returns the same record |",
+        "[docs/srs/AUT_SRS_IEEE830_v1.md] | Field | Module | Valid Partition | Invalid Partition | Min Boundary | Max Boundary | Data Type | Notes | |---|---|---|---|---|---|---|---| | `id` (path param) | All | Existing positive integer | Non-existing integer, 0, negative, non-integer | 1 | System-dependent | integer | Server-generated; client must use a previously returned value | | `title` | Book | Non-empty string | Empty string, null, missing field | 1 char | Not enforced by baseline | string | No explicit length limit found in source | | `author` | Book | Non-empty string | Empty string, null, missing field | 1 char | Not enforced | string | | | `publicationYear` | Book | 4-digit integer (e.g. 1000–2100) | 0, negative, non-integer, missing | 1000 | 2100 (domain) | integer | No explicit range in source; domain constraint applied | | `genre` | Book | Non-empty string | Empty string, null, missing | 1 char | Not enforced | str"
+      ],
+      "response": "When creating a book, a client must submit the following required fields: `title` (string), `author` (string), `publicationYear` (integer), `genre` (string), and `availableCopies` (integer). The `id` is server-generated and should not be included in the request.",
+      "reference": "Book creation requires title, author, publication year, category or genre, and available copies. A successful POST /api/books stores the book, returns 201 Created, and generates a unique book ID.",
+      "faithfulness": 1.0,
+      "llm_context_precision_with_reference": 1.0,
+      "context_recall": 1.0,
+      "answer_relevancy": 0.852559433
+    },
+    {
+      "user_input": "What should the system do when updating a book ID that does not exist?",
+      "retrieved_contexts": [
+        "[docs/srs/AUT_SRS_IEEE830_v1.md] | | Detail | |---|---| | **Endpoint** | `PUT /api/books/{id}` | | **Input** | Path parameter `id`: positive integer; JSON body: same fields as FR-AUT-BOOK-003 | | **Processing** | Locate book by `id`; replace all fields with the provided values; use the path `id` as the resource ID | | **Output** | `200 OK` + updated Book JSON; `404 Not Found` if ID does not exist | | **Acceptance Criteria** | Existing `id` → `200 OK` + updated fields; response body `id` equals the path parameter; non-existing `id` → `404 Not Found` |",
+        "[docs/srs/AUT_SRS_IEEE830_v1.md] | | Detail | |---|---| | **Endpoint** | `DELETE /api/books/{id}` | | **Input** | Path parameter `id`: positive integer | | **Processing** | Locate book by `id`; remove from in-memory list | | **Output** | `204 No Content` if found and deleted; `404 Not Found` if ID does not exist | | **Acceptance Criteria** | Existing `id` → `204 No Content`; subsequent `GET /api/books/{id}` returns `404 Not Found`; non-existing `id` → `404 Not Found` |",
+        "[docs/srs/AUT_SRS_IEEE830_v1.md] **Description:** The system shall return one book when requested by a valid existing ID, and shall return 404 when the ID does not exist."
+      ],
+      "response": "The system should return a `404 Not Found` response when attempting to update a book with an ID that does not exist, as specified in the SRS for the `PUT /api/books/{id}` endpoint.",
+      "reference": "Updating a non-existing book must not create a new book. The API should indicate that the target resource was not found.",
+      "faithfulness": 1.0,
+      "llm_context_precision_with_reference": 0.8333333333,
+      "context_recall": 1.0,
+      "answer_relevancy": 0.9073326416
+    },
+    {
+      "user_input": "What observable result should follow a successful book deletion?",
+      "retrieved_contexts": [
+        "[docs/srs/AUT_SRS_IEEE830_v1.md] | | Detail | |---|---| | **Endpoint** | `DELETE /api/books/{id}` | | **Input** | Path parameter `id`: positive integer | | **Processing** | Locate book by `id`; remove from in-memory list | | **Output** | `204 No Content` if found and deleted; `404 Not Found` if ID does not exist | | **Acceptance Criteria** | Existing `id` → `204 No Content`; subsequent `GET /api/books/{id}` returns `404 Not Found`; non-existing `id` → `404 Not Found` |",
+        "[docs/srs/AUT_SRS_IEEE830_v1.md] | | Detail | |---|---| | **Endpoint** | `PUT /api/books/{id}` | | **Input** | Path parameter `id`: positive integer; JSON body: same fields as FR-AUT-BOOK-003 | | **Processing** | Locate book by `id`; replace all fields with the provided values; use the path `id` as the resource ID | | **Output** | `200 OK` + updated Book JSON; `404 Not Found` if ID does not exist | | **Acceptance Criteria** | Existing `id` → `200 OK` + updated fields; response body `id` equals the path parameter; non-existing `id` → `404 Not Found` |",
+        "[docs/srs/AUT_SRS_IEEE830_v1.md] | | Detail | |---|---| | **Endpoint** | `GET /api/books/{id}` | | **Input** | Path parameter `id`: positive integer | | **Processing** | Look up the book by `id` in the in-memory list | | **Output** | `200 OK` + Book JSON object if found; `404 Not Found` if not found | | **Acceptance Criteria** | Existing `id` → `200 OK` + matching Book object; non-existing `id` → `404 Not Found` |"
+      ],
+      "response": "A successful book deletion results in a `204 No Content` response, and any subsequent `GET /api/books/{id}` for the deleted book returns `404 Not Found`.",
+      "reference": "A successful DELETE /api/books/{bookId} removes the existing book and returns a no-content status. A later query for the same ID should return not found.",
+      "faithfulness": 1.0,
+      "llm_context_precision_with_reference": 0.8333333333,
+      "context_recall": 1.0,
+      "answer_relevancy": 0.8534397421
+    },
+    {
+      "user_input": "What should the API return when a client requests all members?",
+      "retrieved_contexts": [
+        "[docs/srs/AUT_SRS_IEEE830_v1.md] | | Detail | |---|---| | **Endpoint** | `GET /api/members` | | **Input** | None | | **Processing** | Retrieve all items from the in-memory member list | | **Output** | JSON array of Member objects (may be empty) | | **Acceptance Criteria** | Response status is `200 OK`; body is a JSON array |",
+        "[docs/srs/AUT_SRS_IEEE830_v1.md] | | Detail | |---|---| | **Endpoint** | `GET /api/borrowing-records` | | **Input** | None | | **Processing** | Retrieve all borrow records from the in-memory list | | **Output** | JSON array of BorrowingRecord objects | | **Acceptance Criteria** | Response status is `200 OK`; body is a JSON array |",
+        "[docs/srs/AUT_SRS_IEEE830_v1.md] | | Detail | |---|---| | **Endpoint** | `GET /api/books` | | **Input** | None | | **Processing** | Retrieve all items from the in-memory book list | | **Output** | JSON array of Book objects (may be empty `[]`) | | **Acceptance Criteria** | Response status is `200 OK`; response body is a JSON array |"
+      ],
+      "response": "When a client requests all members via `GET /api/members`, the API returns a JSON array of Member objects with a `200 OK` status. The array may be empty if no members exist.",
+      "reference": "GET /api/members returns 200 OK and a JSON array containing all member records.",
+      "faithfulness": 1.0,
+      "llm_context_precision_with_reference": 0.9999999999,
+      "context_recall": 1.0,
+      "answer_relevancy": 0.9620447902
+    },
+    {
+      "user_input": "Which fields are required when creating a member?",
+      "retrieved_contexts": [
+        "[docs/srs/AUT_SRS_IEEE830_v1.md] | Field | Type | Required | Server-Generated | Description | |---|---|---|---|---| | `id` | integer | Response only | Yes | Unique member identifier | | `name` | string | Yes | No | Member's full name | | `email` | string | Yes | No | Member's email address | | `phoneNumber` | string | Yes | No | Member's phone number | | `startDate` | date (ISO 8601) | Yes | No | Membership start date | | `endDate` | date (ISO 8601) | Yes | No | Membership end date |",
+        "[docs/srs/AUT_SRS_IEEE830_v1.md] | | Detail | |---|---| | **Endpoint** | `POST /api/members` | | **Input** | JSON body: `name` (string, required), `email` (string, required), `phoneNumber` (string, required), `startDate` (ISO 8601 date, required), `endDate` (ISO 8601 date, required) | | **Processing** | Assign a generated integer `id`; add to in-memory list | | **Output** | `201 Created` + Member JSON with generated `id` | | **Acceptance Criteria** | Response status is `201 Created`; body contains all submitted fields and a generated `id` |",
+        "[docs/srs/AUT_SRS_IEEE830_v1.md] | | Detail | |---|---| | **Endpoint** | `POST /api/borrow` | | **Input** | JSON body: `book.id` (integer, required), `member.id` (integer, required) | | **Processing** | Validate `book.id` exists → validate `member.id` exists → check `availableCopies > 0` → create borrow record with `borrowDate = today`, `dueDate = today + 14 days`, `returnDate = null` → decrement `availableCopies` by 1 | | **Output** | `201 Created` + BorrowingRecord JSON | | **Acceptance Criteria** | Response status is `201 Created`; `borrowDate` = current date; `dueDate` = `borrowDate + 14 days`; `returnDate` is `null`; `book.availableCopies` decremented by 1 |"
+      ],
+      "response": "The required fields when creating a member are `name`, `email`, `phoneNumber`, `startDate`, and `endDate`. The `id` is server-generated and not required in the request.",
+      "reference": "Member creation requires name, email, phone number, membership start date, and membership end date. A successful POST /api/members stores the member and generates a unique member ID.",
+      "faithfulness": 1.0,
+      "llm_context_precision_with_reference": 1.0,
+      "context_recall": 1.0,
+      "answer_relevancy": 0.9651582593
+    },
+    {
+      "user_input": "What information does a borrowing record contain?",
+      "retrieved_contexts": [
+        "[docs/srs/AUT_SRS_IEEE830_v1.md] tDate` | `0001-01-02` | `9999-12-31` | date string | | | `book.id` (borrow body) | Borrowing | Existing book ID | Non-existing ID, 0, negative, missing field | 1 | System-dependent | integer | **EP: existing vs non-existing; BVA: boundary at existence** | | `member.id` (borrow body) | Borrowing | Existing member ID | Non-existing ID, 0, negative, missing field | 1 | System-dependent | integer | Same as above | | `recordId` (return path) | Return | Existing unreturned record ID | Non-existing ID, already-returned record ID | 1 | System-dependent | integer | **EP: unreturned vs returned vs missing** | | `dueDate` | BorrowingRecord | Always `borrowDate + 14` | (server-computed; client cannot set) | borrowDate + 14 | borrowDate + 14 | date string | **BVA: exact 14-day window** |",
+        "[docs/srs/AUT_SRS_IEEE830_v1.md] | Term | Definition | |---|---| | AUT | Application Under Test — the Library Management System | | SRS | Software Requirements Specification (this document) | | FR | Functional Requirement | | NFR | Non-Functional Requirement | | EP | Equivalence Partitioning (ISTQB FL §4.2.2) | | BVA | Boundary Value Analysis (ISTQB FL §4.2.3) | | DT | Decision Table Testing (ISTQB FL §4.2.4) | | ST | State Transition Testing (ISTQB FL §4.2.5) | | FSM | Finite State Machine | | REST | Representational State Transfer | | HTTP | Hypertext Transfer Protocol | | JSON | JavaScript Object Notation | | ISO 8601 | International date format standard: `YYYY-MM-DD` | | `availableCopies` | The count of physical copies of a book that are currently not borrowed | | Borrow record | A server-created entity linking a Member, a Book, a borrow date, and a due date | | Active borrow | A borrow record whose `returnDate` is ",
+        "[docs/srs/AUT_SRS_IEEE830_v1.md] | Field | Type | Required | Server-Generated | Description | |---|---|---|---|---| | `id` | integer | Response only | Yes | Unique borrow record identifier | | `book.id` | integer | Request: Yes | No | ID of the book being borrowed | | `member.id` | integer | Request: Yes | No | ID of the borrowing member | | `borrowDate` | date (ISO 8601) | Response only | Yes | Date borrow was processed (server clock) | | `dueDate` | date (ISO 8601) | Response only | Yes | `borrowDate + 14 days` | | `returnDate` | date (ISO 8601) or `null` | Response/Update | Yes | Date returned; `null` if still borrowed |"
+      ],
+      "response": "A borrowing record contains a unique `id`, the `book.id` and `member.id` of the borrowed book and member, the `borrowDate`, the `dueDate` (borrowDate + 14 days), and a `returnDate` (or `null` if not yet returned).",
+      "reference": "A borrowing record includes borrowing record ID, book information, member information, borrow date, due date, and return date. The borrowing record ID, borrow date, and due date are generated by the system.",
+      "faithfulness": 1.0,
+      "llm_context_precision_with_reference": 1.0,
+      "context_recall": 1.0,
+      "answer_relevancy": 0.8647280662
+    },
+    {
+      "user_input": "What preconditions are required for a successful borrow operation?",
+      "retrieved_contexts": [
+        "[docs/srs/AUT_SRS_IEEE830_v1.md] | | Detail | |---|---| | **Endpoint** | `POST /api/borrow` | | **Input** | JSON body: `book.id` (integer, required), `member.id` (integer, required) | | **Processing** | Validate `book.id` exists → validate `member.id` exists → check `availableCopies > 0` → create borrow record with `borrowDate = today`, `dueDate = today + 14 days`, `returnDate = null` → decrement `availableCopies` by 1 | | **Output** | `201 Created` + BorrowingRecord JSON | | **Acceptance Criteria** | Response status is `201 Created`; `borrowDate` = current date; `dueDate` = `borrowDate + 14 days`; `returnDate` is `null`; `book.availableCopies` decremented by 1 |",
+        "[docs/srs/AUT_SRS_IEEE830_v1.md] | | Detail | |---|---| | **Endpoint** | `POST /api/borrow` | | **Input** | Valid `book.id` and `member.id`; book has `availableCopies = 0` | | **Processing** | After validating IDs, check `availableCopies`; if `≤ 0`, reject | | **Output** | `400 Bad Request`; no borrow record created; `availableCopies` unchanged | | **Acceptance Criteria** | Response status is `400 Bad Request`; `availableCopies` does not become negative |",
+        "[docs/srs/AUT_SRS_IEEE830_v1.md] | Field | Type | Required | Server-Generated | Description | |---|---|---|---|---| | `id` | integer | Response only | Yes | Unique borrow record identifier | | `book.id` | integer | Request: Yes | No | ID of the book being borrowed | | `member.id` | integer | Request: Yes | No | ID of the borrowing member | | `borrowDate` | date (ISO 8601) | Response only | Yes | Date borrow was processed (server clock) | | `dueDate` | date (ISO 8601) | Response only | Yes | `borrowDate + 14 days` | | `returnDate` | date (ISO 8601) or `null` | Response/Update | Yes | Date returned; `null` if still borrowed |"
+      ],
+      "response": "The preconditions for a successful borrow are: a valid `book.id` and `member.id` must be provided, the book must exist, the member must exist, and the book's `availableCopies` must be greater than zero.",
+      "reference": "A borrow request succeeds only when the book exists, the member exists, and the selected book has availableCopies greater than 0. The request contains book ID and member ID.",
+      "faithfulness": 1.0,
+      "llm_context_precision_with_reference": 1.0,
+      "context_recall": 1.0,
+      "answer_relevancy": 0.9266678556
+    },
+    {
+      "user_input": "What state changes occur after a successful borrow?",
+      "retrieved_contexts": [
+        "[docs/srs/AUT_SRS_IEEE830_v1.md] | | Detail | |---|---| | **Endpoint** | `POST /api/borrow` | | **Input** | JSON body: `book.id` (integer, required), `member.id` (integer, required) | | **Processing** | Validate `book.id` exists → validate `member.id` exists → check `availableCopies > 0` → create borrow record with `borrowDate = today`, `dueDate = today + 14 days`, `returnDate = null` → decrement `availableCopies` by 1 | | **Output** | `201 Created` + BorrowingRecord JSON | | **Acceptance Criteria** | Response status is `201 Created`; `borrowDate` = current date; `dueDate` = `borrowDate + 14 days`; `returnDate` is `null`; `book.availableCopies` decremented by 1 |",
+        "[docs/srs/AUT_SRS_IEEE830_v1.md] | Field | Type | Required | Server-Generated | Description | |---|---|---|---|---| | `id` | integer | Response only | Yes | Unique borrow record identifier | | `book.id` | integer | Request: Yes | No | ID of the book being borrowed | | `member.id` | integer | Request: Yes | No | ID of the borrowing member | | `borrowDate` | date (ISO 8601) | Response only | Yes | Date borrow was processed (server clock) | | `dueDate` | date (ISO 8601) | Response only | Yes | `borrowDate + 14 days` | | `returnDate` | date (ISO 8601) or `null` | Response/Update | Yes | Date returned; `null` if still borrowed |",
+        "[docs/srs/AUT_SRS_IEEE830_v1.md] 1. The AUT process is running and healthy at `http://localhost:8080` before any test is executed. 2. The in-memory store is empty at application start; each test session begins in a clean state. 3. The server clock is used for `borrowDate`; tests must not depend on a specific date value. 4. `dueDate` is always `borrowDate + 14 days` (derived from `LibraryService` source code). 5. `availableCopies` is the sole gating condition for whether a borrow request succeeds. 6. IDs are assigned sequentially starting from 1 within each resource type for a fresh process."
+      ],
+      "response": "After a successful borrow, a new `BorrowingRecord` is created with `borrowDate` set to the current date, `dueDate` = `borrowDate + 14 days`, and `returnDate` = `null`. The `availableCopies` of the associated book is decremented by 1.",
+      "reference": "After a successful borrow, borrowDate is the current date, dueDate is current date plus 14 days, returnDate is empty, and the borrowed book's availableCopies decreases by 1.",
+      "faithfulness": 1.0,
+      "llm_context_precision_with_reference": 1.0,
+      "context_recall": 1.0,
+      "answer_relevancy": 0.7509122296
+    },
+    {
+      "user_input": "How should the system handle a borrow request with a missing or unknown book ID?",
+      "retrieved_contexts": [
+        "[docs/srs/AUT_SRS_IEEE830_v1.md] | | Detail | |---|---| | **Endpoint** | `POST /api/borrow` | | **Input** | JSON body with missing `book.id` field, or with `book.id` that does not match any existing book | | **Processing** | Validate `book.id`; if absent or not found, reject | | **Output** | `400 Bad Request`; no borrow record created | | **Acceptance Criteria** | Response status is `400 Bad Request`; borrow record count does not increase |",
+        "[docs/srs/AUT_SRS_IEEE830_v1.md] | | Detail | |---|---| | **Endpoint** | `POST /api/borrow` | | **Input** | JSON body with missing `member.id` field, or with `member.id` that does not match any existing member | | **Processing** | Validate `member.id`; if absent or not found, reject | | **Output** | `400 Bad Request`; no borrow record created | | **Acceptance Criteria** | Response status is `400 Bad Request`; borrow record count does not increase |",
+        "[docs/srs/AUT_SRS_IEEE830_v1.md] | | Detail | |---|---| | **Endpoint** | `POST /api/borrow` | | **Input** | Valid `book.id` and `member.id`; book has `availableCopies = 0` | | **Processing** | After validating IDs, check `availableCopies`; if `≤ 0`, reject | | **Output** | `400 Bad Request`; no borrow record created; `availableCopies` unchanged | | **Acceptance Criteria** | Response status is `400 Bad Request`; `availableCopies` does not become negative |"
+      ],
+      "response": "The system should reject the request with a `400 Bad Request` status and not create any borrow record when the `book.id` is missing or does not match an existing book.",
+      "reference": "If the borrow request book ID is missing or does not match an existing book, the request is rejected and no borrowing record is created.",
+      "faithfulness": 1.0,
+      "llm_context_precision_with_reference": 0.9999999999,
+      "context_recall": 1.0,
+      "answer_relevancy": 0.8438014663
+    },
+    {
+      "user_input": "How should the system handle a borrow request with a missing or unknown member ID?",
+      "retrieved_contexts": [
+        "[docs/srs/AUT_SRS_IEEE830_v1.md] | | Detail | |---|---| | **Endpoint** | `POST /api/borrow` | | **Input** | JSON body with missing `member.id` field, or with `member.id` that does not match any existing member | | **Processing** | Validate `member.id`; if absent or not found, reject | | **Output** | `400 Bad Request`; no borrow record created | | **Acceptance Criteria** | Response status is `400 Bad Request`; borrow record count does not increase |",
+        "[docs/srs/AUT_SRS_IEEE830_v1.md] | | Detail | |---|---| | **Endpoint** | `POST /api/borrow` | | **Input** | JSON body with missing `book.id` field, or with `book.id` that does not match any existing book | | **Processing** | Validate `book.id`; if absent or not found, reject | | **Output** | `400 Bad Request`; no borrow record created | | **Acceptance Criteria** | Response status is `400 Bad Request`; borrow record count does not increase |",
+        "[docs/srs/AUT_SRS_IEEE830_v1.md] | | Detail | |---|---| | **Endpoint** | `POST /api/borrow` | | **Input** | Valid `book.id` and `member.id`; book has `availableCopies = 0` | | **Processing** | After validating IDs, check `availableCopies`; if `≤ 0`, reject | | **Output** | `400 Bad Request`; no borrow record created; `availableCopies` unchanged | | **Acceptance Criteria** | Response status is `400 Bad Request`; `availableCopies` does not become negative |"
+      ],
+      "response": "The system should validate the `member.id` field; if missing or not matching any existing member, it returns a `400 Bad Request` with no borrow record created.",
+      "reference": "If the borrow request member ID is missing or does not match an existing member, the request is rejected and no borrowing record is created.",
+      "faithfulness": 1.0,
+      "llm_context_precision_with_reference": 0.9999999999,
+      "context_recall": 1.0,
+      "answer_relevancy": 0.7567873649
+    },
+    {
+      "user_input": "What should happen when a client tries to borrow a book with zero available copies?",
+      "retrieved_contexts": [
+        "[docs/srs/AUT_SRS_IEEE830_v1.md] | | Detail | |---|---| | **Endpoint** | `POST /api/borrow` | | **Input** | Valid `book.id` and `member.id`; book has `availableCopies = 0` | | **Processing** | After validating IDs, check `availableCopies`; if `≤ 0`, reject | | **Output** | `400 Bad Request`; no borrow record created; `availableCopies` unchanged | | **Acceptance Criteria** | Response status is `400 Bad Request`; `availableCopies` does not become negative |",
+        "[docs/srs/AUT_SRS_IEEE830_v1.md] | State ID | State Name | Description | |---|---|---| | S0 | **AVAILABLE** | The book exists and `availableCopies > 0`. It may be borrowed. | | S1 | **BORROWED** | A borrow record exists for this book with `returnDate = null`; `availableCopies` was decremented. | | S2 | **RETURNED** | The borrow record has been closed (`returnDate` set); `availableCopies` was incremented. | | S3 | **REJECTED** | A request was refused due to an invalid input or violated business rule (HTTP 400). This is a transient error state, not persisted. |",
+        "[docs/srs/AUT_SRS_IEEE830_v1.md] | Term | Definition | |---|---| | AUT | Application Under Test — the Library Management System | | SRS | Software Requirements Specification (this document) | | FR | Functional Requirement | | NFR | Non-Functional Requirement | | EP | Equivalence Partitioning (ISTQB FL §4.2.2) | | BVA | Boundary Value Analysis (ISTQB FL §4.2.3) | | DT | Decision Table Testing (ISTQB FL §4.2.4) | | ST | State Transition Testing (ISTQB FL §4.2.5) | | FSM | Finite State Machine | | REST | Representational State Transfer | | HTTP | Hypertext Transfer Protocol | | JSON | JavaScript Object Notation | | ISO 8601 | International date format standard: `YYYY-MM-DD` | | `availableCopies` | The count of physical copies of a book that are currently not borrowed | | Borrow record | A server-created entity linking a Member, a Book, a borrow date, and a due date | | Active borrow | A borrow record whose `returnDate` is "
+      ],
+      "response": "When a client attempts to borrow a book with zero available copies, the system responds with a `400 Bad Request`, does not create a borrow record, and leaves `availableCopies` unchanged (context [1]). This corresponds to the transient error state S3 (REJECTED) described in the state model (context [2]).",
+      "reference": "When the target book has availableCopies equal to 0, the system rejects the borrow request, creates no borrowing record, and does not reduce availableCopies below 0.",
+      "faithfulness": 1.0,
+      "llm_context_precision_with_reference": 1.0,
+      "context_recall": 1.0,
+      "answer_relevancy": 0.9590247173
+    },
+    {
+      "user_input": "What state update should occur after a successful return?",
+      "retrieved_contexts": [
+        "[docs/srs/AUT_SRS_IEEE830_v1.md] | Term | Definition | |---|---| | AUT | Application Under Test — the Library Management System | | SRS | Software Requirements Specification (this document) | | FR | Functional Requirement | | NFR | Non-Functional Requirement | | EP | Equivalence Partitioning (ISTQB FL §4.2.2) | | BVA | Boundary Value Analysis (ISTQB FL §4.2.3) | | DT | Decision Table Testing (ISTQB FL §4.2.4) | | ST | State Transition Testing (ISTQB FL §4.2.5) | | FSM | Finite State Machine | | REST | Representational State Transfer | | HTTP | Hypertext Transfer Protocol | | JSON | JavaScript Object Notation | | ISO 8601 | International date format standard: `YYYY-MM-DD` | | `availableCopies` | The count of physical copies of a book that are currently not borrowed | | Borrow record | A server-created entity linking a Member, a Book, a borrow date, and a due date | | Active borrow | A borrow record whose `returnDate` is ",
+        "[docs/srs/AUT_SRS_IEEE830_v1.md] | | Detail | |---|---| | **Endpoint** | `POST /api/borrow` | | **Input** | JSON body: `book.id` (integer, required), `member.id` (integer, required) | | **Processing** | Validate `book.id` exists → validate `member.id` exists → check `availableCopies > 0` → create borrow record with `borrowDate = today`, `dueDate = today + 14 days`, `returnDate = null` → decrement `availableCopies` by 1 | | **Output** | `201 Created` + BorrowingRecord JSON | | **Acceptance Criteria** | Response status is `201 Created`; `borrowDate` = current date; `dueDate` = `borrowDate + 14 days`; `returnDate` is `null`; `book.availableCopies` decremented by 1 |",
+        "[docs/srs/AUT_SRS_IEEE830_v1.md] | | Detail | |---|---| | **Endpoint** | `PUT /api/return/{recordId}` | | **Input** | Path parameter `recordId`: positive integer; must reference an existing borrow record with `returnDate = null` | | **Processing** | Locate the borrow record → set `returnDate = today` → increment `book.availableCopies` by 1 | | **Output** | `200 OK` + updated BorrowingRecord JSON | | **Acceptance Criteria** | Response status is `200 OK`; `returnDate` is set to the current date; `book.availableCopies` increases by 1 |"
+      ],
+      "response": "After a successful return, the `returnDate` field of the borrow record is set to the current date, and the associated book's `availableCopies` is incremented by 1.",
+      "reference": "When returning succeeds, the system records the current date as returnDate and increments the related book's availableCopies by 1.",
+      "faithfulness": 1.0,
+      "llm_context_precision_with_reference": 0.8333333333,
+      "context_recall": 1.0,
+      "answer_relevancy": 0.7465228337
+    },
+    {
+      "user_input": "How should the system respond to a duplicate return request?",
+      "retrieved_contexts": [
+        "[docs/srs/AUT_SRS_IEEE830_v1.md] **Description:** The system shall reject a return request when the borrow record has already been returned.",
+        "[docs/srs/AUT_SRS_IEEE830_v1.md] | | Detail | |---|---| | **Endpoint** | `PUT /api/return/{recordId}` | | **Input** | Path parameter `recordId` referencing a borrow record with `returnDate ≠ null` | | **Processing** | Locate record; check `returnDate`; if already set, reject | | **Output** | `400 Bad Request` on the second call | | **Acceptance Criteria** | First return call → `200 OK`; second call on same `recordId` → `400 Bad Request` |",
+        "[docs/srs/AUT_SRS_IEEE830_v1.md] | State ID | State Name | Description | |---|---|---| | S0 | **AVAILABLE** | The book exists and `availableCopies > 0`. It may be borrowed. | | S1 | **BORROWED** | A borrow record exists for this book with `returnDate = null`; `availableCopies` was decremented. | | S2 | **RETURNED** | The borrow record has been closed (`returnDate` set); `availableCopies` was incremented. | | S3 | **REJECTED** | A request was refused due to an invalid input or violated business rule (HTTP 400). This is a transient error state, not persisted. |"
+      ],
+      "response": "The system should reject a duplicate return request with a `400 Bad Request` status code, because the borrow record already has a `returnDate` set (indicating it was previously returned).",
+      "reference": "If a borrowing record has already been returned, submitting another return request for the same record must be rejected.",
+      "faithfulness": 1.0,
+      "llm_context_precision_with_reference": 1.0,
+      "context_recall": 1.0,
+      "answer_relevancy": 0.8727296208
+    },
+    {
+      "user_input": "What should happen when a JSON endpoint receives malformed JSON?",
+      "retrieved_contexts": [
+        "[docs/srs/AUT_SRS_IEEE830_v1.md] | | Detail | |---|---| | **Endpoint** | `POST /api/borrow` | | **Input** | JSON body: `book.id` (integer, required), `member.id` (integer, required) | | **Processing** | Validate `book.id` exists → validate `member.id` exists → check `availableCopies > 0` → create borrow record with `borrowDate = today`, `dueDate = today + 14 days`, `returnDate = null` → decrement `availableCopies` by 1 | | **Output** | `201 Created` + BorrowingRecord JSON | | **Acceptance Criteria** | Response status is `201 Created`; `borrowDate` = current date; `dueDate` = `borrowDate + 14 days`; `returnDate` is `null`; `book.availableCopies` decremented by 1 |",
+        "[docs/srs/AUT_SRS_IEEE830_v1.md] | | Detail | |---|---| | **Endpoint** | `POST /api/borrow` | | **Input** | JSON body with missing `book.id` field, or with `book.id` that does not match any existing book | | **Processing** | Validate `book.id`; if absent or not found, reject | | **Output** | `400 Bad Request`; no borrow record created | | **Acceptance Criteria** | Response status is `400 Bad Request`; borrow record count does not increase |",
+        "[docs/srs/AUT_SRS_IEEE830_v1.md] | | Detail | |---|---| | **Endpoint** | `POST /api/borrow` | | **Input** | JSON body with missing `member.id` field, or with `member.id` that does not match any existing member | | **Processing** | Validate `member.id`; if absent or not found, reject | | **Output** | `400 Bad Request`; no borrow record created | | **Acceptance Criteria** | Response status is `400 Bad Request`; borrow record count does not increase |"
+      ],
+      "response": "The retrieved contexts do not specify behavior for malformed JSON (e.g., syntax errors). They only describe validation for missing or invalid fields within a valid JSON structure. Therefore, the expected response for truly malformed JSON is not addressed.",
+      "reference": "Malformed or unparsable JSON request bodies for JSON-based create, update, and borrow operations must be rejected. The expected observable result is a bad-request HTTP status.",
+      "faithfulness": 0.75,
+      "llm_context_precision_with_reference": 0.0,
+      "context_recall": 0.0,
+      "answer_relevancy": 0.0
+    }
+  ]
+}

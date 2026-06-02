@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import Field
 
@@ -11,6 +11,7 @@ from ..coverage_strategy.schemas import CoverageItem, Strategy
 from ..evidence_improve.schemas import AnalysisResult, RevisionRecord
 from ..intake_parse.schemas import FlexibleModel, PromptEvidence, Requirement
 from ..test_design.schemas import OracleResult, TestCase
+from ..test_design.schemas import TestDesignSpec
 
 
 # 测试套件优化结果
@@ -30,7 +31,11 @@ class ExportBundle(FlexibleModel):
     risk_results: list[RiskResult] = Field(default_factory=list)
     coverage_items: list[CoverageItem] = Field(default_factory=list)
     strategies: list[Strategy] = Field(default_factory=list)
+    test_design_specs: list[TestDesignSpec] = Field(default_factory=list)
     test_cases: list[TestCase] = Field(default_factory=list)
+    fsm: dict[str, Any] | None = None
+    fsm_test_cases: list[TestCase] = Field(default_factory=list)
+    fsm_coverage_summary: dict[str, Any] | None = None
     oracle_results: list[OracleResult] = Field(default_factory=list)
     optimization_result: OptimizationResult | None = None
     revisions: list[RevisionRecord] = Field(default_factory=list)
@@ -65,7 +70,10 @@ class ExportRequest(FlexibleModel):
     risk_results: list[RiskResult] | None = None
     coverage_items: list[CoverageItem] | None = None
     strategies: list[Strategy] | None = None
+    test_design_specs: list[TestDesignSpec] | None = None
     test_cases: list[TestCase] | None = None
+    fsm: dict[str, Any] | None = None
+    fsm_test_cases: list[TestCase] | None = None
     oracle_results: list[OracleResult] | None = None
     optimization_result: OptimizationResult | None = None
     revisions: list[RevisionRecord] | None = None

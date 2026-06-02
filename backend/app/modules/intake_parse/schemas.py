@@ -90,3 +90,18 @@ class ParseResponse(FlexibleModel):
     requirements: list[ParsedRequirement]
     analyzed_requirements: list[AnalyzedRequirement]
     prompts_used: list[PromptRecord] = Field(default_factory=list)
+
+
+class PipelineStatusRequest(FlexibleModel):
+    session_id: str = "SESSION-CURRENT"
+
+
+class PipelineStatusResponse(FlexibleModel):
+    run_id: str = ""
+    status: str = "idle"
+    current_stage: str = ""
+    completed_stages: list[str] = Field(default_factory=list)
+    failed_stage: str = ""
+    error: str = ""
+    started_at: str = ""
+    updated_at: str = ""

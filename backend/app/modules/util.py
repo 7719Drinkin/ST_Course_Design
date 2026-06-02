@@ -247,6 +247,249 @@ def coverage_counts(test_cases: list[dict[str, Any]]) -> Counter[str]:
     return Counter(str(item.get("coverage_item_id")) for item in test_cases if item.get("coverage_item_id"))
 
 
+def merge_by_id(
+    primary: list[dict[str, Any]],
+    secondary: list[dict[str, Any]],
+    id_field: str,
+) -> list[dict[str, Any]]:
+    """Merge collections without duplicating artifacts that share an ID."""
+
+    merged = list(primary)
+    positions = {
+        str(item.get(id_field)): index
+        for index, item in enumerate(merged)
+        if item.get(id_field) is not None
+    }
+    for item in secondary:
+        item_id = str(item.get(id_field) or "")
+        if item_id and item_id in positions:
+            merged[positions[item_id]] = item
+        else:
+            merged.append(item)
+            if item_id:
+                positions[item_id] = len(merged) - 1
+    return merged
+
+
+def coverage_ids_from_test_case(test_case: dict[str, Any]) -> set[str]:
+    raw = (
+        test_case.get("coverage_item_ids")
+        or test_case.get("coverage_items")
+        or test_case.get("covered_coverage_item_ids")
+    )
+    if isinstance(raw, list):
+        return {str(item) for item in raw if str(item).strip()}
+    coverage_id = test_case.get("coverage_item_id")
+    return {str(coverage_id)} if coverage_id else set()
+
+
+def fsm_coverage_items_from_test_cases(test_cases: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Create explicit coverage rows for FSM test cases so traceability is exportable."""
+
+    items: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for test_case in test_cases:
+        if str(test_case.get("technique") or "").upper() != "FSM":
+            continue
+        for coverage_id in sorted(coverage_ids_from_test_case(test_case)):
+            if coverage_id in seen:
+                continue
+            seen.add(coverage_id)
+            items.append(
+                {
+                    "coverage_item_id": coverage_id,
+                    "coverage_goal_id": "",
+                    "requirement_id": str(test_case.get("requirement_id") or ""),
+                    "technique": "FSM",
+                    "description": str(test_case.get("title") or "FSM coverage inferred from test case."),
+                    "conditions": [],
+                    "data_ranges": [],
+                    "input_fields": [],
+                    "expected_action": str(test_case.get("expected_result") or ""),
+                    "strategy_rationale": "FSM state-transition coverage generated from the FSM model.",
+                    "technique_reason": "FSM is used because the behavior depends on lifecycle states and transitions.",
+                    "status": "ai_generated",
+                    "source": "algorithm",
+                }
+            )
+    return items
+
+
+def fsm_coverage_summary(fsm: dict[str, Any] | None, test_cases: list[dict[str, Any]]) -> dict[str, Any]:
+    """Build document-ready FSM coverage numbers from the exported FSM object."""
+
+    fsm = fsm or {}
+    states = [str(item) for item in fsm.get("states", []) if str(item).strip()]
+    transitions = fsm.get("transitions", []) if isinstance(fsm.get("transitions"), list) else []
+    coverage = fsm.get("coverage") if isinstance(fsm.get("coverage"), dict) else {}
+    covered_states = [str(item) for item in coverage.get("all_states", []) if str(item).strip()]
+    covered_transitions = [str(item) for item in coverage.get("all_transitions", []) if str(item).strip()]
+    fsm_cases = [item for item in test_cases if str(item.get("technique") or "").upper() == "FSM"]
+
+    if fsm_cases and not covered_states:
+        covered_states = _covered_fsm_states(states, fsm.get("coverage_paths", []), fsm_cases)
+    if fsm_cases and not covered_transitions:
+        covered_transitions = _covered_fsm_transitions(transitions, fsm.get("coverage_paths", []), fsm_cases)
+
+    transition_count = len(transitions)
+    state_count = len(states)
+    return {
+        "state_count": state_count,
+        "transition_count": transition_count,
+        "covered_states": covered_states,
+        "covered_transitions": covered_transitions,
+        "state_coverage_rate": _coverage_rate(len(set(covered_states)), state_count),
+        "transition_coverage_rate": _coverage_rate(len(set(covered_transitions)), transition_count),
+        "fsm_test_case_count": len(fsm_cases),
+        "mermaid": str(fsm.get("mermaid") or ""),
+    }
+
+
+def _covered_fsm_states(
+    states: list[str],
+    coverage_paths: Any,
+    fsm_cases: list[dict[str, Any]],
+) -> list[str]:
+    state_set = set(states)
+    covered: set[str] = set()
+    for path in coverage_paths if isinstance(coverage_paths, list) else []:
+        covered.update(_states_from_path(str(path), state_set))
+    text = "\n".join(_test_case_text(item) for item in fsm_cases)
+    covered.update(state for state in states if state and state in text)
+    return sorted(covered)
+
+
+def _covered_fsm_transitions(
+    transitions: list[Any],
+    coverage_paths: Any,
+    fsm_cases: list[dict[str, Any]],
+) -> list[str]:
+    normalized = [_transition_signature(item) for item in transitions]
+    normalized = [item for item in normalized if item]
+    by_pair: dict[tuple[str, str], list[str]] = {}
+    for signature in normalized:
+        from_state, to_state, _event = signature
+        by_pair.setdefault((from_state, to_state), []).append(_format_transition(signature))
+
+    covered: set[str] = set()
+    state_set = {item for signature in normalized for item in signature[:2]}
+    for path in coverage_paths if isinstance(coverage_paths, list) else []:
+        path_states = _states_from_path(str(path), state_set)
+        for left, right in zip(path_states, path_states[1:]):
+            covered.update(by_pair.get((left, right), []))
+
+    text = "\n".join(_test_case_text(item) for item in fsm_cases)
+    for signature in normalized:
+        from_state, to_state, event = signature
+        if from_state in text and to_state in text:
+            covered.add(_format_transition(signature))
+            continue
+        if event and event in text:
+            covered.add(_format_transition(signature))
+    return sorted(covered)
+
+
+def _states_from_path(path: str, state_set: set[str]) -> list[str]:
+    parts = [part.strip() for part in re.split(r"\s*->\s*", path) if part.strip()]
+    return [part for part in parts if part in state_set]
+
+
+def _transition_signature(item: Any) -> tuple[str, str, str] | None:
+    if hasattr(item, "model_dump"):
+        item = item.model_dump(mode="json", by_alias=True)
+    if not isinstance(item, dict):
+        return None
+    from_state = str(item.get("from") or item.get("from_state") or "").strip()
+    to_state = str(item.get("to") or "").strip()
+    event = str(item.get("event") or "").strip()
+    if not from_state or not to_state:
+        return None
+    return from_state, to_state, event
+
+
+def _format_transition(signature: tuple[str, str, str]) -> str:
+    from_state, to_state, event = signature
+    return f"{from_state}->{to_state}" + (f": {event}" if event else "")
+
+
+def _test_case_text(test_case: dict[str, Any]) -> str:
+    return json.dumps(test_case, ensure_ascii=False, default=str)
+
+
+def _coverage_rate(covered: int, total: int) -> float:
+    if total <= 0:
+        return 0.0
+    return round(covered / total, 4)
+
+
+def strategies_from_coverage_items(coverage_items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Derive an explicit strategy table from coverage items when no separate strategy stage exists."""
+
+    strategies: list[dict[str, Any]] = []
+    for index, item in enumerate(coverage_items, start=1):
+        coverage_id = str(item.get("coverage_item_id") or "")
+        if not coverage_id:
+            continue
+        technique = _first_technique(item)
+        strategies.append(
+            {
+                "strategy_id": f"STR-AUT-{index:03d}",
+                "coverage_item_id": coverage_id,
+                "technique": technique,
+                "standard_ref": standard_ref_for(technique),
+                "reason": str(
+                    item.get("technique_reason")
+                    or item.get("strategy_rationale")
+                    or f"{technique} selected for this coverage item."
+                ),
+                "algorithm_params": {
+                    "requirement_id": item.get("requirement_id") or "",
+                    "coverage_goal_id": item.get("coverage_goal_id") or "",
+                },
+            }
+        )
+    return strategies
+
+
+def _first_technique(item: dict[str, Any]) -> str:
+    technique = item.get("technique")
+    if technique:
+        return str(technique).upper()
+    techniques = item.get("techniques")
+    if isinstance(techniques, list) and techniques:
+        return str(techniques[0]).upper()
+    if isinstance(techniques, str) and techniques:
+        return techniques.upper()
+    return "EP"
+
+
+def dedupe_oracle_results(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Keep one Oracle result per test_id, preferring review-required and higher confidence records."""
+
+    best: dict[str, dict[str, Any]] = {}
+    order: list[str] = []
+    for item in items:
+        test_id = str(item.get("test_id") or "")
+        if not test_id:
+            continue
+        if test_id not in best:
+            best[test_id] = item
+            order.append(test_id)
+            continue
+        if _oracle_rank(item) >= _oracle_rank(best[test_id]):
+            best[test_id] = item
+    return [best[test_id] for test_id in order]
+
+
+def _oracle_rank(item: dict[str, Any]) -> tuple[int, float, str]:
+    needs_review = 1 if item.get("needs_review") else 0
+    try:
+        confidence = float(item.get("confidence") or 0)
+    except (TypeError, ValueError):
+        confidence = 0.0
+    return needs_review, confidence, str(item.get("created_at") or item.get("timestamp") or "")
+
+
 def parse_sse_event(raw_event: str) -> tuple[str, dict[str, Any]]:
     event = "message"
     data_lines: list[str] = []

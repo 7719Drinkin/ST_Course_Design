@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from typing import Any
 
 from fastapi import HTTPException
 
 from ..store import workflow_store
-from ..util import make_id, next_index, now_iso, to_dicts
+from ..util import make_id, merge_by_id, next_index, now_iso, to_dicts
 from .schemas import (
     AnalysisRequest,
     AnalysisResponse,
@@ -20,6 +21,8 @@ from .schemas import (
 )
 
 from agent import RevisionRunnerError, regenerate_from_revision
+
+logger = logging.getLogger(__name__)
 
 
 class EvidenceImproveService:
@@ -59,6 +62,8 @@ class EvidenceImproveService:
     async def regenerate(self, request: RegenerateRequest) -> dict:
         revision = workflow_store.find_revision(request.session_id, request.revision_id)
         if revision is None:
+            revision = _find_revision_in_current_state(request.session_id, request.revision_id, request.current_state)
+        if revision is None:
             raise HTTPException(status_code=404, detail=f"revision_id not found: {request.revision_id}")
 
         state = _workflow_state(request.session_id, request.current_state)
@@ -73,16 +78,21 @@ class EvidenceImproveService:
         coverage_items = to_dicts(request.coverage_items) or workflow_store.get_list(request.session_id, "coverage_items")
         strategies = to_dicts(request.strategies) or workflow_store.get_list(request.session_id, "strategies")
         test_cases = to_dicts(request.test_cases) or workflow_store.get_list(request.session_id, "test_cases")
+        if request.test_cases is None:
+            fsm_cases = workflow_store.get_list(request.session_id, "fsm_test_cases")
+            test_cases = merge_by_id(test_cases, fsm_cases, "test_id")
         revisions = to_dicts(request.revisions) or workflow_store.get_list(request.session_id, "revisions")
+        _reject_invalid_traceability_ids(coverage_items, test_cases)
         _save_analysis_inputs(request, requirements, coverage_items, strategies, test_cases, revisions)
 
-        revised_ids = _revised_ids(revisions, coverage_items, strategies, test_cases)
+        revised_ids = _meaningful_revised_ids(revisions, coverage_items, strategies, test_cases)
         strategies_by_coverage: dict[str, list[dict[str, Any]]] = {}
         for strategy in strategies:
             strategies_by_coverage.setdefault(str(strategy.get("coverage_item_id")), []).append(strategy)
         tests_by_coverage: dict[str, list[dict[str, Any]]] = {}
         for test_case in test_cases:
-            tests_by_coverage.setdefault(str(test_case.get("coverage_item_id")), []).append(test_case)
+            for coverage_id in _test_coverage_ids(test_case):
+                tests_by_coverage.setdefault(coverage_id, []).append(test_case)
 
         results: list[AnalysisResult] = []
         for requirement in requirements:
@@ -154,7 +164,8 @@ class EvidenceImproveService:
         analyzed_test_ids = {item.test_id for item in results if item.test_id}
         for test_case in test_cases:
             test_id = str(test_case.get("test_id") or "")
-            coverage_id = str(test_case.get("coverage_item_id") or "")
+            coverage_ids = _test_coverage_ids(test_case)
+            coverage_id = next(iter(coverage_ids), str(test_case.get("coverage_item_id") or ""))
             if test_id in analyzed_test_ids:
                 continue
             results.append(
@@ -163,8 +174,8 @@ class EvidenceImproveService:
                     coverage_item_id=coverage_id,
                     strategy_id=str(test_case.get("strategy_id") or ""),
                     test_id=test_id,
-                    status="needs_review" if coverage_id not in covered_coverage_ids else "covered",
-                    gap="Test case references an unknown coverage item." if coverage_id not in covered_coverage_ids else "",
+                    status="needs_review" if not coverage_ids or not coverage_ids <= covered_coverage_ids else "covered",
+                    gap="Test case references an unknown coverage item." if not coverage_ids or not coverage_ids <= covered_coverage_ids else "",
                 )
             )
 
@@ -203,8 +214,53 @@ def _save_analysis_inputs(
         workflow_store.save_many(request.session_id, "revisions", revisions, "revision_id", replace_all=True)
 
 
+def _test_coverage_ids(test_case: dict[str, Any]) -> set[str]:
+    raw = (
+        test_case.get("coverage_item_ids")
+        or test_case.get("coverage_items")
+        or test_case.get("covered_coverage_item_ids")
+    )
+    if isinstance(raw, list):
+        return {str(item) for item in raw if str(item).strip()}
+    coverage_id = test_case.get("coverage_item_id")
+    return {str(coverage_id)} if coverage_id else set()
+
+
+def _reject_invalid_traceability_ids(
+    coverage_items: list[dict[str, Any]],
+    test_cases: list[dict[str, Any]],
+) -> None:
+    invalid_coverage_ids = sorted(
+        {
+            str(item.get("coverage_item_id") or "")
+            for item in coverage_items
+            if _is_bad_coverage_item_id(str(item.get("coverage_item_id") or ""))
+        }
+    )
+    invalid_test_refs = sorted(
+        {
+            coverage_id
+            for test_case in test_cases
+            for coverage_id in _test_coverage_ids(test_case)
+            if _is_bad_coverage_item_id(coverage_id)
+        }
+    )
+    if not invalid_coverage_ids and not invalid_test_refs:
+        return
+    raise HTTPException(
+        status_code=409,
+        detail={
+            "message": "Traceability analysis was blocked because coverage item IDs are not normalized. Wait for the pipeline to complete or rerun generation.",
+            "invalid_coverage_item_ids": invalid_coverage_ids,
+            "invalid_test_coverage_refs": invalid_test_refs,
+        },
+    )
+
+
 def _workflow_state(session_id: str, current_state: dict[str, Any] | None) -> dict[str, list[dict[str, Any]]]:
     state = current_state or {}
+    test_cases = to_dicts(state.get("test_cases")) or workflow_store.get_list(session_id, "test_cases")
+    fsm_test_cases = to_dicts(state.get("fsm_test_cases")) or workflow_store.get_list(session_id, "fsm_test_cases")
     return {
         "requirements": to_dicts(state.get("requirements")) or workflow_store.get_list(session_id, "requirements"),
         "parsed_requirements": to_dicts(state.get("parsed_requirements")) or workflow_store.get_list(session_id, "parsed_requirements"),
@@ -213,7 +269,8 @@ def _workflow_state(session_id: str, current_state: dict[str, Any] | None) -> di
         "coverage_items": to_dicts(state.get("coverage_items")) or workflow_store.get_list(session_id, "coverage_items"),
         "strategies": to_dicts(state.get("strategies")) or workflow_store.get_list(session_id, "strategies"),
         "test_design_specs": to_dicts(state.get("test_design_specs")) or workflow_store.get_list(session_id, "test_design_specs"),
-        "test_cases": to_dicts(state.get("test_cases")) or workflow_store.get_list(session_id, "test_cases"),
+        "test_cases": merge_by_id(test_cases, fsm_test_cases, "test_id"),
+        "fsm_test_cases": fsm_test_cases,
         "oracle_results": to_dicts(state.get("oracle_results")) or workflow_store.get_list(session_id, "oracle_results"),
         "prompt_evidence": to_dicts(state.get("prompt_evidence")) or workflow_store.get_list(session_id, "prompt_evidence"),
     }
@@ -225,6 +282,7 @@ def _save_regenerate_outputs(
     updated: dict[str, Any],
     deprecated: dict[str, Any],
 ) -> None:
+    _validate_regenerate_outputs(session_id, created, updated, deprecated)
     for group in (created, updated, deprecated):
         for key, value in group.items():
             if key == "fsm":
@@ -234,6 +292,53 @@ def _save_regenerate_outputs(
                 if key == "risk_results" and value and "target_id" not in value[0]:
                     id_field = "requirement_id"
                 workflow_store.save_many(session_id, key, value, id_field)
+
+
+def _validate_regenerate_outputs(
+    session_id: str,
+    created: dict[str, Any],
+    updated: dict[str, Any],
+    deprecated: dict[str, Any],
+) -> None:
+    coverage_items = workflow_store.get_list(session_id, "coverage_items")
+    for group in (created, updated):
+        coverage_items = merge_by_id(
+            coverage_items,
+            to_dicts(group.get("coverage_items")),
+            "coverage_item_id",
+        )
+    coverage_ids = {
+        str(item.get("coverage_item_id") or "")
+        for item in coverage_items
+        if item.get("coverage_item_id")
+    }
+    bad_ids = sorted(
+        coverage_id
+        for coverage_id in coverage_ids
+        if _is_bad_coverage_item_id(coverage_id)
+    )
+    if bad_ids:
+        raise ValueError(f"regenerate produced invalid coverage_item_id values: {bad_ids}")
+
+    for group_name, group in (("created", created), ("updated", updated), ("deprecated", deprecated)):
+        for collection in ("coverage_items", "strategies", "test_design_specs", "test_cases"):
+            for item in to_dicts(group.get(collection)):
+                coverage_id = str(item.get("coverage_item_id") or "")
+                if collection == "coverage_items":
+                    if not coverage_id:
+                        raise ValueError(f"{group_name}.{collection} contains empty coverage_item_id")
+                    if _is_bad_coverage_item_id(coverage_id):
+                        raise ValueError(f"{group_name}.{collection} contains invalid coverage_item_id: {coverage_id}")
+                    continue
+                if coverage_id and coverage_id not in coverage_ids:
+                    item_id = item.get("test_id") or item.get("spec_id") or item.get("strategy_id") or "<unknown>"
+                    raise ValueError(
+                        f"{group_name}.{collection} item {item_id} references unknown coverage_item_id: {coverage_id}"
+                    )
+
+
+def _is_bad_coverage_item_id(coverage_id: str) -> bool:
+    return not coverage_id or coverage_id.startswith("COV-CG-") or "-CG-AUT-" in coverage_id
 
 
 def _affected_ids(
@@ -383,6 +488,92 @@ def _revised_ids(
     return {item for item in ids if item}
 
 
+def _meaningful_revised_ids(
+    revisions: list[dict[str, Any]],
+    coverage_items: list[dict[str, Any]],
+    strategies: list[dict[str, Any]],
+    test_cases: list[dict[str, Any]],
+) -> set[str]:
+    return _revised_ids(
+        [revision for revision in revisions if _is_meaningful_revision(revision)],
+        coverage_items,
+        strategies,
+        test_cases,
+    )
+
+
+def _is_meaningful_revision(revision: dict[str, Any]) -> bool:
+    before = revision.get("before") if isinstance(revision.get("before"), dict) else {}
+    after = revision.get("after") if isinstance(revision.get("after"), dict) else {}
+    target_type = str(revision.get("target_type") or "")
+    if not before and after:
+        return True
+
+    changed_fields = {
+        field
+        for field in set(before) | set(after)
+        if str(before.get(field, "")) != str(after.get(field, ""))
+    }
+    if not changed_fields:
+        return False
+
+    review_only_fields = {"status", "review_status"}
+    if target_type == "test_case" and changed_fields <= review_only_fields:
+        return False
+    if target_type in {"coverage_item", "strategy"} and changed_fields <= {"status", "review_status", "designer_confirmed"}:
+        return False
+    return True
+
+
+def _find_revision_in_current_state(
+    session_id: str,
+    revision_id: str,
+    current_state: dict[str, Any] | None,
+) -> dict[str, Any] | None:
+    state = current_state or {}
+    for item in to_dicts(state.get("revisions")):
+        item_id = str(item.get("revision_id") or item.get("id") or "")
+        if item_id != revision_id:
+            continue
+        return _normalize_current_state_revision(session_id, item)
+    return None
+
+
+def _normalize_current_state_revision(session_id: str, item: dict[str, Any]) -> dict[str, Any]:
+    if item.get("revision_id") and item.get("target_type") and item.get("target_id"):
+        return {
+            **item,
+            "session_id": item.get("session_id") or session_id,
+            "target_type": _revision_target_type(str(item.get("target_type") or "")),
+        }
+
+    field = str(item.get("field") or "")
+    return {
+        "revision_id": str(item.get("revision_id") or item.get("id") or ""),
+        "session_id": session_id,
+        "target_type": _revision_target_type(str(item.get("entity_type") or "")),
+        "target_id": str(item.get("target_id") or item.get("entity_id") or ""),
+        "before": item.get("before") if isinstance(item.get("before"), dict) else {field: item.get("old_value", "")},
+        "after": item.get("after") if isinstance(item.get("after"), dict) else {field: item.get("new_value", "")},
+        "reason": str(item.get("reason") or "designer revision"),
+        "created_by": str(item.get("created_by") or "designer"),
+        "created_at": str(item.get("created_at") or item.get("timestamp") or now_iso()),
+    }
+
+
+def _revision_target_type(entity_type: str) -> str:
+    return {
+        "requirement": "requirement",
+        "parsed_requirement": "parsed_requirement",
+        "risk": "risk_result",
+        "risk_result": "risk_result",
+        "coverage": "coverage_item",
+        "coverage_item": "coverage_item",
+        "strategy": "strategy",
+        "test_case": "test_case",
+    }.get(entity_type, entity_type)
+
+
 async def _background_regenerate(
     session_id: str,
     revision: dict[str, Any],
@@ -398,4 +589,4 @@ async def _background_regenerate(
         _save_regenerate_outputs(session_id, created, updated, deprecated)
         workflow_store.save_many(session_id, "prompt_evidence", prompt_evidence, "evidence_id")
     except Exception:
-        pass
+        logger.exception("Background regenerate failed for session %s", session_id)
