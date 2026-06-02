@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+"""FSM parser tests."""
+
 from backend.agent.tools.fsm import FSMModel, parse_fsm_from_requirement
 
 

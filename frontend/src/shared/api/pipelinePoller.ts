@@ -41,7 +41,9 @@ export function stopAllPolling() {
   activeTimers.forEach((t) => clearInterval(t))
   activeTimers = []
   clearTabTitle()
-  useAppStore.getState().setPipelineActive(false)
+  const store = useAppStore.getState()
+  store.resetStagePolling()
+  store.setPipelineActive(false)
 }
 
 function registerTimer(timer: ReturnType<typeof setInterval>) {

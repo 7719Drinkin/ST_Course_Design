@@ -10,6 +10,8 @@ import pytest
 
 from scripts.run_ragas_evaluation import (
     DEFAULT_RAGAS_THRESHOLDS,
+    _passes_gate,
+    _score_health,
     build_candidate_rows,
     build_corpus,
     install_ragas_vertexai_compat,
@@ -20,8 +22,10 @@ from scripts.run_ragas_evaluation import (
 )
 
 
-ROOT = Path(__file__).resolve().parents[2]
+ROOT = Path(__file__).resolve().parents[3]
 GOLDEN_QA = ROOT / "Testing" / "tests" / "data" / "ragas_golden_qa_draft.json"
+TRACKED_EXPORT = ROOT / "Testing" / "tests" / "export" / "autotest_export (2).json"
+LOCAL_EXPORT = ROOT / "localDocs" / "AUT-test" / "result" / "export" / "autotest_export (2).json"
 
 
 def test_ragas_golden_qa_dataset_contract():
@@ -43,6 +47,8 @@ def test_ragas_golden_qa_dataset_contract():
 
 
 def test_ragas_local_retrieval_produces_contexts_for_each_sample():
+    _skip_without_local_export()
+
     corpus = build_corpus()
     samples = load_golden_samples(GOLDEN_QA)
 
@@ -65,7 +71,26 @@ def test_ragas_local_retrieval_produces_contexts_for_each_sample():
         assert len(query_terms & context_terms) >= 3
 
 
+def test_ragas_retrieval_corpus_excludes_evaluation_plan_leakage():
+    _skip_without_local_export()
+
+    corpus = build_corpus()
+    sources = {chunk.source for chunk in corpus}
+
+    assert "docs/RAGAS/ragas_evaluation_plan.md" not in sources
+    assert "localDocs/RAGAS真实评估实施方案.md" not in sources
+    assert sources == {_expected_export_source()}
+
+    malformed_sample = next(sample for sample in load_golden_samples(GOLDEN_QA) if sample["id"] == "RAGAS-AUT-016")
+    contexts = retrieve_contexts(malformed_sample, corpus, top_k=3)
+    combined = "\n".join(contexts).lower()
+    assert "malformed json" in combined
+    assert "rejects malformed json requests" in combined
+
+
 def test_ragas_candidate_rows_match_required_schema_without_llm():
+    _skip_without_local_export()
+
     samples = load_golden_samples(GOLDEN_QA)[:3]
     rows = build_candidate_rows(samples, use_deepseek=False, allow_reference_fallback=True, top_k=3)
 
@@ -82,6 +107,28 @@ def test_ragas_candidate_rows_match_required_schema_without_llm():
         assert row["response"]
         assert row["reference"]
         assert row["retrieved_contexts"]
+
+
+def test_ragas_gate_rejects_missing_or_critical_scores():
+    healthy_summary = {metric: threshold + 0.1 for metric, threshold in DEFAULT_RAGAS_THRESHOLDS.items()}
+    missing_metric_summary = dict(healthy_summary)
+    missing_metric_summary.pop("faithfulness")
+
+    assert not _passes_gate(missing_metric_summary, {"invalid_score_count": 0, "critical_failure_count": 0})
+
+    rows = [
+        {
+            "id": "RAGAS-AUT-X",
+            "requirement_id": "REQ-AUT-999",
+            "faithfulness": 1.0,
+            "context_recall": 0.0,
+            "llm_context_precision_with_reference": 1.0,
+            "answer_relevancy": 1.0,
+        }
+    ]
+    health = _score_health(rows)
+    assert health["critical_failure_count"] == 1
+    assert not _passes_gate(healthy_summary, health)
 
 
 def test_installed_ragas_imports_with_compatibility_shim():
@@ -108,12 +155,32 @@ def test_real_ragas_evaluation_smoke():
     load_local_env()
     if not os.getenv("DEEPSEEK_API_KEY"):
         pytest.skip("DEEPSEEK_API_KEY is required for real RAGAS smoke evaluation.")
+    _skip_without_local_export()
 
     sample_limit = int(os.getenv("RAGAS_SMOKE_SAMPLE_LIMIT", "1"))
     output_dir = ROOT / "Testing" / "reports"
-    report = run_ragas_evaluation(sample_limit=sample_limit, output_dir=output_dir, top_k=3)
+    report = run_ragas_evaluation(
+        sample_limit=sample_limit,
+        output_dir=output_dir,
+        top_k=3,
+        report_prefix="ragas_smoke",
+    )
 
     assert report["sample_count"] == sample_limit
     assert report["summary"]
     assert set(report["thresholds"]) == set(DEFAULT_RAGAS_THRESHOLDS)
     assert "output_files" in report or "output_write_error" in report
+
+
+def _skip_without_local_export() -> None:
+    if not (TRACKED_EXPORT.exists() or LOCAL_EXPORT.exists()):
+        pytest.skip(
+            "Export bundle is required for this RAGAS evidence test. "
+            f"Expected {TRACKED_EXPORT} or {LOCAL_EXPORT}."
+        )
+
+
+def _expected_export_source() -> str:
+    if TRACKED_EXPORT.exists():
+        return "Testing/tests/export/autotest_export (2).json::export_bundle.requirements"
+    return "localDocs/AUT-test/result/export/autotest_export (2).json::export_bundle.requirements"

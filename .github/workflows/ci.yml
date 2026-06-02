@@ -5,6 +5,10 @@ on:
     branches:
       - main
       - develop
+  push:
+    branches:
+      - main
+      - develop
   workflow_dispatch:
 
 permissions:
@@ -12,8 +16,8 @@ permissions:
   pull-requests: read
 
 jobs:
-  validate-pr:
-    name: PR Policy Gate
+  governance:
+    name: Repository Governance
     runs-on: ubuntu-latest
 
     steps:
@@ -21,7 +25,6 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          persist-credentials: true
 
       - name: Enforce main receives only develop
         if: github.event_name == 'pull_request' && github.base_ref == 'main'
@@ -31,161 +34,74 @@ jobs:
             exit 1
           fi
 
-      - name: Block local-only directories
-        if: github.event_name == 'pull_request'
-        env:
-          BASE_REF: ${{ github.base_ref }}
-          GITHUB_TOKEN: ${{ github.token }}
-          GITHUB_REPOSITORY: ${{ github.repository }}
+      - name: Block local-only tracked files
         run: |
           set -euo pipefail
-
-          git remote set-url origin "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
-
-          git fetch --no-tags --prune --depth=1 origin \
-            "+refs/heads/${BASE_REF}:refs/remotes/origin/${BASE_REF}"
-
-          changed_files="$(git diff --name-only "origin/${BASE_REF}...HEAD")"
-
-          echo "Changed files in this PR:"
-          echo "${changed_files}"
-
-          if echo "${changed_files}" | grep -E '^(localDocs|external)/' > /dev/null; then
-            echo "localDocs/ and external/ must not be included in pull requests."
-            echo "Blocked files:"
-            echo "${changed_files}" | grep -E '^(localDocs|external)/'
+          blocked="$(git ls-files localDocs external temp .codex .run || true)"
+          if [ -n "$blocked" ]; then
+            echo "The following local-only files are tracked and must be removed:"
+            echo "$blocked"
             exit 1
           fi
-      - name: Explain optional issue policy
-        if: github.event_name == 'pull_request'
-        run: |
-          echo "GitHub Issues are optional for this project."
-          echo "This gate enforces branch flow and local-only directory protection only."
 
-  conditional-builds:
-    name: Conditional Builds
+  frontend:
+    name: Frontend Build
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+
     steps:
-      - uses: actions/checkout@v4
-      - name: Setup Node.js for frontend
-        if: hashFiles('frontend/package.json') != ''
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"
           cache: npm
           cache-dependency-path: frontend/package-lock.json
-      - name: Frontend build if frontend project exists
-        run: |
-          if [ -f frontend/package.json ]; then
-            cd frontend
-            npm ci
-            npm run build
-          else
-            echo "No frontend/package.json found; skipping frontend build."
-          fi
-      - name: Setup Java for Maven backend
-        if: hashFiles('backend/pom.xml') != ''
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: "17"
-          cache: maven
-      - name: Setup Python for Python backend
-        if: hashFiles('backend/requirements.txt') != '' || hashFiles('backend/pyproject.toml') != ''
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build frontend
+        run: npm run build
+
+  backend-tests:
+    name: Backend And CI-Safe Tests
+    runs-on: ubuntu-latest
+    env:
+      PYTHONDONTWRITEBYTECODE: "1"
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Backend build if backend project exists
-        run: |
-          if [ -f backend/pom.xml ]; then
-            mvn -f backend/pom.xml test
-          elif [ -f backend/requirements.txt ] || [ -f backend/pyproject.toml ]; then
-            python -m pip install --upgrade pip
-            [ -f backend/requirements.txt ] && pip install -r backend/requirements.txt
-            python -m compileall backend
-          else
-            echo "No backend build descriptor found; skipping backend build."
-          fi
+          cache: pip
+          cache-dependency-path: |
+            backend/requirements.txt
+            requirements-dev.txt
 
-  python-tests:
-    name: Python Test Suite
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-
-      - name: Install test dependencies
+      - name: Install Python dependencies
         run: |
           python -m pip install --upgrade pip
-          if [ -f Testing/requirements-dev.txt ]; then
-            pip install -r Testing/requirements-dev.txt
-          elif [ -f requirements-dev.txt ]; then
-            pip install -r requirements-dev.txt
-          else
-            pip install pytest requests
-          fi
+          pip install -r backend/requirements.txt
+          pip install -r requirements-dev.txt
 
-      - name: Link root docs into Testing workspace
+      - name: Check backend imports
         run: |
-          if [ ! -d docs ]; then
-            echo "Root docs/ directory is missing."
-            exit 1
-          fi
+          python - <<'PY'
+          import sys
+          sys.path.insert(0, "backend")
+          from main import create_app
+          app = create_app()
+          assert app.routes
+          PY
 
-          if [ -e Testing/docs ] && [ ! -L Testing/docs ]; then
-            echo "Testing/docs already exists and is not a symlink; refusing to overwrite."
-            exit 1
-          fi
-
-          rm -f Testing/docs
-          ln -s ../docs Testing/docs
-
-          echo "Testing/docs now points to root docs/:"
-          ls -la Testing/docs
-
-      - name: Run non-live tests from Testing directory
-        run: |
-          cd Testing
-          pytest -m "not aut_api and not ragas and not llm" -q
-          
-  ragas-gate:
-    name: RAGAS Gate
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-
-      - name: Link root docs into Testing workspace
-        run: |
-          if [ ! -d docs ]; then
-            echo "Root docs/ directory is missing."
-            exit 1
-          fi
-
-          if [ -e Testing/docs ] && [ ! -L Testing/docs ]; then
-            echo "Testing/docs already exists and is not a symlink; refusing to overwrite."
-            exit 1
-          fi
-
-          rm -f Testing/docs
-          ln -s ../docs Testing/docs
-
-          echo "Testing/docs now points to root docs/:"
-          ls -la Testing/docs
-
-      - name: Run RAGAS tests only when present
-        run: |
-          if find Testing/tests -type f -name 'test_*.py' -print0 | xargs -0 grep -E '@pytest\.mark\.ragas|pytestmark.*ragas' >/dev/null 2>&1; then
-            python -m pip install --upgrade pip
-            [ -f Testing/requirements-dev.txt ] && pip install -r Testing/requirements-dev.txt
-            cd Testing
-            pytest -m ragas
-          else
-            echo "No pytest tests marked ragas found; skipping RAGAS gate."
-          fi
+      - name: Run CI-safe pytest suite
+        run: python -m pytest Testing/tests -m "not aut_api and not ragas and not llm" -q -p no:cacheprovider

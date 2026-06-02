@@ -11,9 +11,9 @@ export function DataStatusTag({
   if (isLive === undefined) return null
   if (isLive) return <Tag color="green" style={{ marginLeft: 8 }}>已连接</Tag>
   return (
-    <Tooltip title="部分服务暂未接入，当前结果可能为空或等待生成。">
-      <Tag color="orange" style={{ marginLeft: 8, cursor: 'help' }}>
-        服务待接入
+    <Tooltip title="接口已配置，但当前请求暂未返回有效数据；可能仍在生成、超时、无结果或服务暂时不可用。">
+      <Tag color="gold" style={{ marginLeft: 8, cursor: 'help' }}>
+        等待服务返回
       </Tag>
     </Tooltip>
   )

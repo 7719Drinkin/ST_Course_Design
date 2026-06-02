@@ -84,6 +84,8 @@ export function CoverageStrategyPage() {
   const highRiskIds = new Set(
     riskEntries.filter((entry) => entry.level === 'High').map((entry) => entry.requirement_id),
   )
+  const coverageStatusLive = coverageGoals.length > 0 ? true : coverageLive
+  const strategyStatusLive = coverageItems.length > 0 ? true : strategyLive
 
   const handleAddCoverage = () => {
     const baseRequirementId = requirements[0]?.requirement_id
@@ -115,7 +117,7 @@ export function CoverageStrategyPage() {
           <div className="workbench-grid workbench-grid-2">
             <Card title="覆盖项识别">
               <Space direction="vertical" size={16} className="full-width">
-                <DataStatusTag isLive={coverageLive} />
+                <DataStatusTag isLive={coverageStatusLive} />
                 <div className="metric-band">
                   <div>
                     <span>{coverageGoals.length}</span>
@@ -138,7 +140,7 @@ export function CoverageStrategyPage() {
 
             <Card title="覆盖策略">
               <Space direction="vertical" size={16} className="full-width">
-                <DataStatusTag isLive={strategyLive} />
+                <DataStatusTag isLive={strategyStatusLive} />
                 <div className="technique-strip">
                   {TECHNIQUE_OPTIONS.map((technique) => (
                     <span key={technique}>

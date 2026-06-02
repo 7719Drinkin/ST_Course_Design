@@ -59,6 +59,7 @@ export function EvidencePage() {
     value: revision.id,
     label: `${revision.id} · ${entityLabels[revision.entity_type]} · ${revision.entity_id}`,
   }))
+  const analysisStatusLive = analysisResults.length > 0 ? true : analysisLive
 
   useEffect(() => {
     if (requirements.length === 0) {
@@ -86,10 +87,6 @@ export function EvidencePage() {
   const handleRegenerate = async () => {
     const revisionId = selectedRevisionId ?? latestRevision?.id
     if (!revisionId) return
-    const selectedRevision = savedRevisions.find((item) => item.id === revisionId)
-    const isReviewOnlyRevision =
-      selectedRevision?.entity_type === 'test_case'
-      && ['status', 'review_status'].includes(selectedRevision.field)
     try {
       setRegenerateTriggered(true)
       setStagePolling(4, true)
@@ -110,6 +107,7 @@ export function EvidencePage() {
         polls++
         if (polls > 30) {
           clearInterval(timer)
+          pollTimer.current = null
           setStagePolling(4, false)
           setRegenerateLive(false)
           return
@@ -123,17 +121,10 @@ export function EvidencePage() {
           setAnalysisResults(snapshot.analysisResults)
           setAnalysisLive(true)
 
-          const hasRegeneratedOracle = snapshot.oracleResults.some((item) => (
-            item.regenerated_from_revision === revisionId
-          ))
-          const hasRegeneratedTestCase = snapshot.testCases.some((item) => (
-            item.regenerated_from_revision === revisionId
-          ))
-          if (hasRegeneratedOracle || hasRegeneratedTestCase || isReviewOnlyRevision) {
-            setStagePolling(4, false)
-            setRegenerateLive(false)
-            clearInterval(timer)
-          }
+          setStagePolling(4, false)
+          setRegenerateLive(false)
+          clearInterval(timer)
+          pollTimer.current = null
         } catch { /* retry */ }
       }, 2000)
       pollTimer.current = timer
@@ -218,7 +209,7 @@ export function EvidencePage() {
 
         <Card title="结果分析">
           <Space direction="vertical" size={12} className="full-width">
-            <DataStatusTag isLive={analysisLive} />
+            <DataStatusTag isLive={analysisStatusLive} />
             <div className="metric-band metric-band-tight">
               <div>
                 <span>{improvementStats.missing}</span>

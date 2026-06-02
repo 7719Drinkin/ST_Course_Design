@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+"""FSM prompt pipeline contract tests."""
+
 import asyncio
 
 from backend.agent.pipeline import AgentPipeline
@@ -71,4 +73,6 @@ def test_generate_fsm_uses_fsm_modeling_prompt_pipeline():
     assert result.fsm.transitions[0].from_state == "AVAILABLE"
     assert result.test_cases[0].technique == "FSM"
     assert result.prompts_used[0].name == "fsm_modeling"
-    assert "只输出 JSON。" in llm_client.prompt
+    assert "You are an FSM testing agent." in llm_client.prompt
+    assert "Return exactly one JSON object" in llm_client.prompt
+    assert "Before returning" in llm_client.prompt

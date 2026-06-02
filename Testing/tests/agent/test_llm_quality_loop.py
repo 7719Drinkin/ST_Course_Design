@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+"""LLM repair-loop quality tests for role agents."""
+
 import pytest
 
 from backend.agent.core.agent_context import AgentContext

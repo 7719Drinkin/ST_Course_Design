@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+"""Deterministic FSM generation tests."""
+
 from backend.agent.tools.fsm import generate_fsm_tests
 
 

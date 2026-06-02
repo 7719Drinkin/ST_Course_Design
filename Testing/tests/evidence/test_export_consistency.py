@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+"""Export consistency and traceability gate tests."""
+
 from types import SimpleNamespace
 
 import pytest

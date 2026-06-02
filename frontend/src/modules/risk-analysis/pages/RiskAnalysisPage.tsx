@@ -66,6 +66,7 @@ export function RiskAnalysisPage() {
   }, [riskEntries, cellFilter])
 
   const highRiskCount = riskEntries.filter((entry) => entry.level === 'High').length
+  const riskStatusLive = riskEntries.length > 0 ? true : riskLive
 
   return (
     <Space direction="vertical" size={24} className="full-width">
@@ -79,7 +80,7 @@ export function RiskAnalysisPage() {
           <div className="workbench-grid workbench-grid-1">
             <Card title="风险评分">
               <Space direction="vertical" size={16} className="full-width">
-                <DataStatusTag isLive={riskLive} />
+                <DataStatusTag isLive={riskStatusLive} />
                 <div className="metric-band">
                   <div>
                     <span>{riskEntries.length}</span>

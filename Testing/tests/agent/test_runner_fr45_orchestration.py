@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+"""End-to-end runner orchestration tests for FR3, FR4, and FR5 stages."""
+
 import asyncio
 
 from backend.agent.core.models import (
@@ -126,7 +128,7 @@ def test_finalizer_keeps_fr3_and_fr4_boundary_and_contains_fr5_results():
     strategy_result = _build_strategy_result()
     generate_result = _build_generate_result()
     fsm_result = _build_fsm_result()
-    oracle_result = _build_oracle_result(["TC-AUT-EP-001", "TC-AUT-FSM-001"])
+    oracle_result = _build_oracle_result(["TC-AUT-001-001-EP-001", "TC-AUT-FSM-001"])
 
     final = finalize_pipeline_result(
         parse_result,
@@ -151,7 +153,7 @@ def _build_parse_result() -> ParseResult:
     return ParseResult(
         requirements=[
             ParsedRequirement(
-                requirement_id="REQ-AUT-FLOW-001",
+                requirement_id="REQ-AUT-001",
                 module="Loans",
                 raw_text="Only members with active status can borrow a book.",
                 description="Borrow requires active member status.",
@@ -159,7 +161,7 @@ def _build_parse_result() -> ParseResult:
         ],
         analyzed_requirements=[
             AnalyzedRequirement(
-                requirement_id="REQ-AUT-FLOW-001",
+                requirement_id="REQ-AUT-001",
                 module="Loans",
                 description="Borrow requires active member status.",
                 input_fields=["member_status", "book_id"],
@@ -177,7 +179,7 @@ def _build_risk_result() -> RiskResult:
     return RiskResult(
         risk_analysis=[
             RiskAnalysisItem(
-                requirement_id="REQ-AUT-FLOW-001",
+                requirement_id="REQ-AUT-001",
                 impact=5,
                 likelihood=3,
                 risk_score=15,
@@ -194,8 +196,8 @@ def _build_coverage_result() -> CoverageResult:
     return CoverageResult(
         coverage_goals=[
             CoverageGoal(
-                coverage_goal_id="CG-AUT-FLOW-001",
-                requirement_id="REQ-AUT-FLOW-001",
+                coverage_goal_id="CG-AUT-001-001",
+                requirement_id="REQ-AUT-001",
                 goal="Cover active vs inactive member borrow behavior.",
                 related_inputs=["member_status"],
                 related_conditions=["borrow request submitted"],
@@ -210,9 +212,9 @@ def _build_strategy_result() -> StrategyResult:
     return StrategyResult(
         coverage_items=[
             CoverageItem(
-                coverage_item_id="COV-AUT-FLOW-EP-001",
-                coverage_goal_id="CG-AUT-FLOW-001",
-                requirement_id="REQ-AUT-FLOW-001",
+                coverage_item_id="COV-AUT-001-001-EP-001",
+                coverage_goal_id="CG-AUT-001-001",
+                requirement_id="REQ-AUT-001",
                 technique="EP",
                 description="Partition member status into active/inactive.",
                 conditions=["borrow request submitted"],
@@ -231,9 +233,9 @@ def _build_generate_result() -> GenerateResult:
     return GenerateResult(
         test_design_specs=[
             DesignSpecModel(
-                spec_id="SPEC-AUT-FLOW-EP-001",
-                coverage_item_id="COV-AUT-FLOW-EP-001",
-                requirement_id="REQ-AUT-FLOW-001",
+                spec_id="SPEC-AUT-001-001-EP-001",
+                coverage_item_id="COV-AUT-001-001-EP-001",
+                requirement_id="REQ-AUT-001",
                 technique="EP",
                 design_points=[
                     {"partition": "inactive", "expected": "reject borrow"},
@@ -244,10 +246,10 @@ def _build_generate_result() -> GenerateResult:
         ],
         test_cases=[
             CaseDraftModel(
-                test_id="TC-AUT-EP-001",
-                requirement_id="REQ-AUT-FLOW-001",
-                coverage_item_id="COV-AUT-FLOW-EP-001",
-                spec_id="SPEC-AUT-FLOW-EP-001",
+                test_id="TC-AUT-001-001-EP-001",
+                requirement_id="REQ-AUT-001",
+                coverage_item_id="COV-AUT-001-001-EP-001",
+                spec_id="SPEC-AUT-001-001-EP-001",
                 technique="EP",
                 title="Inactive member cannot borrow.",
                 preconditions=["member account exists"],
@@ -284,7 +286,7 @@ def _build_fsm_result() -> FsmGenerationResult:
         test_cases=[
             FsmTestCaseDraft(
                 test_id="TC-AUT-FSM-001",
-                requirement_id="REQ-AUT-FLOW-001",
+                requirement_id="REQ-AUT-001",
                 coverage_item_id="COV-AUT-FSM-001",
                 strategy_id="STR-AUT-FSM-TRANSITION",
                 technique="FSM",

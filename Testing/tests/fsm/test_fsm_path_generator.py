@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+"""FSM path generation tests."""
+
 from backend.agent.tools.fsm import (
     FSMModel,
     FSMState,

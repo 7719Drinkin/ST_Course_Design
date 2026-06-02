@@ -6,12 +6,15 @@ import ast
 import json
 from pathlib import Path
 
+import pytest
+
 from tests.aut.traceability import NON_AUTOMATED_DESIGN_CASES, TRACEABILITY, mapped_test_ids
 
 
-ROOT = Path(__file__).resolve().parents[2]
+ROOT = Path(__file__).resolve().parents[3]
 AUT_TEST_DIR = ROOT / "Testing" / "tests" / "aut"
-EXPORT_JSON = ROOT / "localDocs" / "AUT-test" / "result" / "export" / "autotest_export (2).json"
+TRACKED_EXPORT_JSON = ROOT / "Testing" / "tests" / "export" / "autotest_export (2).json"
+LOCAL_EXPORT_JSON = ROOT / "localDocs" / "AUT-test" / "result" / "export" / "autotest_export (2).json"
 
 
 def _aut_test_function_names() -> set[str]:
@@ -29,7 +32,14 @@ def test_aut_traceability_mapping_targets_existing_pytest_functions():
 
 
 def test_aut_traceability_mapping_accounts_for_exported_final_test_cases():
-    bundle = json.loads(EXPORT_JSON.read_text(encoding="utf-8"))["export_bundle"]
+    export_json = TRACKED_EXPORT_JSON if TRACKED_EXPORT_JSON.exists() else LOCAL_EXPORT_JSON
+    if not export_json.exists():
+        pytest.skip(
+            "Export bundle is required for AUT traceability mapping. "
+            f"Expected {TRACKED_EXPORT_JSON} or {LOCAL_EXPORT_JSON}."
+        )
+
+    bundle = json.loads(export_json.read_text(encoding="utf-8"))["export_bundle"]
     exported_test_ids = {item["test_id"] for item in bundle["test_cases"]}
 
     accounted_for = mapped_test_ids() | set(NON_AUTOMATED_DESIGN_CASES)

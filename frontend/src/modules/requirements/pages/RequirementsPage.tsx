@@ -15,6 +15,7 @@ import {
 import type { UploadFile } from 'antd'
 import { useAppStore } from '@/app/store/appStore'
 import {
+  calculateRequirementCompleteness,
   ingestFile,
   ingestText,
   isAllowedFileType,
@@ -58,8 +59,9 @@ export function RequirementsPage() {
 
   const fieldCompleteness = useMemo(() => {
     if (requirements.length === 0) return 0
-    const complete = requirements.filter((item) => item.missing_fields.length === 0).length
-    return Math.round((complete / requirements.length) * 100)
+    const total = requirements.reduce((sum, item) => sum + calculateRequirementCompleteness(item).total, 0)
+    const completed = requirements.reduce((sum, item) => sum + calculateRequirementCompleteness(item).completed, 0)
+    return total === 0 ? 0 : Math.round((completed / total) * 100)
   }, [requirements])
 
   const handleIngest = async () => {
@@ -341,7 +343,6 @@ export function RequirementsPage() {
                       onClick={() =>
                         updateRequirement(record.requirement_id, {
                           designer_confirmed: !record.designer_confirmed,
-                          missing_fields: record.designer_confirmed ? record.missing_fields : [],
                         }, undefined, true)
                       }
                     >

@@ -149,6 +149,8 @@ export function TestDesignPage() {
   }, [fsm])
 
   const needsReviewCases = oracleResults.filter((o) => o.needs_review)
+  const testCaseStatusLive = testCases.length > 0 ? true : tcLive
+  const fsmStatusLive = fsm?.states?.length ? true : fsmLive
 
   const handleApproveAll = () => {
     const targetIds = new Set(filteredCases.map((tc) => tc.test_id))
@@ -175,7 +177,7 @@ export function TestDesignPage() {
       <div className="stage-toolbar stage-toolbar-wrap">
         <span>
           <Title level={4} style={{ margin: 0, display: 'inline' }}>生成与复核</Title>
-          {hasRequirements && <DataStatusTag isLive={tcLive} />}
+          {hasRequirements && <DataStatusTag isLive={testCaseStatusLive} />}
         </span>
         <Space wrap>
           {(['EP', 'BVA', 'DT', 'FSM'] as Technique[]).map((t) => (
@@ -338,7 +340,7 @@ export function TestDesignPage() {
           <Space direction="vertical" size={16} className="full-width">
             <TraceabilityPanel />
             <Card title="FSM · All States">
-              <DataStatusTag isLive={fsmLive} />
+              <DataStatusTag isLive={fsmStatusLive} />
               {fsm?.mermaid?.trim() ? (
                 <MermaidView chart={fsm.mermaid} />
               ) : fetching ? (
