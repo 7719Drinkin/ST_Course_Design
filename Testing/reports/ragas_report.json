@@ -1,0 +1,252 @@
+{
+  "gate": "PASS",
+  "sample_count": 16,
+  "model": "deepseek-v4-flash",
+  "embedding_model": "BAAI/bge-small-zh-v1.5",
+  "include_export_artifacts": false,
+  "thresholds": {
+    "faithfulness": 0.75,
+    "context_recall": 0.65,
+    "llm_context_precision_with_reference": 0.65,
+    "answer_relevancy": 0.7
+  },
+  "summary": {
+    "answer_relevancy": 0.8028,
+    "context_recall": 1.0,
+    "faithfulness": 1.0,
+    "llm_context_precision_with_reference": 1.0
+  },
+  "score_health": {
+    "invalid_score_count": 0,
+    "critical_failure_count": 0,
+    "invalid_scores": [],
+    "critical_failures": []
+  },
+  "low_score_cases": [],
+  "rows": [
+    {
+      "user_input": "According to the final exported requirement, what should the system return when querying all books?",
+      "retrieved_contexts": [
+        "[localDocs/AUT-test/result/export/autotest_export (2).json::export_bundle.requirements] REQ-AUT-001; Module: Book Management; Description: The system allows querying all books.; Raw requirement: 客户端可以查询所有图书; Business rules: System returns all book records.; Expected action: System returns a list of all books."
+      ],
+      "response": "According to the requirement, when querying all books, the system should return all book records, which means a list of all books.",
+      "reference": "REQ-AUT-001 states that the system allows querying all books. Its business rule is that the system returns all book records, and its expected action is to return a list of all books.",
+      "faithfulness": 1.0,
+      "llm_context_precision_with_reference": 0.9999999999,
+      "context_recall": 1.0,
+      "answer_relevancy": 0.8738307245,
+      "id": "RAGAS-AUT-001",
+      "requirement_id": "REQ-AUT-001"
+    },
+    {
+      "user_input": "According to the final exported requirement, what happens when querying a book by book ID?",
+      "retrieved_contexts": [
+        "[localDocs/AUT-test/result/export/autotest_export (2).json::export_bundle.requirements] REQ-AUT-002; Module: Book Management; Description: The system allows querying a book by its ID.; Raw requirement: 也可以根据图书 ID 查询指定图书; Input fields: book_id; Business rules: System returns the book matching the given ID.; Expected action: System returns the specified book record."
+      ],
+      "response": "When querying a book by its ID, the system returns the book record that matches the given ID.",
+      "reference": "REQ-AUT-002 states that the system allows querying a book by its ID. The input field is book_id, the business rule is that the system returns the book matching the given ID, and the expected action is to return the specified book record.",
+      "faithfulness": 1.0,
+      "llm_context_precision_with_reference": 0.9999999999,
+      "context_recall": 1.0,
+      "answer_relevancy": 0.8538643536,
+      "id": "RAGAS-AUT-002",
+      "requirement_id": "REQ-AUT-002"
+    },
+    {
+      "user_input": "According to the final exported requirement, what must the system do when creating a new book?",
+      "retrieved_contexts": [
+        "[localDocs/AUT-test/result/export/autotest_export (2).json::export_bundle.requirements] REQ-AUT-003; Module: Book Management; Description: The system allows creating a new book with provided details and generates a unique ID.; Raw requirement: 客户端可以创建新图书。创建图书时，客户端需要提交书名、作者、出版年份、图书类别和可借副本数量。系统创建成功后，应保存该图书，并为该图书生成唯一 ID。; Input fields: title, author, publication_year, category, available_copies; Conditions: A request to create a book with required fields is submitted.; Business rules: System saves the book and generates a unique ID.; Expected action: System creates a new book record and returns the generated unique ID."
+      ],
+      "response": "When creating a new book, the system must save the provided details (title, author, publication year, category, available copies) and generate a unique ID for the book. The system then returns that generated unique ID.",
+      "reference": "REQ-AUT-003 states that a client can create a new book by submitting title, author, publication_year, category, and available_copies. The system saves the book and generates a unique ID.",
+      "faithfulness": 1.0,
+      "llm_context_precision_with_reference": 0.9999999999,
+      "context_recall": 1.0,
+      "answer_relevancy": 0.8540102483,
+      "id": "RAGAS-AUT-003",
+      "requirement_id": "REQ-AUT-003"
+    },
+    {
+      "user_input": "According to the final exported requirement, how should the system handle updating an existing or missing book?",
+      "retrieved_contexts": [
+        "[localDocs/AUT-test/result/export/autotest_export (2).json::export_bundle.requirements] REQ-AUT-004; Module: Book Management; Description: The system allows updating an existing book by ID; does not create if not found.; Raw requirement: 客户端可以根据图书 ID 更新已有图书的信息。更新内容包括书名、作者、出版年份、图书类别和可借副本数量。如果指定图书不存在，系统不应创建新的图书。; Input fields: book_id, title, author, publication_year, category, available_copies; Conditions: The specified book exists.; Business rules: System updates the book fields if the book exists; does not create a new book if not found.; Expected action: System updates the existing book record; if not found, rejects the request."
+      ],
+      "response": "If the specified book exists, the system updates its fields; if the book is not found, the system rejects the request without creating a new book.",
+      "reference": "REQ-AUT-004 states that the system updates book fields when the specified book exists. If the book is not found, the system must not create a new book and should reject the request.",
+      "faithfulness": 1.0,
+      "llm_context_precision_with_reference": 0.9999999999,
+      "context_recall": 1.0,
+      "answer_relevancy": 0.7678905602,
+      "id": "RAGAS-AUT-004",
+      "requirement_id": "REQ-AUT-004"
+    },
+    {
+      "user_input": "According to the final exported requirement, what is the expected result after deleting a book?",
+      "retrieved_contexts": [
+        "[localDocs/AUT-test/result/export/autotest_export (2).json::export_bundle.requirements] REQ-AUT-005; Module: Book Management; Description: The system allows deleting a book by ID; subsequent query returns no record.; Raw requirement: 客户端可以根据图书 ID 删除已有图书。图书删除后，客户端再次根据该 ID 查询时，不应再获得该图书记录。; Input fields: book_id; Conditions: The specified book exists.; Business rules: System deletes the book record.; Expected action: System deletes the book record; subsequent query by that ID returns no record."
+      ],
+      "response": "After deleting a book by its ID, a subsequent query using that ID should return no record. The system deletes the book record, so it no longer appears in search results.",
+      "reference": "REQ-AUT-005 states that the system allows deleting a book by ID. After deletion, querying the same ID should not obtain the book record.",
+      "faithfulness": 1.0,
+      "llm_context_precision_with_reference": 0.9999999999,
+      "context_recall": 1.0,
+      "answer_relevancy": 0.749855873,
+      "id": "RAGAS-AUT-005",
+      "requirement_id": "REQ-AUT-005"
+    },
+    {
+      "user_input": "According to the final exported requirement, what must the system do when creating a new member?",
+      "retrieved_contexts": [
+        "[localDocs/AUT-test/result/export/autotest_export (2).json::export_bundle.requirements] REQ-AUT-008; Module: Member Management; Description: The system allows creating a new member with provided details and generates a unique ID.; Raw requirement: 客户端可以创建新会员。创建会员时，客户端需要提交姓名、邮箱、电话号码、会员开始日期和会员结束日期。系统创建成功后，应保存该会员，并为该会员生成唯一 ID。; Input fields: name, email, phone, membership_start_date, membership_end_date; Conditions: A request to create a member with required fields is submitted.; Business rules: System saves the member and generates a unique ID.; Expected action: System creates a new member record and returns the generated unique ID."
+      ],
+      "response": "According to the requirement, when creating a new member, the system saves the member record and generates a unique ID, then returns that generated unique ID.",
+      "reference": "REQ-AUT-008 states that member creation requires name, email, phone, membership_start_date, and membership_end_date. The system saves the member and generates a unique ID.",
+      "faithfulness": 1.0,
+      "llm_context_precision_with_reference": 0.9999999999,
+      "context_recall": 1.0,
+      "answer_relevancy": 0.8316363853,
+      "id": "RAGAS-AUT-006",
+      "requirement_id": "REQ-AUT-008"
+    },
+    {
+      "user_input": "According to the final exported requirement, what conditions are required before the system creates a borrowing record?",
+      "retrieved_contexts": [
+        "[localDocs/AUT-test/result/export/autotest_export (2).json::export_bundle.requirements] REQ-AUT-012; Module: Borrowing Record; Description: The system allows borrowing a book for an existing member, only if book and member exist and available copies > 0.; Raw requirement: 客户端可以为一个已存在会员借阅一本已存在图书。借书请求中应包含图书 ID 和会员 ID。只有当图书存在、会员存在并且图书可借副本数量大于 0 时，系统才应创建借阅记录。; Input fields: book_id, member_id; Conditions: The specified book exists.; The specified member exists.; The book's available copies count is greater than 0.; Business rules: System creates a borrowing record only if all conditions are met.; Expected action: System creates a borrowing record and associates it with the book and member."
+      ],
+      "response": "The system requires that the specified book exists, the specified member exists, and the book's available copies count is greater than 0 before creating a borrowing record.",
+      "reference": "REQ-AUT-012 states that a borrowing record is created only when the specified book exists, the specified member exists, and the book's available copies count is greater than 0.",
+      "faithfulness": 1.0,
+      "llm_context_precision_with_reference": 0.9999999999,
+      "context_recall": 1.0,
+      "answer_relevancy": 0.836766198,
+      "id": "RAGAS-AUT-007",
+      "requirement_id": "REQ-AUT-012"
+    },
+    {
+      "user_input": "According to the final exported requirement, what state updates occur after a successful borrow?",
+      "retrieved_contexts": [
+        "[localDocs/AUT-test/result/export/autotest_export (2).json::export_bundle.requirements] REQ-AUT-013; Module: Borrowing Record; Description: On successful borrow, system sets borrow date to today, due date to 14 days later, return date null, decreases available copies by 1.; Raw requirement: 当借书成功时，系统应记录当天作为借出日期，并将应还日期设置为借出日期之后 14 天。新借阅记录的归还日期应为空。借书成功后，被借图书的可借副本数量应减少 1。; Conditions: A successful borrow occurs.; Business rules: System sets borrow date to current date.; System sets due date to borrow date + 14 days.; System sets return date to null.; System decreases the book's available copies by 1.; Expected action: System records the borrow date, calculates due date, and updates the book's available copies."
+      ],
+      "response": "After a successful borrow, the system sets the borrow date to the current date, the due date to 14 days later, and the return date to null. It also decreases the book's available copies by 1.",
+      "reference": "REQ-AUT-013 states that on successful borrow the system sets borrow date to current date, due date to borrow date plus 14 days, return date to null, and decreases the book's available copies by 1.",
+      "faithfulness": 1.0,
+      "llm_context_precision_with_reference": 0.9999999999,
+      "context_recall": 1.0,
+      "answer_relevancy": 0.732267093,
+      "id": "RAGAS-AUT-008",
+      "requirement_id": "REQ-AUT-013"
+    },
+    {
+      "user_input": "According to the final exported requirement, how should the system handle a borrow request with a missing or unknown book ID?",
+      "retrieved_contexts": [
+        "[localDocs/AUT-test/result/export/autotest_export (2).json::export_bundle.requirements] REQ-AUT-014; Module: Borrowing Record; Description: The system rejects borrow request if book ID is missing or does not correspond to an existing book.; Raw requirement: 如果借书请求中的图书 ID 缺失，或者图书 ID 不对应任何已存在图书，系统应拒绝该借书请求，并且不应创建借阅记录。; Input fields: book_id; Conditions: Book ID is missing or does not correspond to an existing book.; Business rules: System rejects the borrow request and does not create a borrowing record.; Expected action: System rejects the borrow request with an error."
+      ],
+      "response": "The system should reject the borrow request with an error and must not create a borrowing record when the book ID is missing or does not correspond to an existing book.",
+      "reference": "REQ-AUT-014 states that if the book ID is missing or does not correspond to an existing book, the system rejects the borrow request and does not create a borrowing record.",
+      "faithfulness": 1.0,
+      "llm_context_precision_with_reference": 0.9999999999,
+      "context_recall": 1.0,
+      "answer_relevancy": 0.8044937633,
+      "id": "RAGAS-AUT-009",
+      "requirement_id": "REQ-AUT-014"
+    },
+    {
+      "user_input": "According to the final exported requirement, how should the system handle a borrow request with a missing or unknown member ID?",
+      "retrieved_contexts": [
+        "[localDocs/AUT-test/result/export/autotest_export (2).json::export_bundle.requirements] REQ-AUT-015; Module: Borrowing Record; Description: The system rejects borrow request if member ID is missing or does not correspond to an existing member.; Raw requirement: 如果借书请求中的会员 ID 缺失，或者会员 ID 不对应任何已存在会员，系统应拒绝该借书请求，并且不应创建借阅记录。; Input fields: member_id; Conditions: Member ID is missing or does not correspond to an existing member.; Business rules: System rejects the borrow request and does not create a borrowing record.; Expected action: System rejects the borrow request with an error."
+      ],
+      "response": "According to REQ-AUT-015, the system should reject a borrow request if the member ID is missing or unknown, not create a borrowing record, and return an error.",
+      "reference": "REQ-AUT-015 states that if the member ID is missing or does not correspond to an existing member, the system rejects the borrow request and does not create a borrowing record.",
+      "faithfulness": 1.0,
+      "llm_context_precision_with_reference": 0.9999999999,
+      "context_recall": 1.0,
+      "answer_relevancy": 0.8257909799,
+      "id": "RAGAS-AUT-010",
+      "requirement_id": "REQ-AUT-015"
+    },
+    {
+      "user_input": "According to the final exported requirement, what happens when a borrow request targets a book with zero available copies?",
+      "retrieved_contexts": [
+        "[localDocs/AUT-test/result/export/autotest_export (2).json::export_bundle.requirements] REQ-AUT-016; Module: Borrowing Record; Description: The system rejects borrow request if available copies are 0, does not create record and does not decrease copies.; Raw requirement: 如果目标图书的可借副本数量为 0，系统应拒绝借书请求。拒绝借书后，系统不应创建借阅记录，也不应把图书可借副本数量减少为负数。; Input fields: book_id; Conditions: The book's available copies count is 0.; Business rules: System rejects the borrow request.; System does not create a borrowing record.; System does not decrease the book's available copies.; Expected action: System rejects the borrow request and does not modify the book's copy count."
+      ],
+      "response": "When the target book has zero available copies, the system rejects the borrow request, does not create a borrowing record, and does not decrease the book's available copies.",
+      "reference": "REQ-AUT-016 states that when the book's available copies count is 0, the system rejects the borrow request, does not create a borrowing record, and does not decrease the copy count.",
+      "faithfulness": 1.0,
+      "llm_context_precision_with_reference": 0.9999999999,
+      "context_recall": 1.0,
+      "answer_relevancy": 0.878223626,
+      "id": "RAGAS-AUT-011",
+      "requirement_id": "REQ-AUT-016"
+    },
+    {
+      "user_input": "According to the final exported requirement, when is a borrowed book return allowed?",
+      "retrieved_contexts": [
+        "[localDocs/AUT-test/result/export/autotest_export (2).json::export_bundle.requirements] REQ-AUT-017; Module: Borrowing Record; Description: The system allows returning a borrowed book by record ID, only if record exists and not yet returned.; Raw requirement: 客户端可以归还一本已借出的图书。归还请求通过借阅记录 ID 指定要归还的借阅记录。只有当借阅记录存在，并且该借阅记录尚未归还时，系统才应完成归还。; Input fields: record_id; Conditions: The specified borrowing record exists.; The borrowing record has not been returned (return date is null).; Business rules: System allows return only if record exists and not yet returned.; Expected action: System processes the return and updates the record."
+      ],
+      "response": "According to REQ-AUT-017, a borrowed book return is allowed only if the borrowing record exists and has not yet been returned (i.e., the return date is null).",
+      "reference": "REQ-AUT-017 states that the system allows returning a borrowed book by record ID only if the specified borrowing record exists and the record has not been returned.",
+      "faithfulness": 1.0,
+      "llm_context_precision_with_reference": 0.9999999999,
+      "context_recall": 1.0,
+      "answer_relevancy": 0.8327484336,
+      "id": "RAGAS-AUT-012",
+      "requirement_id": "REQ-AUT-017"
+    },
+    {
+      "user_input": "According to the final exported requirement, what state update occurs after a successful return?",
+      "retrieved_contexts": [
+        "[localDocs/AUT-test/result/export/autotest_export (2).json::export_bundle.requirements] REQ-AUT-018; Module: Borrowing Record; Description: On successful return, system sets return date to today and increases available copies of the book by 1.; Raw requirement: 当归还成功时，系统应记录当天作为归还日期，并将对应图书的可借副本数量增加 1。; Conditions: A successful return occurs.; Business rules: System sets return date to current date.; System increases the book's available copies by 1.; Expected action: System updates the borrowing record with return date and increments available copies."
+      ],
+      "response": "After a successful return, the system sets the return date to the current date and increases the book's available copies by 1.",
+      "reference": "REQ-AUT-018 states that on successful return the system sets return date to current date and increases the book's available copies by 1.",
+      "faithfulness": 1.0,
+      "llm_context_precision_with_reference": 0.9999999999,
+      "context_recall": 1.0,
+      "answer_relevancy": 0.7002978985,
+      "id": "RAGAS-AUT-013",
+      "requirement_id": "REQ-AUT-018"
+    },
+    {
+      "user_input": "According to the final exported requirement, how should the system handle a duplicate return request?",
+      "retrieved_contexts": [
+        "[localDocs/AUT-test/result/export/autotest_export (2).json::export_bundle.requirements] REQ-AUT-020; Module: Borrowing Record; Description: The system rejects duplicate return for an already returned record.; Raw requirement: 如果某条借阅记录已经归还，客户端再次提交同一借阅记录的归还请求时，系统应拒绝重复归还。; Input fields: record_id; Conditions: The borrowing record already has a return date (already returned).; Business rules: System rejects the duplicate return request.; Expected action: System rejects the duplicate return request with an error."
+      ],
+      "response": "According to requirement REQ-AUT-020, the system rejects duplicate return requests for already returned records with an error message.",
+      "reference": "REQ-AUT-020 states that if a borrowing record already has a return date, the system rejects another return request for that record.",
+      "faithfulness": 1.0,
+      "llm_context_precision_with_reference": 0.9999999999,
+      "context_recall": 1.0,
+      "answer_relevancy": 0.8031825042,
+      "id": "RAGAS-AUT-014",
+      "requirement_id": "REQ-AUT-020"
+    },
+    {
+      "user_input": "According to the final exported requirement, what HTTP status categories should the system use for common outcomes?",
+      "retrieved_contexts": [
+        "[localDocs/AUT-test/result/export/autotest_export (2).json::export_bundle.requirements] REQ-AUT-022; Module: System; Description: The system uses standard HTTP status codes: 200 for success, 201 for created, 204 for deleted, 400 for client errors, 404 for not found.; Raw requirement: 系统应使用常见 HTTP 状态码表达处理结果。成功查询或更新通常返回成功状态，成功创建资源返回创建成功状态，成功删除资源返回无内容状态，输入错误或业务规则不满足时返回请求错误状态，按 ID 查询、更新或删除不存在的资源时返回未找到状态。; Business rules: System returns HTTP 200 for successful queries and updates.; System returns HTTP 201 for successful creation.; System returns HTTP 204 for successful deletion.; System returns HTTP 400 for input errors or business rule violations.; System returns HTTP 404 for queries, updates, or deletions of non-existing resources.; Expected action: System returns appropriate HTTP status codes based on outcome."
+      ],
+      "response": "The system uses 2xx status codes for success outcomes: 200 for queries/updates, 201 for creation, and 204 for deletion. For client errors, it uses 4xx codes: 400 for input errors or business rule violations, and 404 for non-existing resources.",
+      "reference": "REQ-AUT-022 states that the system returns HTTP 200 for successful queries and updates, 201 for successful creation, 204 for successful deletion, 400 for input errors or business rule violations, and 404 for queries, updates, or deletions of non-existing resources.",
+      "faithfulness": 1.0,
+      "llm_context_precision_with_reference": 0.9999999999,
+      "context_recall": 1.0,
+      "answer_relevancy": 0.708657385,
+      "id": "RAGAS-AUT-015",
+      "requirement_id": "REQ-AUT-022"
+    },
+    {
+      "user_input": "According to the final exported requirement, how should the system handle malformed JSON request bodies?",
+      "retrieved_contexts": [
+        "[localDocs/AUT-test/result/export/autotest_export (2).json::export_bundle.requirements] REQ-AUT-021; Module: System; Description: The system uses JSON for requests/responses; rejects malformed JSON in request bodies.; Raw requirement: 系统的接口请求和响应主要使用 JSON。创建和更新图书、创建和更新会员、借书等请求需要提交 JSON 请求体。如果客户端提交格式错误、无法解析的 JSON，请求应被拒绝。; Conditions: Client submits malformed JSON in request body.; Business rules: System expects JSON request bodies for create/update/borrow requests.; System rejects malformed JSON requests.; Expected action: System rejects the request with an error if JSON is malformed."
+      ],
+      "response": "The system rejects requests with malformed JSON in the request body, returning an error. This applies to create/update/borrow operations that expect JSON.",
+      "reference": "REQ-AUT-021 states that create/update book, create/update member, and borrow requests use JSON request bodies. If the client submits malformed JSON that cannot be parsed, the system rejects the request with an error.",
+      "faithfulness": 1.0,
+      "llm_context_precision_with_reference": 0.9999999999,
+      "context_recall": 1.0,
+      "answer_relevancy": 0.7908910908,
+      "id": "RAGAS-AUT-016",
+      "requirement_id": "REQ-AUT-021"
+    }
+  ]
+}

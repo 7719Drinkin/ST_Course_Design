@@ -28,7 +28,6 @@ const { Title, Text } = Typography
 export function ExportPage() {
   const [mode, setMode] = useState<OptimizeMode>('risk_priority')
   const [optLive, setOptLive] = useState<boolean>()
-  const [optPending, setOptPending] = useState<string>()
   const [exporting, setExporting] = useState(false)
   const [previewOpen, setPreviewOpen] = useState(false)
 
@@ -36,10 +35,19 @@ export function ExportPage() {
   const revisions = useAppStore((s) => s.revisions)
   const riskEntries = useAppStore((s) => s.riskEntries)
   const coverageItems = useAppStore((s) => s.coverageItems)
+  const requirements = useAppStore((s) => s.requirements)
+  const strategies = useAppStore((s) => s.strategies)
+  const fsm = useAppStore((s) => s.fsm)
+  const promptEvidence = useAppStore((s) => s.promptEvidence)
+  const analysisResults = useAppStore((s) => s.analysisResults)
   const optimizeResult = useAppStore((s) => s.optimizeResult)
   const setOptimizeResult = useAppStore((s) => s.setOptimizeResult)
 
-  const approved = testCases.filter((t) => t.status === 'Approved')
+  const approved = useMemo(() => testCases.filter((t) => t.status === 'Approved'), [testCases])
+  const selectedForOptimize = useMemo(
+    () => (approved.length > 0 ? approved : testCases),
+    [approved, testCases],
+  )
   const approvedIdsKey = approved.map((t) => t.test_id).join(',')
   const allIdsKey = testCases.map((t) => t.test_id).join(',')
   const hasTestCases = testCases.length > 0
@@ -49,13 +57,11 @@ export function ExportPage() {
       setOptimizeResult(null)
       return
     }
-    const ids = approvedIdsKey ? approvedIdsKey.split(',') : allIdsKey ? allIdsKey.split(',') : []
-    getOptimizeResult(mode, ids).then((r) => {
+    getOptimizeResult(mode, selectedForOptimize, coverageItems, riskEntries).then((r) => {
       setOptimizeResult(r.data)
       setOptLive(r.isLive)
-      setOptPending(r.pendingFrom)
     })
-  }, [mode, approvedIdsKey, allIdsKey, setOptimizeResult])
+  }, [mode, approvedIdsKey, allIdsKey, selectedForOptimize, coverageItems, riskEntries, setOptimizeResult])
 
   const previewPayload = useMemo(
     () => ({
@@ -69,44 +75,56 @@ export function ExportPage() {
 
   const handleExport = async (format: 'json' | 'csv' | 'xlsx') => {
     if (approved.length === 0) {
-      message.warning('请先于 Step 3 批准至少一条测试用例')
+      message.warning('请先批准至少一条测试用例')
       return
     }
     setExporting(true)
     try {
-      const blob = await exportApproved(format, approved, revisions, {
-        risk_scores: riskEntries,
-        coverage_items: coverageItems,
+      const blob = await exportApproved(format, {
+        requirements,
+        riskEntries,
+        coverageItems,
+        strategies,
+        testCases: approved,
+        fsm,
+        revisions,
+        optimizeResult,
+        promptEvidence,
+        analysisResults,
       })
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
-      a.download = `autotest_export.${format === 'xlsx' ? 'csv' : format}`
+      a.download = `autotest_export.${format}`
       a.click()
       URL.revokeObjectURL(url)
-      message.success(`已导出 ${approved.length} 条 Approved 用例 + 风险分 + 覆盖项`)
+      message.success(`已导出 ${approved.length} 条已通过用例、风险分和覆盖项`)
     } catch {
-      message.error('导出失败，请确认后端已启动 (port 8000)')
+      message.error('导出失败，请稍后重试或检查服务状态。')
     }
     setExporting(false)
   }
 
   const opt = optimizeResult
+  const optimizeStatusLive = opt ? true : optLive
+  const reductionPercent = opt
+    ? Math.max(0, Math.round(((opt.before_count - opt.after_count) / Math.max(1, opt.before_count)) * 100))
+    : 0
 
   return (
     <Space direction="vertical" size={24} className="full-width">
       <div className="stage-toolbar stage-toolbar-wrap">
         <span>
           <Title level={4} style={{ margin: 0, display: 'inline' }}>优化与导出</Title>
-          {hasTestCases && <DataStatusTag isLive={optLive} pendingFrom={optPending} />}
+          {hasTestCases && <DataStatusTag isLive={optimizeStatusLive} />}
         </span>
         <Space wrap>
           <Button disabled={!hasTestCases} onClick={() => setPreviewOpen(true)}>导出预览</Button>
           <Button disabled={approved.length === 0} loading={exporting} onClick={() => handleExport('csv')}>
-            导出 Approved CSV
+            导出已通过 CSV
           </Button>
           <Button disabled={approved.length === 0} loading={exporting} onClick={() => handleExport('json')}>
-            导出 Approved JSON
+            导出已通过 JSON
           </Button>
         </Space>
       </div>
@@ -121,7 +139,7 @@ export function ExportPage() {
           <Alert
             type="info"
             showIcon
-            message={`将导出 ${approved.length} 条已批准用例、${riskEntries.length} 条风险分、${coverageItems.length} 个覆盖项，并附带 ${revisions.length} 条修订记录。`}
+            title={`将导出 ${approved.length} 条已批准用例、${riskEntries.length} 条风险分、${coverageItems.length} 个覆盖项，并附带 ${revisions.length} 条修订记录。`}
           />
 
           <Card title="套件优化">
@@ -131,7 +149,7 @@ export function ExportPage() {
                 onChange={(v) => setMode(v as OptimizeMode)}
                 options={[
                   { label: '风险优先', value: 'risk_priority' },
-                  { label: '标准模式', value: 'normal' },
+                  { label: '集合覆盖', value: 'set_cover' },
                 ]}
               />
               <Spin spinning={!opt}>
@@ -149,7 +167,7 @@ export function ExportPage() {
                     </div>
                   </Col>
                 </Row>
-                <Progress className="top-gap" percent={opt?.reduction_rate ?? 0} strokeColor="#0f766e" />
+                <Progress className="top-gap" percent={opt?.reduction_rate ?? reductionPercent} strokeColor="#0f766e" />
                 {opt?.removed_test_ids && opt.removed_test_ids.length > 0 && (
                   <List
                     size="small"
@@ -181,7 +199,7 @@ export function ExportPage() {
         width={720}
       >
         <Descriptions size="small" column={2} bordered>
-          <Descriptions.Item label="Approved 用例">{approved.length}</Descriptions.Item>
+            <Descriptions.Item label="已通过用例">{approved.length}</Descriptions.Item>
           <Descriptions.Item label="风险分">{riskEntries.length}</Descriptions.Item>
           <Descriptions.Item label="覆盖项">{coverageItems.length}</Descriptions.Item>
           <Descriptions.Item label="修订记录">{revisions.length}</Descriptions.Item>

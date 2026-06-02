@@ -4,10 +4,10 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "tsc -b && vite build",
+    "dev": "vite --configLoader native --host 127.0.0.1 --port 5173",
+    "build": "tsc -b && vite build --configLoader native --emptyOutDir false",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview --configLoader native"
   },
   "dependencies": {
     "antd": "^6.3.7",

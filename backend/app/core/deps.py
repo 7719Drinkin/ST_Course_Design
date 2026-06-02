@@ -1,7 +1,7 @@
-"""FastAPI dependency injection — single source for all Depends() callables."""
+"""FastAPI dependency injection helpers."""
 
-from ..modules.requirements.service import RequirementService
+from ..modules.fsm.service import FsmService
 
 
-def get_requirement_service() -> RequirementService:
-    return RequirementService()
+def get_fsm_service() -> FsmService:
+    return FsmService()

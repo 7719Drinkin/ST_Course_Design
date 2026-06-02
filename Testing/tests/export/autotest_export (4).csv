@@ -1,0 +1,198 @@
+﻿artifact_type,id,requirement_id,coverage_item_id,strategy_id,text
+requirement,REQ-AUT-001,REQ-AUT-001,,,The system allows querying all books.
+requirement,REQ-AUT-002,REQ-AUT-002,,,The system allows querying a book by its ID.
+requirement,REQ-AUT-003,REQ-AUT-003,,,The system allows creating a new book with provided details and generates a unique ID.
+requirement,REQ-AUT-004,REQ-AUT-004,,,The system allows updating an existing book by ID; does not create if not found.
+requirement,REQ-AUT-005,REQ-AUT-005,,,The system allows deleting a book by ID; subsequent query returns no record.
+requirement,REQ-AUT-006,REQ-AUT-006,,,The system allows querying all members.
+requirement,REQ-AUT-007,REQ-AUT-007,,,The system allows querying a member by ID.
+requirement,REQ-AUT-008,REQ-AUT-008,,,The system allows creating a new member with provided details and generates a unique ID.
+requirement,REQ-AUT-009,REQ-AUT-009,,,The system allows updating an existing member by ID; does not create if not found.
+requirement,REQ-AUT-010,REQ-AUT-010,,,The system allows deleting a member by ID; subsequent query returns no record.
+requirement,REQ-AUT-011,REQ-AUT-011,,,The system allows querying all borrowing records.
+requirement,REQ-AUT-012,REQ-AUT-012,,,"The system allows borrowing a book for an existing member, only if book and member exist and available copies > 0."
+requirement,REQ-AUT-013,REQ-AUT-013,,,"On successful borrow, system sets borrow date to today, due date to 14 days later, return date null, decreases available copies by 1."
+requirement,REQ-AUT-014,REQ-AUT-014,,,The system rejects borrow request if book ID is missing or does not correspond to an existing book.
+requirement,REQ-AUT-015,REQ-AUT-015,,,The system rejects borrow request if member ID is missing or does not correspond to an existing member.
+requirement,REQ-AUT-016,REQ-AUT-016,,,"The system rejects borrow request if available copies are 0, does not create record and does not decrease copies."
+requirement,REQ-AUT-017,REQ-AUT-017,,,"The system allows returning a borrowed book by record ID, only if record exists and not yet returned."
+requirement,REQ-AUT-018,REQ-AUT-018,,,"On successful return, system sets return date to today and increases available copies of the book by 1."
+requirement,REQ-AUT-019,REQ-AUT-019,,,The system rejects return request if record ID does not exist.
+requirement,REQ-AUT-020,REQ-AUT-020,,,The system rejects duplicate return for an already returned record.
+requirement,REQ-AUT-021,REQ-AUT-021,,,The system uses JSON for requests/responses; rejects malformed JSON in request bodies.
+requirement,REQ-AUT-022,REQ-AUT-022,,,"The system uses standard HTTP status codes: 200 for success, 201 for created, 204 for deleted, 400 for client errors, 404 for not found."
+requirement,REQ-AUT-023,REQ-AUT-023,,,Date fields use YYYY-MM-DD format; due date is always 14 days after borrow date.
+coverage_item,COV-AUT-001-001-EP-001,REQ-AUT-001,COV-AUT-001-001-EP-001,,Cover successful retrieval of all book records.
+coverage_item,COV-AUT-002-001-EP-001,REQ-AUT-002,COV-AUT-002-001-EP-001,,Cover retrieval of a book by ID when the book exists.
+coverage_item,COV-AUT-003-001-EP-001,REQ-AUT-003,COV-AUT-003-001-EP-001,,Cover successful creation of a new book with all valid fields.
+coverage_item,COV-AUT-004-001-EP-001,REQ-AUT-004,COV-AUT-004-001-EP-001,,Cover successful update of an existing book by ID when the book exists.
+coverage_item,COV-AUT-004-002-EP-001,REQ-AUT-004,COV-AUT-004-002-EP-001,,Cover rejection of update request when the specified book ID does not exist.
+coverage_item,COV-AUT-005-001-EP-001,REQ-AUT-005,COV-AUT-005-001-EP-001,,Cover successful deletion of an existing book by ID.
+coverage_item,COV-AUT-006-001-EP-001,REQ-AUT-006,COV-AUT-006-001-EP-001,,Cover successful retrieval of all member records.
+coverage_item,COV-AUT-007-001-EP-001,REQ-AUT-007,COV-AUT-007-001-EP-001,,Cover retrieval of a member by ID when the member exists.
+coverage_item,COV-AUT-008-001-EP-001,REQ-AUT-008,COV-AUT-008-001-EP-001,,Cover successful creation of a new member with all valid fields.
+coverage_item,COV-AUT-009-001-EP-001,REQ-AUT-009,COV-AUT-009-001-EP-001,,Cover successful update of an existing member by ID when the member exists.
+coverage_item,COV-AUT-009-002-EP-001,REQ-AUT-009,COV-AUT-009-002-EP-001,,Cover rejection of update request when the specified member ID does not exist.
+coverage_item,COV-AUT-010-001-EP-001,REQ-AUT-010,COV-AUT-010-001-EP-001,,Cover successful deletion of an existing member by ID.
+coverage_item,COV-AUT-011-001-EP-001,REQ-AUT-011,COV-AUT-011-001-EP-001,,Cover successful retrieval of all borrowing records.
+coverage_item,COV-AUT-012-001-DT-001,REQ-AUT-012,COV-AUT-012-001-DT-001,,"Cover the successful borrow scenario where book exists, member exists, and available copies > 0."
+coverage_item,COV-AUT-013-001-EP-001,REQ-AUT-013,COV-AUT-013-001-EP-001,,"Cover verification of borrow date, due date, and available copies update after a successful borrow."
+coverage_item,COV-AUT-014-001-EP-001,REQ-AUT-014,COV-AUT-014-001-EP-001,,Cover rejection of borrow request when book ID is missing or does not correspond to an existing book.
+coverage_item,COV-AUT-015-001-EP-001,REQ-AUT-015,COV-AUT-015-001-EP-001,,Cover rejection of borrow request when member ID is missing or does not correspond to an existing member.
+coverage_item,COV-AUT-016-001-BVA-001,REQ-AUT-016,COV-AUT-016-001-BVA-001,,Cover rejection of borrow request when the book's available copies are zero (boundary value).
+coverage_item,COV-AUT-017-001-DT-001,REQ-AUT-017,COV-AUT-017-001-DT-001,,Cover successful return of a borrowed book when the record exists and has not been returned.
+coverage_item,COV-AUT-018-001-EP-001,REQ-AUT-018,COV-AUT-018-001-EP-001,,Cover verification of return date and available copies update after a successful return.
+coverage_item,COV-AUT-019-001-EP-001,REQ-AUT-019,COV-AUT-019-001-EP-001,,Cover rejection of return request when the record ID does not exist.
+coverage_item,COV-AUT-020-001-EP-001,REQ-AUT-020,COV-AUT-020-001-EP-001,,Cover rejection of duplicate return request for an already returned record.
+coverage_item,COV-AUT-021-001-EP-001,REQ-AUT-021,COV-AUT-021-001-EP-001,,Cover rejection of malformed JSON in request body.
+coverage_item,COV-AUT-022-001-DT-001,REQ-AUT-022,COV-AUT-022-001-DT-001,,Cover mapping of different outcome types to correct HTTP status codes.
+coverage_item,COV-AUT-023-001-EP-001,REQ-AUT-023,COV-AUT-023-001-EP-001,,Cover that the system enforces YYYY-MM-DD date format and calculates due date as borrow date + 14 days.
+coverage_item,COV-AUT-FSM-001,REQ-AUT-012,COV-AUT-FSM-001,,Borrow an available book successfully moves from NO_RECORD to BORROWED
+coverage_item,COV-AUT-FSM-002,REQ-AUT-014,COV-AUT-FSM-002,,Borrow request rejected when book ID missing or book not found (state remains NO_RECORD)
+coverage_item,COV-AUT-FSM-003,REQ-AUT-015,COV-AUT-FSM-003,,Borrow request rejected when member ID missing or member not found (state remains NO_RECORD)
+coverage_item,COV-AUT-FSM-004,REQ-AUT-016,COV-AUT-FSM-004,,Borrow request rejected when book available copies are 0 (state remains NO_RECORD)
+coverage_item,COV-AUT-FSM-005,REQ-AUT-021,COV-AUT-FSM-005,,Borrow request rejected when request body contains malformed JSON (state remains NO_RECORD)
+coverage_item,COV-AUT-FSM-006,REQ-AUT-017,COV-AUT-FSM-006,,Return a borrowed book successfully moves from BORROWED to RETURNED
+coverage_item,COV-AUT-FSM-007,REQ-AUT-020,COV-AUT-FSM-007,,Duplicate return request rejected (state stays RETURNED)
+coverage_item,COV-AUT-FSM-008,REQ-AUT-019,COV-AUT-FSM-008,,Return request rejected when record ID does not exist (state remains NO_RECORD)
+strategy,STR-AUT-001,,COV-AUT-001-001-EP-001,STR-AUT-001,EP is suitable because the goal involves a single valid outcome with no input conditions or boundaries.
+strategy,STR-AUT-002,,COV-AUT-002-001-EP-001,STR-AUT-002,EP is suitable because the behavior depends on the existence class of the book ID.
+strategy,STR-AUT-003,,COV-AUT-003-001-EP-001,STR-AUT-003,EP is suitable because the outcome depends on the validity of input classes.
+strategy,STR-AUT-004,,COV-AUT-004-001-EP-001,STR-AUT-004,EP is suitable because the behavior depends on the existence class of the book ID.
+strategy,STR-AUT-005,,COV-AUT-004-002-EP-001,STR-AUT-005,EP is suitable because the behavior depends on the non-existence class of the book ID.
+strategy,STR-AUT-006,,COV-AUT-005-001-EP-001,STR-AUT-006,EP is suitable because the behavior depends on the existence class of the book ID.
+strategy,STR-AUT-007,,COV-AUT-006-001-EP-001,STR-AUT-007,EP is suitable because the goal involves a single valid outcome with no input conditions or boundaries.
+strategy,STR-AUT-008,,COV-AUT-007-001-EP-001,STR-AUT-008,EP is suitable because the behavior depends on the existence class of the member ID.
+strategy,STR-AUT-009,,COV-AUT-008-001-EP-001,STR-AUT-009,EP is suitable because the outcome depends on the validity of input classes.
+strategy,STR-AUT-010,,COV-AUT-009-001-EP-001,STR-AUT-010,EP is suitable because the behavior depends on the existence class of the member ID.
+strategy,STR-AUT-011,,COV-AUT-009-002-EP-001,STR-AUT-011,EP is suitable because the behavior depends on the non-existence class of the member ID.
+strategy,STR-AUT-012,,COV-AUT-010-001-EP-001,STR-AUT-012,EP is suitable because the behavior depends on the existence class of the member ID.
+strategy,STR-AUT-013,,COV-AUT-011-001-EP-001,STR-AUT-013,EP is suitable because the goal involves a single valid outcome with no input conditions or boundaries.
+strategy,STR-AUT-014,,COV-AUT-012-001-DT-001,STR-AUT-014,"DT is suitable because the outcome depends on the combination of multiple conditions (book exists, member exists, copies > 0)."
+strategy,STR-AUT-015,,COV-AUT-013-001-EP-001,STR-AUT-015,EP is suitable for verifying the expected state changes in a single valid scenario.
+strategy,STR-AUT-016,,COV-AUT-014-001-EP-001,STR-AUT-016,EP is suitable because the behavior depends on the invalid existence class of the book ID.
+strategy,STR-AUT-017,,COV-AUT-015-001-EP-001,STR-AUT-017,EP is suitable because the behavior depends on the invalid existence class of the member ID.
+strategy,STR-AUT-018,,COV-AUT-016-001-BVA-001,STR-AUT-018,BVA is suitable because the condition involves a numeric boundary (zero copies) that determines the outcome.
+strategy,STR-AUT-019,,COV-AUT-017-001-DT-001,STR-AUT-019,DT is suitable because the outcome depends on the combination of two conditions (record exists and not returned).
+strategy,STR-AUT-020,,COV-AUT-018-001-EP-001,STR-AUT-020,EP is suitable for verifying the expected state changes in a single valid scenario.
+strategy,STR-AUT-021,,COV-AUT-019-001-EP-001,STR-AUT-021,EP is suitable because the behavior depends on the non-existence class of the record ID.
+strategy,STR-AUT-022,,COV-AUT-020-001-EP-001,STR-AUT-022,EP is suitable because the behavior depends on the state class (already returned) of the record.
+strategy,STR-AUT-023,,COV-AUT-021-001-EP-001,STR-AUT-023,EP is suitable because the behavior depends on the invalid format class of the input.
+strategy,STR-AUT-024,,COV-AUT-022-001-DT-001,STR-AUT-024,"DT is suitable because the outcome (status code) depends on the combination of outcome types (success, creation, deletion, client error, not found)."
+strategy,STR-AUT-025,,COV-AUT-023-001-EP-001,STR-AUT-025,EP is suitable for verifying the expected date behavior in a single valid scenario.
+strategy,STR-AUT-026,,COV-AUT-FSM-001,STR-AUT-026,FSM is used because the behavior depends on lifecycle states and transitions.
+strategy,STR-AUT-027,,COV-AUT-FSM-002,STR-AUT-027,FSM is used because the behavior depends on lifecycle states and transitions.
+strategy,STR-AUT-028,,COV-AUT-FSM-003,STR-AUT-028,FSM is used because the behavior depends on lifecycle states and transitions.
+strategy,STR-AUT-029,,COV-AUT-FSM-004,STR-AUT-029,FSM is used because the behavior depends on lifecycle states and transitions.
+strategy,STR-AUT-030,,COV-AUT-FSM-005,STR-AUT-030,FSM is used because the behavior depends on lifecycle states and transitions.
+strategy,STR-AUT-031,,COV-AUT-FSM-006,STR-AUT-031,FSM is used because the behavior depends on lifecycle states and transitions.
+strategy,STR-AUT-032,,COV-AUT-FSM-007,STR-AUT-032,FSM is used because the behavior depends on lifecycle states and transitions.
+strategy,STR-AUT-033,,COV-AUT-FSM-008,STR-AUT-033,FSM is used because the behavior depends on lifecycle states and transitions.
+test_case,TC-AUT-001-001-EP-001,REQ-AUT-001,COV-AUT-001-001-EP-001,,The system returns a complete list of all book records currently stored in the database.
+test_case,TC-AUT-002-001-EP-001,REQ-AUT-002,COV-AUT-002-001-EP-001,,The system displays the book record matching the given ID.
+test_case,TC-AUT-003-001-EP-001,REQ-AUT-003,COV-AUT-003-001-EP-001,,The system creates a new book record with the submitted data and returns a generated unique ID.
+test_case,TC-AUT-003-001-EP-002,REQ-AUT-003,COV-AUT-003-001-EP-001,,The system creates a new book record with the submitted data and returns a generated unique ID.
+test_case,TC-AUT-003-001-EP-003,REQ-AUT-003,COV-AUT-003-001-EP-001,,The system creates a new book record with the submitted data and returns a generated unique ID.
+test_case,TC-AUT-004-001-EP-001,REQ-AUT-004,COV-AUT-004-001-EP-001,,The system updates the existing book record with the provided fields and returns a success confirmation.
+test_case,TC-AUT-004-002-EP-001,REQ-AUT-004,COV-AUT-004-002-EP-001,,The system rejects the update request and returns an error indicating that the book ID does not exist. No new or updated book record is created.
+test_case,TC-AUT-005-001-EP-001,REQ-AUT-005,COV-AUT-005-001-EP-001,,The system deletes the book record; subsequent query by ID 123 returns no record.
+test_case,TC-AUT-005-001-EP-002,REQ-AUT-005,COV-AUT-005-001-EP-001,,The system does not delete any record and returns an error or indication that the book does not exist.
+test_case,TC-AUT-006-001-EP-001,REQ-AUT-006,COV-AUT-006-001-EP-001,,The system returns a list of all member records.
+test_case,TC-AUT-007-001-EP-001,REQ-AUT-007,COV-AUT-007-001-EP-001,,"The system returns the member record matching member_id 'M12345', including all relevant member details."
+test_case,TC-AUT-008-001-EP-001,REQ-AUT-008,COV-AUT-008-001-EP-001,,The system creates a new member record containing the submitted data and returns a unique member ID.
+test_case,TC-AUT-008-001-EP-002,REQ-AUT-008,COV-AUT-008-001-EP-001,,The system creates a new member record containing the submitted data and returns a unique member ID.
+test_case,TC-AUT-008-001-EP-003,REQ-AUT-008,COV-AUT-008-001-EP-001,,The system creates a new member record containing the submitted data and returns a unique member ID.
+test_case,TC-AUT-009-001-EP-001,REQ-AUT-009,COV-AUT-009-001-EP-001,,The system updates the existing member record with the provided fields and confirms the update.
+test_case,TC-AUT-009-002-EP-001,REQ-AUT-009,COV-AUT-009-002-EP-001,,"The system rejects the update request with an appropriate error message indicating that the member ID does not exist, and no new member is created."
+test_case,TC-AUT-010-001-EP-001,REQ-AUT-010,COV-AUT-010-001-EP-001,,The delete operation succeeds. A subsequent query by member ID 'M-001' returns no record (empty result or 'not found' message).
+test_case,TC-AUT-011-001-EP-001,REQ-AUT-011,COV-AUT-011-001-EP-001,,The system returns a list containing all borrowing records.
+test_case,TC-AUT-012-001-DT-001,REQ-AUT-012,COV-AUT-012-001-DT-001,,"The system creates a borrowing record for book B001 and member M001, and the available copies of book B001 are decremented to 0."
+test_case,TC-AUT-012-001-DT-002,REQ-AUT-012,COV-AUT-012-001-DT-001,,"The system creates a borrowing record for book B002 and member M002, and the available copies of book B002 are decremented to 49."
+test_case,TC-AUT-012-001-DT-003,REQ-AUT-012,COV-AUT-012-001-DT-001,,"The system creates a borrowing record for book B003 and member M003, and the available copies of book B003 are decremented to 998."
+test_case,TC-AUT-013-001-EP-001,REQ-AUT-013,COV-AUT-013-001-EP-001,,"The system sets borrow date to today's date, due date to borrow date + 14 days, return date to null, and updates the book's available copies from 5 to 4."
+test_case,TC-AUT-013-001-EP-002,REQ-AUT-013,COV-AUT-013-001-EP-001,,"The system sets borrow date to today's date, due date to borrow date + 14 days, return date to null, and updates the book's available copies from 1 to 0."
+test_case,TC-AUT-014-001-EP-001,REQ-AUT-014,COV-AUT-014-001-EP-001,,"The system rejects the borrow request with an error message indicating that the book ID is missing or invalid, and does not create a borrowing record."
+test_case,TC-AUT-014-001-EP-002,REQ-AUT-014,COV-AUT-014-001-EP-001,,"The system rejects the borrow request with an error message indicating that the book ID does not exist, and does not create a borrowing record."
+test_case,TC-AUT-015-001-EP-001,REQ-AUT-015,COV-AUT-015-001-EP-001,,The system rejects the borrow request with an error and does not create a borrowing record.
+test_case,TC-AUT-015-001-EP-002,REQ-AUT-015,COV-AUT-015-001-EP-001,,The system rejects the borrow request with an error and does not create a borrowing record.
+test_case,TC-AUT-016-001-BVA-001,REQ-AUT-016,COV-AUT-016-001-BVA-001,,The system rejects the borrow request. No borrowing record is created. The available copies count remains 0.
+test_case,TC-AUT-016-001-BVA-002,REQ-AUT-016,COV-AUT-016-001-BVA-001,,"The system accepts the borrow request, creates a borrowing record, and decrements the available copies to 0."
+test_case,TC-AUT-017-001-DT-001,REQ-AUT-017,COV-AUT-017-001-DT-001,,"The system processes the return, updates the borrowing record's return date to the current date, and confirms success."
+test_case,TC-AUT-018-001-EP-001,REQ-AUT-018,COV-AUT-018-001-EP-001,,The system records the return date for the borrowing record and increases the related book's available copies count by 1.
+test_case,TC-AUT-019-001-EP-001,REQ-AUT-019,COV-AUT-019-001-EP-001,,The system rejects the return request and displays an error message indicating that the record ID does not exist.
+test_case,TC-AUT-020-001-EP-001,REQ-AUT-020,COV-AUT-020-001-EP-001,,The system displays an error message indicating that the record has already been returned and does not process the return.
+test_case,TC-AUT-021-001-EP-001,REQ-AUT-021,COV-AUT-021-001-EP-001,,The system responds with HTTP 201 Created and creates the resource.
+test_case,TC-AUT-021-001-EP-002,REQ-AUT-021,COV-AUT-021-001-EP-001,,The system responds with a 400 Bad Request status code and an error message indicating malformed JSON due to missing closing brace.
+test_case,TC-AUT-021-001-EP-003,REQ-AUT-021,COV-AUT-021-001-EP-001,,The system responds with a 400 Bad Request status code and an error message indicating malformed JSON due to trailing comma.
+test_case,TC-AUT-021-001-EP-004,REQ-AUT-021,COV-AUT-021-001-EP-001,,The system responds with a 400 Bad Request status code and an error message indicating malformed JSON due to unquoted key.
+test_case,TC-AUT-022-001-DT-001,REQ-AUT-022,COV-AUT-022-001-DT-001,,The system returns HTTP 200 status code.
+test_case,TC-AUT-022-001-DT-002,REQ-AUT-022,COV-AUT-022-001-DT-001,,The system returns HTTP 201 status code.
+test_case,TC-AUT-022-001-DT-003,REQ-AUT-022,COV-AUT-022-001-DT-001,,The system returns HTTP 204 status code.
+test_case,TC-AUT-022-001-DT-004,REQ-AUT-022,COV-AUT-022-001-DT-001,,The system returns HTTP 400 status code.
+test_case,TC-AUT-022-001-DT-005,REQ-AUT-022,COV-AUT-022-001-DT-001,,The system returns HTTP 404 status code.
+test_case,TC-AUT-023-001-EP-001,REQ-AUT-023,COV-AUT-023-001-EP-001,,"System accepts the date, displays/stores it as 2025-03-20, and calculates the due date as 2025-04-03 (14 days later)."
+test_case,TC-AUT-023-001-EP-002,REQ-AUT-023,COV-AUT-023-001-EP-001,,System rejects the input and displays an error message indicating invalid date format.
+test_case,TC-AUT-023-001-EP-003,REQ-AUT-023,COV-AUT-023-001-EP-001,,System rejects the input and displays an error message indicating that the expected format is YYYY-MM-DD.
+test_case,TC-AUT-023-001-EP-004,REQ-AUT-023,COV-AUT-023-001-EP-001,,System rejects the input and displays an error message indicating the date does not exist.
+test_case,TC-AUT-FSM-001,REQ-AUT-012,COV-AUT-FSM-001,STR-AUT-FSM-001,"System creates a borrowing record with borrow date set to today, due date 14 days later, return date null; the book's available copies decrease by 1; FSM state transitions from NO_RECORD to BORROWED."
+test_case,TC-AUT-FSM-002,REQ-AUT-014,COV-AUT-FSM-002,STR-AUT-FSM-002,System rejects the request with HTTP 400 or 404 error; no borrowing record is created; FSM state remains NO_RECORD.
+test_case,TC-AUT-FSM-003,REQ-AUT-015,COV-AUT-FSM-003,STR-AUT-FSM-003,System rejects the request with HTTP 400 or 404 error; no borrowing record is created; FSM state remains NO_RECORD.
+test_case,TC-AUT-FSM-004,REQ-AUT-016,COV-AUT-FSM-004,STR-AUT-FSM-004,System rejects the request with HTTP 400 error; no borrowing record is created; book's available copies remain 0; FSM state remains NO_RECORD.
+test_case,TC-AUT-FSM-005,REQ-AUT-021,COV-AUT-FSM-005,STR-AUT-FSM-005,System rejects the request with HTTP 400 error; no borrowing record is created; FSM state remains NO_RECORD.
+test_case,TC-AUT-FSM-006,REQ-AUT-017,COV-AUT-FSM-006,STR-AUT-FSM-006,System sets return date to today; increases the associated book's available copies by 1; FSM state transitions from BORROWED to RETURNED.
+test_case,TC-AUT-FSM-007,REQ-AUT-020,COV-AUT-FSM-007,STR-AUT-FSM-007,System rejects the duplicate return request with HTTP 400 error; no changes to the record or book copies; FSM state remains RETURNED.
+test_case,TC-AUT-FSM-008,REQ-AUT-019,COV-AUT-FSM-008,STR-AUT-FSM-008,System rejects the return request with HTTP 404 error; no borrowing record created; FSM state remains NO_RECORD.
+oracle_result,TC-AUT-001-001-EP-001,,,,The system returns a complete list of all book records currently stored in the database.
+oracle_result,TC-AUT-002-001-EP-001,,,,The system displays the book record matching the given ID.
+oracle_result,TC-AUT-003-001-EP-001,,,,The system creates a new book record with the submitted data and returns a generated unique ID.
+oracle_result,TC-AUT-003-001-EP-002,,,,The system creates a new book record with the submitted data and returns a generated unique ID.
+oracle_result,TC-AUT-003-001-EP-003,,,,The system creates a new book record with the submitted data and returns a generated unique ID.
+oracle_result,TC-AUT-004-001-EP-001,,,,The system updates the existing book record with the provided fields and returns a success confirmation.
+oracle_result,TC-AUT-004-002-EP-001,,,,The system rejects the update request and returns an error indicating that the book ID does not exist. No new or updated book record is created.
+oracle_result,TC-AUT-005-001-EP-001,,,,The system deletes the book record; subsequent query by ID 123 returns no record.
+oracle_result,TC-AUT-005-001-EP-002,,,,The system does not delete any record and returns an error or indication that the book does not exist.
+oracle_result,TC-AUT-006-001-EP-001,,,,The system returns a list of all member records.
+oracle_result,TC-AUT-007-001-EP-001,,,,"The system returns the member record matching member_id 'M12345', including all relevant member details."
+oracle_result,TC-AUT-008-001-EP-001,,,,The system creates a new member record containing the submitted data and returns a unique member ID.
+oracle_result,TC-AUT-008-001-EP-002,,,,The system creates a new member record containing the submitted data and returns a unique member ID.
+oracle_result,TC-AUT-008-001-EP-003,,,,The system creates a new member record containing the submitted data and returns a unique member ID.
+oracle_result,TC-AUT-009-001-EP-001,,,,The system updates the existing member record with the provided fields and confirms the update.
+oracle_result,TC-AUT-009-002-EP-001,,,,"The system rejects the update request with an appropriate error message indicating that the member ID does not exist, and no new member is created."
+oracle_result,TC-AUT-010-001-EP-001,,,,The delete operation succeeds. A subsequent query by member ID 'M-001' returns no record (empty result or 'not found' message).
+oracle_result,TC-AUT-011-001-EP-001,,,,The system returns a list containing all borrowing records.
+oracle_result,TC-AUT-012-001-DT-001,,,,"The system creates a borrowing record for book B001 and member M001, and the available copies of book B001 are decremented to 0."
+oracle_result,TC-AUT-012-001-DT-002,,,,"The system creates a borrowing record for book B002 and member M002, and the available copies of book B002 are decremented to 49."
+oracle_result,TC-AUT-012-001-DT-003,,,,"The system creates a borrowing record for book B003 and member M003, and the available copies of book B003 are decremented to 998."
+oracle_result,TC-AUT-013-001-EP-001,,,,"The system sets borrow date to today's date, due date to borrow date + 14 days, return date to null, and updates the book's available copies from 5 to 4."
+oracle_result,TC-AUT-013-001-EP-002,,,,"The system sets borrow date to today's date, due date to borrow date + 14 days, return date to null, and updates the book's available copies from 1 to 0."
+oracle_result,TC-AUT-014-001-EP-001,,,,"The system rejects the borrow request with an error message indicating that the book ID is missing or invalid, and does not create a borrowing record."
+oracle_result,TC-AUT-014-001-EP-002,,,,"The system rejects the borrow request with an error message indicating that the book ID does not exist, and does not create a borrowing record."
+oracle_result,TC-AUT-015-001-EP-001,,,,The system rejects the borrow request with an error and does not create a borrowing record.
+oracle_result,TC-AUT-015-001-EP-002,,,,The system rejects the borrow request with an error and does not create a borrowing record.
+oracle_result,TC-AUT-016-001-BVA-001,,,,The system rejects the borrow request. No borrowing record is created. The available copies count remains 0.
+oracle_result,TC-AUT-016-001-BVA-002,,,,"The system accepts the borrow request, creates a borrowing record, and decrements the available copies to 0."
+oracle_result,TC-AUT-017-001-DT-001,,,,"The system processes the return, updates the borrowing record's return date to the current date, and confirms success."
+oracle_result,TC-AUT-018-001-EP-001,,,,The system records the return date for the borrowing record and increases the related book's available copies count by 1.
+oracle_result,TC-AUT-019-001-EP-001,,,,The system rejects the return request and displays an error message indicating that the record ID does not exist.
+oracle_result,TC-AUT-020-001-EP-001,,,,The system displays an error message indicating that the record has already been returned and does not process the return.
+oracle_result,TC-AUT-021-001-EP-001,,,,The system responds with HTTP 201 Created and creates the resource.
+oracle_result,TC-AUT-021-001-EP-002,,,,The system responds with a 400 Bad Request status code and an error message indicating malformed JSON due to missing closing brace.
+oracle_result,TC-AUT-021-001-EP-003,,,,The system responds with a 400 Bad Request status code and an error message indicating malformed JSON due to trailing comma.
+oracle_result,TC-AUT-021-001-EP-004,,,,The system responds with a 400 Bad Request status code and an error message indicating malformed JSON due to unquoted key.
+oracle_result,TC-AUT-022-001-DT-001,,,,The system returns HTTP 200 status code.
+oracle_result,TC-AUT-022-001-DT-002,,,,The system returns HTTP 201 status code.
+oracle_result,TC-AUT-022-001-DT-003,,,,The system returns HTTP 204 status code.
+oracle_result,TC-AUT-022-001-DT-004,,,,The system returns HTTP 400 status code.
+oracle_result,TC-AUT-022-001-DT-005,,,,The system returns HTTP 404 status code.
+oracle_result,TC-AUT-023-001-EP-001,,,,"System accepts the date, displays/stores it as 2025-03-20, and calculates the due date as 2025-04-03 (14 days later)."
+oracle_result,TC-AUT-023-001-EP-002,,,,System rejects the input and displays an error message indicating invalid date format.
+oracle_result,TC-AUT-023-001-EP-003,,,,System rejects the input and displays an error message indicating that the expected format is YYYY-MM-DD.
+oracle_result,TC-AUT-023-001-EP-004,,,,System rejects the input and displays an error message indicating the date does not exist.
+oracle_result,TC-AUT-FSM-001,,,,"System creates a borrowing record with borrow date set to today, due date 14 days later, return date null; the book's available copies decrease by 1; FSM state transitions from NO_RECORD to BORROWED."
+oracle_result,TC-AUT-FSM-002,,,,System rejects the request with HTTP 400 or 404 error; no borrowing record is created; FSM state remains NO_RECORD.
+oracle_result,TC-AUT-FSM-003,,,,System rejects the request with HTTP 400 or 404 error; no borrowing record is created; FSM state remains NO_RECORD.
+oracle_result,TC-AUT-FSM-004,,,,System rejects the request with HTTP 400 error; no borrowing record is created; book's available copies remain 0; FSM state remains NO_RECORD.
+oracle_result,TC-AUT-FSM-005,,,,System rejects the request with HTTP 400 error; no borrowing record is created; FSM state remains NO_RECORD.
+oracle_result,TC-AUT-FSM-006,,,,System sets return date to today; increases the associated book's available copies by 1; FSM state transitions from BORROWED to RETURNED.
+oracle_result,TC-AUT-FSM-007,,,,System rejects the duplicate return request with HTTP 400 error; no changes to the record or book copies; FSM state remains RETURNED.
+oracle_result,TC-AUT-FSM-008,,,,System rejects the return request with HTTP 404 error; no borrowing record created; FSM state remains NO_RECORD.

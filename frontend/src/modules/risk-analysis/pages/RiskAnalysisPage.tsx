@@ -1,134 +1,113 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Button, Card, Col, Input, List, Row, Select, Space, Table, Tag, Typography } from 'antd'
-import { TECHNIQUE_OPTIONS, useAppStore } from '@/app/store/appStore'
-import { getCoverageItems } from '@/modules/risk-analysis/api/coverageApi'
+import { Button, Card, InputNumber, Select, Space, Table, Tag, Typography } from 'antd'
+import { useAppStore } from '@/app/store/appStore'
 import { getRiskData } from '@/modules/risk-analysis/api/riskApi'
-import { ImprovementSummary } from '@/shared/components/ImprovementSummary'
 import { RevisionPanel } from '@/shared/components/RevisionPanel'
 import { DataStatusTag, WorkflowEmptyState } from '@/shared/components/WorkflowFeedback'
-import type { CoverageItem, RiskLevel, Technique } from '@/shared/types'
+import type { RiskEntry, RiskLevel, TestPriority } from '@/shared/types'
 
-const { Title, Text } = Typography
+const { Text } = Typography
 
-function buildHeatmapMatrix(
-  entries: { impact: number; likelihood: number }[],
-  filter?: { impact: number; likelihood: number } | null,
-) {
+function buildHeatmapMatrix(entries: RiskEntry[]) {
   const matrix = Array.from({ length: 5 }, () => Array<number>(5).fill(0))
   entries.forEach(({ impact, likelihood }) => {
-    const r = Math.min(5, Math.max(1, likelihood)) - 1
-    const c = Math.min(5, Math.max(1, impact)) - 1
-    if (!filter || (filter.impact === impact && filter.likelihood === likelihood)) {
-      matrix[r][c]++
-    }
+    const row = Math.min(5, Math.max(1, likelihood)) - 1
+    const col = Math.min(5, Math.max(1, impact)) - 1
+    matrix[row][col] += 1
   })
   return matrix
 }
 
 function getCellBg(count: number, row: number, col: number) {
   const score = (row + 1) * (col + 1)
-  if (count === 0) return score >= 15 ? 'rgba(248,113,113,0.12)' : score >= 8 ? 'rgba(250,204,21,0.12)' : 'rgba(134,239,172,0.12)'
-  if (score >= 15) return '#f87171'
-  if (score >= 8) return '#facc15'
-  return '#86efac'
+  if (count === 0) return score >= 15 ? 'rgba(220, 38, 38, 0.08)' : score >= 8 ? 'rgba(202, 138, 4, 0.10)' : 'rgba(15, 118, 110, 0.08)'
+  if (score >= 15) return '#ef4444'
+  if (score >= 8) return '#f59e0b'
+  return '#2dd4bf'
+}
+
+function normalizeRisk(entry: RiskEntry): RiskEntry {
+  const score = entry.score ?? entry.risk_score ?? entry.impact * entry.likelihood
+  const level = entry.level ?? entry.risk_level ?? (score >= 15 ? 'High' : score >= 8 ? 'Medium' : 'Low')
+  return { ...entry, score, level }
 }
 
 export function RiskAnalysisPage() {
-  const [cellFilter, setCellFilter] = useState<{ impact: number; likelihood: number } | null>(null)
   const [riskLive, setRiskLive] = useState<boolean>()
-  const [riskPending, setRiskPending] = useState<string>()
+  const [cellFilter, setCellFilter] = useState<{ impact: number; likelihood: number } | null>(null)
 
   const requirements = useAppStore((s) => s.requirements)
   const riskEntries = useAppStore((s) => s.riskEntries)
   const setRiskEntries = useAppStore((s) => s.setRiskEntries)
-  const updateRiskLevel = useAppStore((s) => s.updateRiskLevel)
-  const coverageItems = useAppStore((s) => s.coverageItems)
-  const setCoverageItems = useAppStore((s) => s.setCoverageItems)
-  const updateCoverageItem = useAppStore((s) => s.updateCoverageItem)
-  const addCoverageItem = useAppStore((s) => s.addCoverageItem)
-  const setCurrentStep = useAppStore((s) => s.setCurrentStep)
+  const updateRiskEntry = useAppStore((s) => s.updateRiskEntry)
+  const pipelineActive = useAppStore((s) => s.pipelineActive)
 
-  const reqIdsKey = requirements.map((r) => r.requirement_id).join(',')
+  const reqIdsKey = requirements.map((requirement) => requirement.requirement_id).join(',')
   const hasRequirements = requirements.length > 0
 
   useEffect(() => {
+    if (pipelineActive) return
     if (!reqIdsKey) {
       setRiskEntries([])
-      setCoverageItems([])
       return
     }
-    const ids = reqIdsKey.split(',')
-    getRiskData(ids).then((r) => {
-      setRiskEntries(r.data)
-      setRiskLive(r.isLive)
-      setRiskPending(r.pendingFrom)
+    getRiskData(requirements).then((result) => {
+      setRiskEntries(result.data.map(normalizeRisk))
+      setRiskLive(result.isLive)
     })
-    getCoverageItems(ids).then((r) => setCoverageItems(r.data))
-  }, [reqIdsKey, setRiskEntries, setCoverageItems])
+  }, [pipelineActive, requirements, reqIdsKey, setRiskEntries])
 
-  const matrix = useMemo(() => buildHeatmapMatrix(riskEntries, cellFilter), [riskEntries, cellFilter])
-
+  const matrix = useMemo(() => buildHeatmapMatrix(riskEntries), [riskEntries])
   const displayedRisk = useMemo(() => {
     if (!cellFilter) return riskEntries
     return riskEntries.filter(
-      (e) => e.impact === cellFilter.impact && e.likelihood === cellFilter.likelihood,
+      (entry) => entry.impact === cellFilter.impact && entry.likelihood === cellFilter.likelihood,
     )
   }, [riskEntries, cellFilter])
 
-  const highCount = riskEntries.filter((e) => e.level === 'High').length
-  const medCount = riskEntries.filter((e) => e.level === 'Medium').length
-  const lowCount = riskEntries.filter((e) => e.level === 'Low').length
-
-  const handleAddCoverage = () => {
-    const baseReq = requirements[0]?.requirement_id
-    if (!baseReq) return
-    const n = coverageItems.length + 1
-    const item: CoverageItem = {
-      coverage_item_id: `COV-DESIGN-${String(n).padStart(3, '0')}`,
-      requirement_id: baseReq,
-      description: '人工新增覆盖项',
-      techniques: ['EP'],
-      strategy_rationale: '需求评审过程中补充',
-      designer_added: true,
-    }
-    addCoverageItem(item)
-  }
+  const highRiskCount = riskEntries.filter((entry) => entry.level === 'High').length
+  const riskStatusLive = riskEntries.length > 0 ? true : riskLive
 
   return (
     <Space direction="vertical" size={24} className="full-width">
-      <div className="stage-toolbar">
-        <span>
-          <Title level={4} style={{ margin: 0, display: 'inline' }}>风险矩阵</Title>
-          {hasRequirements && <DataStatusTag isLive={riskLive} pendingFrom={riskPending} />}
-        </span>
-        <Button type="primary" disabled={!hasRequirements} onClick={() => setCurrentStep(2)}>
-          下一步: 生成与复核
-        </Button>
-      </div>
-
       {!hasRequirements ? (
         <WorkflowEmptyState
-          title="等待需求解析结果"
-          description="风险矩阵会基于已上传需求动态生成。当前没有需求数据，因此不会请求或展示任何内置风险样例。"
+          title="等待结构化需求"
+          description="风险评分必须基于真实需求。请先在输入阶段提交需求，再继续审查风险。"
         />
       ) : (
         <>
-          <Row gutter={[16, 16]}>
-            <Col xs={24} lg={14}>
-              <Card title="Impact × Likelihood 热力图（点击单元格筛选）">
+          <div className="workbench-grid workbench-grid-1">
+            <Card title="风险评分">
+              <Space direction="vertical" size={16} className="full-width">
+                <DataStatusTag isLive={riskStatusLive} />
+                <div className="metric-band">
+                  <div>
+                    <span>{riskEntries.length}</span>
+                    <Text>风险项</Text>
+                  </div>
+                  <div>
+                    <span>{highRiskCount}</span>
+                    <Text>High</Text>
+                  </div>
+                  <div>
+                    <span>{riskEntries.filter((entry) => entry.test_priority === 'P1').length}</span>
+                    <Text>P1</Text>
+                  </div>
+                </div>
                 <div className="heatmap">
-                  {matrix.flatMap((row, rIdx) =>
-                    row.map((count, cIdx) => (
+                  {matrix.flatMap((row, rowIndex) =>
+                    row.map((count, colIndex) => (
                       <button
-                        key={`${rIdx}-${cIdx}`}
+                        key={`${rowIndex}-${colIndex}`}
                         type="button"
                         className="heatmap-cell heatmap-cell-btn"
-                        style={{ background: getCellBg(count, rIdx, cIdx) }}
+                        style={{ background: getCellBg(count, rowIndex, colIndex) }}
                         onClick={() =>
                           setCellFilter(
-                            cellFilter?.impact === cIdx + 1 && cellFilter?.likelihood === rIdx + 1
+                            cellFilter?.impact === colIndex + 1 && cellFilter?.likelihood === rowIndex + 1
                               ? null
-                              : { impact: cIdx + 1, likelihood: rIdx + 1 },
+                              : { impact: colIndex + 1, likelihood: rowIndex + 1 },
                           )
                         }
                       >
@@ -137,144 +116,94 @@ export function RiskAnalysisPage() {
                     )),
                   )}
                 </div>
-                {cellFilter && (
-                  <Text type="secondary" style={{ fontSize: 12, marginTop: 8, display: 'block' }}>
-                    筛选：Impact={cellFilter.impact}, Likelihood={cellFilter.likelihood}
-                    <Button type="link" size="small" onClick={() => setCellFilter(null)}>清除</Button>
-                  </Text>
-                )}
-              </Card>
-            </Col>
-            <Col xs={24} lg={10}>
-              <Card title="Risk Snapshot">
-                <List
-                  size="small"
-                  dataSource={[
-                    `高风险：${highCount}`,
-                    `中风险：${medCount}`,
-                    `低风险：${lowCount}`,
-                  ]}
-                  renderItem={(item) => <List.Item>{item}</List.Item>}
-                />
-                <Table
-                  size="small"
-                  pagination={{ pageSize: 6 }}
-                  style={{ marginTop: 12 }}
-                  rowKey="requirement_id"
-                  scroll={{ x: 420 }}
-                  dataSource={displayedRisk}
-                  columns={[
-                    { title: 'ID', dataIndex: 'requirement_id', ellipsis: true, width: 110 },
-                    { title: 'Score', dataIndex: 'score', width: 56 },
-                    {
-                      title: 'I×L',
-                      width: 64,
-                      render: (_, r) => `${r.impact}×${r.likelihood}`,
-                    },
-                    {
-                      title: 'Priority',
-                      dataIndex: 'level',
-                      width: 110,
-                      render: (v: RiskLevel, record) => (
-                        <Select
-                          size="small"
-                          value={v}
-                          style={{ width: 96 }}
-                          onChange={(level) => updateRiskLevel(record.requirement_id, level)}
-                          options={[
-                            { value: 'High', label: 'High' },
-                            { value: 'Medium', label: 'Medium' },
-                            { value: 'Low', label: 'Low' },
-                          ]}
-                        />
-                      ),
-                    },
-                  ]}
-                />
-              </Card>
-            </Col>
-          </Row>
+              </Space>
+            </Card>
+          </div>
 
-          <Card
-            title="Coverage Items · 覆盖项识别与策略 (Mainly)"
-            extra={
-              <Button size="small" onClick={handleAddCoverage}>
-                新增覆盖项
-              </Button>
-            }
-          >
+          <Card title="风险评分审查">
             <Table
               size="small"
-              rowKey="coverage_item_id"
-              pagination={{ pageSize: 6 }}
-              scroll={{ x: 860 }}
-              dataSource={coverageItems}
+              rowKey="requirement_id"
+              pagination={{ pageSize: 8 }}
+              scroll={{ x: 980 }}
+              dataSource={displayedRisk}
               columns={[
+                { title: '目标', dataIndex: 'requirement_id', width: 130 },
                 {
-                  title: 'Coverage ID',
-                  dataIndex: 'coverage_item_id',
-                  width: 150,
-                  render: (v: string, record) => (
-                    <Space size={4}>
-                      {v}
-                      {record.designer_added && <Tag color="blue">新增</Tag>}
-                    </Space>
-                  ),
-                },
-                { title: 'Requirement', dataIndex: 'requirement_id', width: 120 },
-                {
-                  title: 'Description',
-                  dataIndex: 'description',
-                  render: (v, record) => (
-                    <Input
-                      size="small"
-                      value={v}
-                      onChange={(e) =>
-                        updateCoverageItem(record.coverage_item_id, { description: e.target.value })
-                      }
+                  title: '影响', dataIndex: 'impact', width: 100,
+                  render: (value: number, record: RiskEntry) => (
+                    <InputNumber size="small" min={1} max={5} value={value} style={{ width: '100%' }}
+                      onChange={(v) => updateRiskEntry(record.requirement_id, { impact: v ?? value })}
                     />
                   ),
                 },
                 {
-                  title: 'Techniques',
-                  dataIndex: 'techniques',
-                  width: 160,
-                  render: (t: Technique[], record) => (
+                  title: '可能性', dataIndex: 'likelihood', width: 100,
+                  render: (value: number, record: RiskEntry) => (
+                    <InputNumber size="small" min={1} max={5} value={value} style={{ width: '100%' }}
+                      onChange={(v) => updateRiskEntry(record.requirement_id, { likelihood: v ?? value })}
+                    />
+                  ),
+                },
+                { title: '分数', dataIndex: 'score', width: 80 },
+                {
+                  title: '风险等级',
+                  dataIndex: 'level',
+                  width: 150,
+                  render: (value: RiskLevel, record: RiskEntry) => (
                     <Select
                       size="small"
-                      mode="multiple"
-                      value={t}
+                      value={value}
                       style={{ width: '100%' }}
-                      onChange={(techniques) =>
-                        updateCoverageItem(record.coverage_item_id, { techniques })
-                      }
-                      options={TECHNIQUE_OPTIONS.map((x) => ({ value: x, label: x }))}
+                      onChange={(level) => updateRiskEntry(record.requirement_id, { level }, undefined, true)}
+                      options={[
+                        { value: 'High', label: 'High' },
+                        { value: 'Medium', label: 'Medium' },
+                        { value: 'Low', label: 'Low' },
+                      ]}
                     />
                   ),
                 },
                 {
-                  title: 'Strategy',
-                  dataIndex: 'strategy_rationale',
-                  ellipsis: true,
-                  render: (v, record) => (
-                    <Input
+                  title: '优先级',
+                  dataIndex: 'test_priority',
+                  width: 120,
+                  render: (value: TestPriority | undefined, record: RiskEntry) => (
+                    <Select
                       size="small"
-                      value={v ?? ''}
-                      onChange={(e) =>
-                        updateCoverageItem(record.coverage_item_id, {
-                          strategy_rationale: e.target.value,
-                        })
+                      value={value ?? 'P2'}
+                      style={{ width: '100%' }}
+                      onChange={(testPriority) =>
+                        updateRiskEntry(record.requirement_id, { test_priority: testPriority }, undefined, true)
                       }
+                      options={[
+                        { value: 'P1', label: 'P1' },
+                        { value: 'P2', label: 'P2' },
+                        { value: 'P3', label: 'P3' },
+                      ]}
                     />
                   ),
+                },
+                {
+                  title: '评分理由',
+                  dataIndex: 'reason',
+                  ellipsis: true,
+                  render: (value: string | undefined) => value || <Tag>待 RAG/Prompt 返回</Tag>,
                 },
               ]}
             />
+            {cellFilter && (
+              <Text type="secondary" className="table-hint">
+                当前筛选 Impact={cellFilter.impact}, Likelihood={cellFilter.likelihood}
+                <Button type="link" size="small" onClick={() => setCellFilter(null)}>
+                  清除筛选
+                </Button>
+              </Text>
+            )}
           </Card>
         </>
       )}
 
-      <ImprovementSummary />
       <RevisionPanel />
     </Space>
   )

@@ -1,39 +1,59 @@
 import { ExportPage } from '@/modules/export/pages/ExportPage'
 import { RequirementsPage } from '@/modules/requirements/pages/RequirementsPage'
+import { CoverageStrategyPage } from '@/modules/risk-analysis/pages/CoverageStrategyPage'
 import { RiskAnalysisPage } from '@/modules/risk-analysis/pages/RiskAnalysisPage'
+import { EvidencePage } from '@/modules/test-design/pages/EvidencePage'
 import { TestDesignPage } from '@/modules/test-design/pages/TestDesignPage'
 
 export const workflowRoutes = [
   {
-    id: 'requirements',
-    title: 'Input & Parse',
-    description: '需求输入与结构化解析',
-    short: '解析',
-    accent: 'Ingest',
+    id: 'intake-parse',
+    title: '输入与结构化解析',
+    description: '接收文本输入或需求文档，完成需求整理和结构化解析。',
+    short: '输入',
+    accent: '输入',
     render: () => <RequirementsPage />,
   },
   {
     id: 'risk-analysis',
-    title: 'Risk Analysis',
-    description: '风险矩阵与覆盖项',
+    title: '风险评分',
+    description: '基于结构化需求计算风险等级和测试优先级。',
     short: '风险',
-    accent: 'Prioritize',
+    accent: '评估',
     render: () => <RiskAnalysisPage />,
   },
   {
-    id: 'test-design',
-    title: 'Generate & Evaluate',
-    description: '用例生成与人工复核',
-    short: '复核',
-    accent: 'Review',
+    id: 'coverage-strategy',
+    title: '覆盖项与覆盖策略',
+    description: '生成覆盖项，并为每个覆盖项选择合适的测试设计方法。',
+    short: '覆盖',
+    accent: '设计',
+    render: () => <CoverageStrategyPage />,
+  },
+  {
+    id: 'case-lab',
+    title: '测试用例与状态路径',
+    description: '生成可追溯测试用例，复核状态路径覆盖和期望结果。',
+    short: '用例',
+    accent: '生成',
     render: () => <TestDesignPage />,
   },
   {
-    id: 'export',
-    title: 'Optimize & Export',
-    description: '套件优化与导出',
+    id: 'evidence-improve',
+    title: '生成依据与差量改进',
+    description: '审查生成依据、人工修订记录、差量更新和结果分析。',
+    short: '证据',
+    accent: '改进',
+    render: () => <EvidencePage />,
+  },
+  {
+    id: 'optimize-export',
+    title: '测试套件优化与导出',
+    description: '按覆盖保持和风险优先目标优化测试套件，并导出完整证据包。',
     short: '导出',
-    accent: 'Release',
+    accent: '发布',
     render: () => <ExportPage />,
   },
 ] as const
+
+export type WorkflowRoute = (typeof workflowRoutes)[number]

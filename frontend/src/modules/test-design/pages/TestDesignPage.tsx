@@ -4,7 +4,6 @@ import {
   Button,
   Card,
   Col,
-  Input,
   List,
   Row,
   Select,
@@ -13,35 +12,38 @@ import {
   Table,
   Tag,
   Typography,
+  message,
 } from 'antd'
 import { useAppStore } from '@/app/store/appStore'
 import { generateFSM } from '@/modules/test-design/api/fsmApi'
 import { MermaidView } from '@/modules/test-design/components/MermaidView'
+import { TestCaseEditorModal } from '@/modules/test-design/components/TestCaseEditorModal'
 import { TraceabilityPanel } from '@/modules/test-design/components/TraceabilityPanel'
 import { getOracleResults } from '@/modules/test-design/api/oracleApi'
 import { getTestCases } from '@/modules/test-design/api/testCasesApi'
 import { ImprovementSummary } from '@/shared/components/ImprovementSummary'
 import { RevisionPanel } from '@/shared/components/RevisionPanel'
 import { DataStatusTag, WorkflowEmptyState } from '@/shared/components/WorkflowFeedback'
-import type { Technique, TestCaseStatus } from '@/shared/types'
+import type { Technique, TestCase, TestCaseStatus } from '@/shared/types'
 
 const { Title, Text } = Typography
 const GENERATE_SLOW_MS = 2000
 
 export function TestDesignPage() {
   const [tcLive, setTcLive] = useState<boolean>()
-  const [tcPending, setTcPending] = useState<string>()
   const [fsmLive, setFsmLive] = useState<boolean>()
   const [fetching, setFetching] = useState(false)
   const [slowWarning, setSlowWarning] = useState(false)
   const [statusFilter, setStatusFilter] = useState<TestCaseStatus | 'all'>('all')
   const [techniqueFilter, setTechniqueFilter] = useState<Technique | 'all'>('all')
+  const [editingCase, setEditingCase] = useState<TestCase | null>(null)
 
   const requirements = useAppStore((s) => s.requirements)
   const coverageItems = useAppStore((s) => s.coverageItems)
   const testCases = useAppStore((s) => s.testCases)
   const setTestCases = useAppStore((s) => s.setTestCases)
   const updateTestCase = useAppStore((s) => s.updateTestCase)
+  const replaceTestCase = useAppStore((s) => s.replaceTestCase)
   const oracleResults = useAppStore((s) => s.oracleResults)
   const setOracleResults = useAppStore((s) => s.setOracleResults)
   const fsm = useAppStore((s) => s.fsm)
@@ -50,19 +52,22 @@ export function TestDesignPage() {
   const setFsmPathCoverage = useAppStore((s) => s.setFsmPathCoverage)
   const highlightedRequirementId = useAppStore((s) => s.highlightedRequirementId)
   const setHighlightedRequirementId = useAppStore((s) => s.setHighlightedRequirementId)
-  const setCurrentStep = useAppStore((s) => s.setCurrentStep)
+  const riskEntries = useAppStore((s) => s.riskEntries)
+  const pipelineActive = useAppStore((s) => s.pipelineActive)
 
   const reqIdsKey = requirements.map((r) => r.requirement_id).join(',')
+  const coverageIdsKey = coverageItems.map((item) => item.coverage_item_id).join(',')
+  const riskKey = riskEntries.map((entry) => `${entry.requirement_id}:${entry.risk_score ?? entry.score}`).join(',')
   const hasRequirements = requirements.length > 0
 
   useEffect(() => {
-    if (!reqIdsKey) {
+    if (pipelineActive) return
+    if (!reqIdsKey || coverageItems.length === 0) {
       setTestCases([])
       setOracleResults([])
       setFsm(null)
       return
     }
-    const ids = reqIdsKey.split(',')
     let active = true
     const slowTimer = window.setTimeout(() => {
       if (active) setSlowWarning(true)
@@ -71,17 +76,17 @@ export function TestDesignPage() {
     const load = async () => {
       setFetching(true)
       try {
-        const r = await getTestCases(ids)
+        const r = await getTestCases(coverageItems, riskEntries)
         if (!active) return
         const cases = r.data.map((c) => ({ ...c, status: c.status ?? 'Draft' }))
-        setTestCases(cases)
+        const fsmCasesFromStore = useAppStore.getState().testCases.filter((t) => t.technique === 'FSM')
+        setTestCases([...cases, ...fsmCasesFromStore])
         setTcLive(r.isLive)
-        setTcPending(r.pendingFrom)
         if (cases.length === 0) {
           setOracleResults([])
           return
         }
-        const o = await getOracleResults(cases.map((c) => c.test_id))
+        const o = await getOracleResults(cases, requirements)
         if (active) setOracleResults(o.data)
       } finally {
         if (active) {
@@ -94,7 +99,7 @@ export function TestDesignPage() {
 
     void load()
 
-    generateFSM(ids).then((r) => {
+    generateFSM(requirements, coverageItems).then((r) => {
       if (active) {
         setFsm(r.data)
         setFsmLive(r.isLive)
@@ -105,7 +110,18 @@ export function TestDesignPage() {
       active = false
       window.clearTimeout(slowTimer)
     }
-  }, [reqIdsKey, setTestCases, setOracleResults, setFsm])
+  }, [
+    pipelineActive,
+    reqIdsKey,
+    coverageIdsKey,
+    coverageItems,
+    requirements,
+    riskEntries,
+    riskKey,
+    setTestCases,
+    setOracleResults,
+    setFsm,
+  ])
 
   const techniqueCounts = useMemo(() => {
     const counts: Record<string, number> = { EP: 0, BVA: 0, DT: 0, FSM: 0 }
@@ -118,25 +134,50 @@ export function TestDesignPage() {
   const filteredCases = testCases.filter((tc) => {
     if (statusFilter !== 'all' && tc.status !== statusFilter) return false
     if (techniqueFilter !== 'all' && tc.technique !== techniqueFilter) return false
-    return !(highlightedRequirementId && tc.requirement_id !== highlightedRequirementId);
+    return !(highlightedRequirementId && tc.requirement_id !== highlightedRequirementId)
 
   })
 
   const fsmPaths = useMemo(() => {
     if (!fsm) return []
-    const statePaths = fsm.coverage.all_states.map((s) => `state:${s}`)
-    const transPaths = fsm.coverage.all_transitions.map((t) => `transition:${t}`)
-    return [...statePaths, ...transPaths]
+    if (fsm.coverage) {
+      const statePaths = fsm.coverage.all_states.map((s) => `state:${s}`)
+      const transPaths = fsm.coverage.all_transitions.map((t) => `transition:${t}`)
+      return [...statePaths, ...transPaths]
+    }
+    return fsm.coverage_paths
   }, [fsm])
 
   const needsReviewCases = oracleResults.filter((o) => o.needs_review)
+  const testCaseStatusLive = testCases.length > 0 ? true : tcLive
+  const fsmStatusLive = fsm?.states?.length ? true : fsmLive
+
+  const handleApproveAll = () => {
+    const targetIds = new Set(filteredCases.map((tc) => tc.test_id))
+    setTestCases(testCases.map((tc) => (
+      targetIds.has(tc.test_id) ? { ...tc, status: 'Approved' } : tc
+    )))
+  }
+
+  const handleRejectAll = () => {
+    const targetIds = new Set(filteredCases.map((tc) => tc.test_id))
+    setTestCases(testCases.map((tc) => (
+      targetIds.has(tc.test_id) ? { ...tc, status: 'Rejected' } : tc
+    )))
+  }
+
+  const handleSaveEditedCase = (next: TestCase, reason: string) => {
+    replaceTestCase(next.test_id, next, reason)
+    setEditingCase(null)
+    message.success('已保存完整测试用例修订，请在证据页重新审查 Oracle。')
+  }
 
   return (
     <Space direction="vertical" size={24} className="full-width">
       <div className="stage-toolbar stage-toolbar-wrap">
         <span>
           <Title level={4} style={{ margin: 0, display: 'inline' }}>生成与复核</Title>
-          {hasRequirements && <DataStatusTag isLive={tcLive} pendingFrom={tcPending} />}
+          {hasRequirements && <DataStatusTag isLive={testCaseStatusLive} />}
         </span>
         <Space wrap>
           {(['EP', 'BVA', 'DT', 'FSM'] as Technique[]).map((t) => (
@@ -160,14 +201,11 @@ export function TestDesignPage() {
             onChange={setStatusFilter}
             options={[
               { value: 'all', label: '全部状态' },
-              { value: 'Draft', label: 'Draft' },
-              { value: 'Approved', label: 'Approved' },
-              { value: 'Rejected', label: 'Rejected' },
+              { value: 'Draft', label: '草稿' },
+              { value: 'Approved', label: '通过' },
+              { value: 'Rejected', label: '驳回' },
             ]}
           />
-          <Button type="primary" disabled={!hasRequirements} onClick={() => setCurrentStep(3)}>
-            下一步: 优化与导出
-          </Button>
         </Space>
       </div>
 
@@ -180,13 +218,18 @@ export function TestDesignPage() {
         <Alert
           type="warning"
           showIcon
-          message="用例生成超过 2s（NFR 目标），请稍后；后端联调后可优化性能。"
+          title="用例生成超过 2s（NFR 目标），请稍后；后端联调后可优化性能。"
         />
       ) : null}
 
       {hasRequirements && <Row gutter={[16, 16]}>
         <Col xs={24} lg={16}>
-          <Card title="测试用例池 · Designer Review">
+          <Card title="测试用例池 · 人工审查" extra={
+            <Space>
+              <Button size="small" onClick={handleApproveAll}>全部通过</Button>
+              <Button size="small" danger onClick={handleRejectAll}>全部驳回</Button>
+            </Space>
+          }>
             <Spin spinning={fetching}>
               <Table
                 rowKey="test_id"
@@ -198,9 +241,9 @@ export function TestDesignPage() {
                   record.requirement_id === highlightedRequirementId ? 'row-highlight' : ''
                 }
                 columns={[
-                  { title: 'ID', dataIndex: 'test_id', width: 120, ellipsis: true },
+                  { title: '用例编号', dataIndex: 'test_id', width: 120, ellipsis: true },
                   {
-                    title: 'Req',
+                    title: '需求',
                     dataIndex: 'requirement_id',
                     width: 108,
                     render: (id: string) => (
@@ -209,57 +252,36 @@ export function TestDesignPage() {
                       </Button>
                     ),
                   },
-                  { title: 'Tech', dataIndex: 'technique', width: 64, render: (v) => <Tag>{v}</Tag> },
+                  { title: '方法', dataIndex: 'technique', width: 64, render: (v) => <Tag>{v}</Tag> },
                   {
-                    title: 'Title',
+                    title: '标题',
                     dataIndex: 'title',
                     width: 140,
-                    render: (v, record) => (
-                      <Input
-                        size="small"
-                        value={v}
-                        onChange={(e) => updateTestCase(record.test_id, { title: e.target.value })}
-                      />
-                    ),
+                    ellipsis: true,
+                    render: (v: string) => <Text title={v}>{v}</Text>,
                   },
                   {
-                    title: 'Steps',
+                    title: '步骤',
                     dataIndex: 'test_steps',
-                    width: 120,
-                    render: (steps: string[], record) => (
-                      <Input
-                        size="small"
-                        value={steps.join(' → ')}
-                        onChange={(e) =>
-                          updateTestCase(record.test_id, {
-                            test_steps: e.target.value.split('→').map((s) => s.trim()).filter(Boolean),
-                          })
-                        }
-                      />
-                    ),
+                    width: 180,
+                    ellipsis: true,
+                    render: (steps: string[]) => <Text title={(steps ?? []).join(' → ')}>{(steps ?? []).join(' → ')}</Text>,
                   },
                   {
-                    title: 'Expected',
+                    title: '期望结果',
                     dataIndex: 'expected_result',
-                    width: 120,
-                    render: (v, record) => (
-                      <Input
-                        size="small"
-                        value={v}
-                        onChange={(e) =>
-                          updateTestCase(record.test_id, { expected_result: e.target.value })
-                        }
-                      />
-                    ),
+                    width: 200,
+                    ellipsis: true,
+                    render: (v: string) => <Text title={v}>{v}</Text>,
                   },
                   {
-                    title: 'COV',
+                    title: '覆盖项',
                     dataIndex: 'coverage_item_id',
                     width: 130,
                     ellipsis: true,
                   },
                   {
-                    title: 'Std Ref',
+                    title: '依据',
                     dataIndex: 'standard_ref',
                     width: 100,
                     ellipsis: true,
@@ -270,22 +292,35 @@ export function TestDesignPage() {
                     ),
                   },
                   {
-                    title: 'Status',
+                    title: '状态',
                     width: 180,
                     render: (_, record) => (
                       <Space size={4} wrap>
-                        {(['Approved', 'Rejected', 'Draft'] as TestCaseStatus[]).map((s) => (
+                        {[
+                          { value: 'Approved' as TestCaseStatus, label: '通过' },
+                          { value: 'Rejected' as TestCaseStatus, label: '驳回' },
+                          { value: 'Draft' as TestCaseStatus, label: '草稿' },
+                        ].map((statusOption) => (
                           <Button
-                            key={s}
+                            key={statusOption.value}
                             size="small"
-                            type={record.status === s ? 'primary' : 'default'}
-                            danger={s === 'Rejected'}
-                            onClick={() => updateTestCase(record.test_id, { status: s })}
+                            type={record.status === statusOption.value ? 'primary' : 'default'}
+                            danger={statusOption.value === 'Rejected'}
+                            onClick={() => updateTestCase(record.test_id, { status: statusOption.value }, undefined, true)}
                           >
-                            {s}
+                            {statusOption.label}
                           </Button>
                         ))}
                       </Space>
+                    ),
+                  },
+                  {
+                    title: '操作',
+                    width: 90,
+                    render: (_, record) => (
+                      <Button size="small" onClick={() => setEditingCase(record)}>
+                        编辑
+                      </Button>
                     ),
                   },
                 ]}
@@ -305,7 +340,7 @@ export function TestDesignPage() {
           <Space direction="vertical" size={16} className="full-width">
             <TraceabilityPanel />
             <Card title="FSM · All States">
-              <DataStatusTag isLive={fsmLive} />
+              <DataStatusTag isLive={fsmStatusLive} />
               {fsm?.mermaid?.trim() ? (
                 <MermaidView chart={fsm.mermaid} />
               ) : fetching ? (
@@ -314,6 +349,22 @@ export function TestDesignPage() {
                 <Text type="secondary" style={{ fontSize: 12 }}>
                   暂无 FSM 数据
                 </Text>
+              )}
+              {testCases.filter((tc) => tc.technique === 'FSM').length > 0 && (
+                <List
+                  size="small"
+                  style={{ marginTop: 12 }}
+                  header={<Text strong>FSM 测试用例</Text>}
+                  dataSource={testCases.filter((tc) => tc.technique === 'FSM').slice(0, 6)}
+                  renderItem={(tc) => (
+                    <List.Item>
+                      <Space direction="vertical" size={0}>
+                        <Text strong style={{ fontSize: 11 }}>{tc.test_id}</Text>
+                        <Text style={{ fontSize: 11 }}>{tc.title}</Text>
+                      </Space>
+                    </List.Item>
+                  )}
+                />
               )}
               {fsmPaths.length > 0 && (
                 <List
@@ -347,26 +398,16 @@ export function TestDesignPage() {
         </Col>
       </Row>}
 
-      {hasRequirements && <Card title="Oracle · Expected Result 合成">
+      {hasRequirements && <Card title="期望结果复核">
         <Table
           size="small"
           rowKey="test_id"
           pagination={false}
           dataSource={oracleResults}
           columns={[
-            { title: 'Test ID', dataIndex: 'test_id', width: 130 },
+            { title: '用例编号', dataIndex: 'test_id', width: 130 },
             {
-              title: 'LLM',
-              dataIndex: 'llm_verdict',
-              render: (v) => <Tag color={v === 'Pass' ? 'green' : 'red'}>{v}</Tag>,
-            },
-            {
-              title: 'Rule',
-              dataIndex: 'rule_verdict',
-              render: (v) => <Tag>{v}</Tag>,
-            },
-            {
-              title: 'Confidence',
+              title: '置信度',
               dataIndex: 'confidence',
               render: (v: number) => (
                 <Tag color={v >= 0.85 ? 'green' : v >= 0.7 ? 'gold' : 'volcano'}>
@@ -375,13 +416,13 @@ export function TestDesignPage() {
               ),
             },
             {
-              title: 'Review',
+              title: '审查',
               render: (_, record) =>
                 record.needs_review ? (
                   <Button
                     size="small"
                     type="primary"
-                    onClick={() => updateTestCase(record.test_id, { status: 'Approved' })}
+                    onClick={() => updateTestCase(record.test_id, { status: 'Approved' }, undefined, true)}
                   >
                     Designer 确认
                   </Button>
@@ -396,7 +437,7 @@ export function TestDesignPage() {
             className="top-gap"
             type="warning"
             showIcon
-            message={`${needsReviewCases.length} 条用例需人工复核 Oracle 结果`}
+            title={`${needsReviewCases.length} 条用例需人工复核 Oracle 结果`}
           />
         )}
       </Card>}
@@ -405,12 +446,18 @@ export function TestDesignPage() {
         <Alert
           type="info"
           showIcon
-          message={`已加载 ${coverageItems.length} 个覆盖项，用例生成将与之追溯（COV-*）。`}
+          title={`已加载 ${coverageItems.length} 个覆盖项，用例生成将与之追溯（COV-*）。`}
         />
       )}
 
       <ImprovementSummary />
       <RevisionPanel />
+      <TestCaseEditorModal
+        open={Boolean(editingCase)}
+        testCase={editingCase}
+        onCancel={() => setEditingCase(null)}
+        onSave={handleSaveEditedCase}
+      />
     </Space>
   )
 }

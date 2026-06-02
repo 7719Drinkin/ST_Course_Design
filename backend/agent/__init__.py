@@ -1,7 +1,29 @@
-"""Agent interaction layer — AI model orchestration, LLM prompting, and
-multi-agent collaboration.
+from .pipeline.agent_pipeline import (
+    AgentPipeline,
+    analyze_risk,
+    assign_strategy,
+    generate_fsm,
+    generate_oracles,
+    generate_tests,
+    identify_coverage,
+    parse_requirements,
+)
+from .pipeline.stages import StageName
+from .revision_runner import RevisionRunnerError, regenerate_from_revision
+from .runner import generate_blackbox_tests, generate_blackbox_tests_stream
 
-This package is intentionally isolated from `app/`. All functions it exposes
-are callable without an HTTP context. `app/` modules consume it through
-interfaces defined here, never depending on its internal implementation.
-"""
+__all__ = [
+    "AgentPipeline",
+    "RevisionRunnerError",
+    "StageName",
+    "analyze_risk",
+    "assign_strategy",
+    "generate_blackbox_tests",
+    "generate_blackbox_tests_stream",
+    "generate_fsm",
+    "generate_oracles",
+    "generate_tests",
+    "identify_coverage",
+    "parse_requirements",
+    "regenerate_from_revision",
+]
