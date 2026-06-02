@@ -22,6 +22,8 @@ from typing import Any, Iterable
 ROOT = Path(__file__).resolve().parents[2]
 GOLDEN_QA = ROOT / "Testing" / "tests" / "data" / "ragas_golden_qa_draft.json"
 REPORT_DIR = ROOT / "Testing" / "reports"
+TRACKED_EXPORT = ROOT / "Testing" / "tests" / "export" / "autotest_export (2).json"
+LOCAL_EXPORT_FALLBACK = ROOT / "localDocs" / "AUT-test" / "result" / "export" / "autotest_export (2).json"
 
 DEFAULT_RAGAS_THRESHOLDS = {
     "faithfulness": 0.75,
@@ -148,9 +150,12 @@ def load_local_env() -> None:
 
 
 def build_corpus(*, include_export_artifacts: bool = False) -> list[CorpusChunk]:
-    export_path = ROOT / "localDocs" / "AUT-test" / "result" / "export" / "autotest_export (2).json"
+    export_path = TRACKED_EXPORT if TRACKED_EXPORT.exists() else LOCAL_EXPORT_FALLBACK
     if not export_path.exists():
-        raise FileNotFoundError(f"Final AutoTestDesign export not found: {export_path}")
+        raise FileNotFoundError(
+            "Final AutoTestDesign export not found. Expected a tracked export at "
+            f"{TRACKED_EXPORT} or a local fallback at {LOCAL_EXPORT_FALLBACK}."
+        )
 
     return _chunks_from_export_json(export_path, include_export_artifacts=include_export_artifacts)
 

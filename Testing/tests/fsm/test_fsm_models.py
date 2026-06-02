@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+"""FSM model validation tests."""
+
 from backend.agent.tools.fsm import (
     FSMCoverageItem,
     FSMGenerationResult,

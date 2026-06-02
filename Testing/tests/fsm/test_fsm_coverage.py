@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+"""FSM coverage item and coverage gap tests."""
+
 from backend.agent.tools.fsm import (
     ALL_STATES,
     ALL_TRANSITIONS,

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+"""FSM test case generator tests."""
+
 from backend.agent.tools.fsm import generate_fsm_tests
 
 

@@ -16,8 +16,6 @@ function App() {
   const testCases = useAppStore((s) => s.testCases)
   const riskEntries = useAppStore((s) => s.riskEntries)
   const coverageItems = useAppStore((s) => s.coverageItems)
-  const analysisResults = useAppStore((s) => s.analysisResults)
-  const optimizeResult = useAppStore((s) => s.optimizeResult)
   const stagePolling = useAppStore((s) => s.stagePolling)
   const regenerateTriggered = useAppStore((s) => s.regenerateTriggered)
   const pendingRevisions = useAppStore((s) => s.pendingRevisions)
@@ -51,10 +49,12 @@ function App() {
         if (!regenerateTriggered) return 'awaiting'
         if (stagePolling[4]) return 'polling'
         return 'ready'
-      case 5: return optimizeResult ? 'ready' : 'pending'
+      case 5:
+        if (testCases.some((testCase) => testCase.status === 'Approved')) return 'ready'
+        return testCases.length > 0 ? 'awaiting' : 'pending'
       default: return 'pending'
     }
-  }, [requirements, riskEntries, coverageItems, testCases, analysisResults, optimizeResult, stagePolling, regenerateTriggered])
+  }, [requirements, riskEntries, coverageItems, testCases, stagePolling, regenerateTriggered])
 
   // Update document title when polling
   useEffect(() => {

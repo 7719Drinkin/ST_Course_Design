@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+"""Agent output validation and final quality gate tests."""
+
 import pytest
 
 from backend.agent.core.models import CoverageItem, TestCaseDraft as CaseDraftModel

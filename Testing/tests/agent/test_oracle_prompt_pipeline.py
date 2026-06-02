@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+"""Oracle prompt pipeline contract tests."""
+
 import asyncio
 
 import pytest
@@ -70,10 +72,11 @@ def test_generate_oracles_uses_oracle_prompt_pipeline():
     assert [item.test_id for item in result.oracle_results] == ["TC-AUT-001", "TC-AUT-002"]
     assert result.oracle_results[1].needs_review is True
     assert result.prompts_used[0].name == "oracle_generation"
-    assert "FR5 测试预言生成 Agent" in llm_client.prompt
+    assert "You are a test oracle generation agent." in llm_client.prompt
     assert "TC-AUT-001" in llm_client.prompt
     assert "CTX-001" in llm_client.prompt
-    assert "只输出 JSON。" in llm_client.prompt
+    assert "Return exactly one JSON object" in llm_client.prompt
+    assert "Before returning" in llm_client.prompt
 
 
 def test_oracle_validation_requires_review_for_low_confidence():
