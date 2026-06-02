@@ -59,6 +59,7 @@ export function EvidencePage() {
     value: revision.id,
     label: `${revision.id} · ${entityLabels[revision.entity_type]} · ${revision.entity_id}`,
   }))
+  const analysisStatusLive = analysisResults.length > 0 ? true : analysisLive
 
   useEffect(() => {
     if (requirements.length === 0) {
@@ -218,7 +219,7 @@ export function EvidencePage() {
 
         <Card title="结果分析">
           <Space direction="vertical" size={12} className="full-width">
-            <DataStatusTag isLive={analysisLive} />
+            <DataStatusTag isLive={analysisStatusLive} />
             <div className="metric-band metric-band-tight">
               <div>
                 <span>{improvementStats.missing}</span>

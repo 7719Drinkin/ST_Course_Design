@@ -106,6 +106,7 @@ export function ExportPage() {
   }
 
   const opt = optimizeResult
+  const optimizeStatusLive = opt ? true : optLive
   const reductionPercent = opt
     ? Math.max(0, Math.round(((opt.before_count - opt.after_count) / Math.max(1, opt.before_count)) * 100))
     : 0
@@ -115,7 +116,7 @@ export function ExportPage() {
       <div className="stage-toolbar stage-toolbar-wrap">
         <span>
           <Title level={4} style={{ margin: 0, display: 'inline' }}>优化与导出</Title>
-          {hasTestCases && <DataStatusTag isLive={optLive} />}
+          {hasTestCases && <DataStatusTag isLive={optimizeStatusLive} />}
         </span>
         <Space wrap>
           <Button disabled={!hasTestCases} onClick={() => setPreviewOpen(true)}>导出预览</Button>
