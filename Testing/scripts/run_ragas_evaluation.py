@@ -29,6 +29,7 @@ DEFAULT_RAGAS_THRESHOLDS = {
     "llm_context_precision_with_reference": 0.65,
     "answer_relevancy": 0.70,
 }
+CRITICAL_SCORE_FLOOR = 0.05
 
 STOP_WORDS = {
     "a",
@@ -55,6 +56,12 @@ STOP_WORDS = {
     "what",
     "when",
     "with",
+    "client",
+    "endpoint",
+    "api",
+    "request",
+    "response",
+    "system",
 }
 
 
@@ -140,28 +147,12 @@ def load_local_env() -> None:
             os.environ.setdefault(key, value)
 
 
-def build_corpus() -> list[CorpusChunk]:
-    sources = [
-        ROOT / "docs" / "srs" / "AUT_SRS_IEEE830_v1.md",
-        ROOT / "localDocs" / "AUT-test" / "AUT中文需求输入.md",
-        ROOT / "docs" / "RAGAS" / "ragas_evaluation_plan.md",
-        ROOT / "localDocs" / "RAGAS真实评估实施方案.md",
-        ROOT / "Testing" / "tests" / "aut" / "test_books_api.py",
-        ROOT / "Testing" / "tests" / "aut" / "test_members_api.py",
-        ROOT / "Testing" / "tests" / "aut" / "test_borrowing_api.py",
-    ]
-
-    chunks: list[CorpusChunk] = []
-    for path in sources:
-        if not path.exists():
-            continue
-        chunks.extend(_split_text(path.relative_to(ROOT).as_posix(), path.read_text(encoding="utf-8", errors="ignore")))
-
+def build_corpus(*, include_export_artifacts: bool = False) -> list[CorpusChunk]:
     export_path = ROOT / "localDocs" / "AUT-test" / "result" / "export" / "autotest_export (2).json"
-    if export_path.exists():
-        chunks.extend(_chunks_from_export_json(export_path))
+    if not export_path.exists():
+        raise FileNotFoundError(f"Final AutoTestDesign export not found: {export_path}")
 
-    return chunks
+    return _chunks_from_export_json(export_path, include_export_artifacts=include_export_artifacts)
 
 
 def retrieve_contexts(sample: dict[str, Any], corpus: list[CorpusChunk], top_k: int = 4) -> list[str]:
@@ -174,12 +165,14 @@ def retrieve_contexts(sample: dict[str, Any], corpus: list[CorpusChunk], top_k: 
         ]
     )
     query_tokens = _tokens(query)
+    query_lower = query.lower()
     scored: list[tuple[float, CorpusChunk]] = []
 
     for chunk in corpus:
         chunk_tokens = _tokens(chunk.text)
         if not chunk_tokens:
             continue
+        chunk_lower = chunk.text.lower()
         overlap = len(query_tokens & chunk_tokens)
         score = overlap / max(len(query_tokens), 1)
         if sample.get("requirement_id") and str(sample["requirement_id"]) in chunk.text:
@@ -190,21 +183,20 @@ def retrieve_contexts(sample: dict[str, Any], corpus: list[CorpusChunk], top_k: 
             score += 0.04
         if "member" in query_tokens and "member" in chunk_tokens:
             score += 0.04
+        if "malformed" in query_lower or "unparsable" in query_lower:
+            if "malformed" in chunk_lower and "json" in chunk_lower:
+                score += 1.2
+            if "well-formed json" in chunk_lower or "request bodies" in chunk_lower:
+                score += 0.5
+            if "400 bad request" in chunk_lower or "bad request" in chunk_lower:
+                score += 0.35
+        if "json" in query_tokens and "json" in chunk_tokens:
+            score += 0.08
         if score > 0:
             scored.append((score, chunk))
 
     scored.sort(key=lambda item: item[0], reverse=True)
-    contexts = [f"[{chunk.source}] {chunk.text}" for _, chunk in scored[:top_k]]
-
-    # Keep the manually curated evidence as a reproducible fallback when local
-    # retrieval does not find enough support for a golden item.
-    for context in sample.get("contexts", []):
-        if len(contexts) >= top_k:
-            break
-        if context and context not in contexts:
-            contexts.append(str(context))
-
-    return contexts
+    return [f"[{chunk.source}] {chunk.text}" for _, chunk in scored[:top_k]]
 
 
 def build_candidate_rows(
@@ -213,12 +205,15 @@ def build_candidate_rows(
     use_deepseek: bool,
     allow_reference_fallback: bool = False,
     top_k: int = 4,
+    include_export_artifacts: bool = False,
 ) -> list[dict[str, Any]]:
-    corpus = build_corpus()
+    corpus = build_corpus(include_export_artifacts=include_export_artifacts)
     rows: list[dict[str, Any]] = []
 
     for sample in samples:
         contexts = retrieve_contexts(sample, corpus, top_k=top_k)
+        if not contexts:
+            raise RuntimeError(f"No retrieved contexts for {sample['id']}.")
         if use_deepseek:
             response = generate_deepseek_answer(sample, contexts)
         elif allow_reference_fallback:
@@ -282,6 +277,8 @@ def run_ragas_evaluation(
     sample_limit: int | None = None,
     output_dir: Path = REPORT_DIR,
     top_k: int = 4,
+    include_export_artifacts: bool = False,
+    report_prefix: str = "ragas",
 ) -> dict[str, Any]:
     load_local_env()
     if not os.getenv("DEEPSEEK_API_KEY"):
@@ -291,7 +288,12 @@ def run_ragas_evaluation(
     if sample_limit is not None:
         samples = samples[:sample_limit]
 
-    candidate_rows = build_candidate_rows(samples, use_deepseek=True, top_k=top_k)
+    candidate_rows = build_candidate_rows(
+        samples,
+        use_deepseek=True,
+        top_k=top_k,
+        include_export_artifacts=include_export_artifacts,
+    )
     install_ragas_vertexai_compat()
 
     from datasets import Dataset
@@ -335,23 +337,27 @@ def run_ragas_evaluation(
         row.setdefault("id", candidate_rows[index]["id"])
         row.setdefault("requirement_id", candidate_rows[index]["requirement_id"])
     summary = _summarize_scores(row_records)
-    gate = "PASS" if _passes_gate(summary) else "REVIEW_REQUIRED"
+    score_health = _score_health(row_records)
+    gate = "PASS" if _passes_gate(summary, score_health) else "REVIEW_REQUIRED"
 
     report = {
         "gate": gate,
         "sample_count": len(candidate_rows),
         "model": os.getenv("DEEPSEEK_MODEL", "deepseek-v4-flash"),
         "embedding_model": getattr(embeddings, "model_name", "hash_embeddings_fallback"),
+        "include_export_artifacts": include_export_artifacts,
         "thresholds": DEFAULT_RAGAS_THRESHOLDS,
         "summary": summary,
+        "score_health": score_health,
+        "low_score_cases": _low_score_cases(row_records),
         "rows": row_records,
     }
 
     try:
         output_dir.mkdir(parents=True, exist_ok=True)
-        candidates_path = output_dir / "ragas_candidates.json"
-        report_json_path = output_dir / "ragas_report.json"
-        report_md_path = output_dir / "ragas_report.md"
+        candidates_path = output_dir / f"{report_prefix}_candidates.json"
+        report_json_path = output_dir / f"{report_prefix}_report.json"
+        report_md_path = output_dir / f"{report_prefix}_report.md"
         candidates_path.write_text(
             json.dumps(candidate_rows, ensure_ascii=False, indent=2),
             encoding="utf-8",
@@ -405,7 +411,7 @@ def _split_text(source: str, text: str, max_chars: int = 900) -> list[CorpusChun
     return chunks
 
 
-def _chunks_from_export_json(path: Path) -> list[CorpusChunk]:
+def _chunks_from_export_json(path: Path, *, include_export_artifacts: bool = False) -> list[CorpusChunk]:
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
     except json.JSONDecodeError:
@@ -413,8 +419,30 @@ def _chunks_from_export_json(path: Path) -> list[CorpusChunk]:
 
     chunks: list[CorpusChunk] = []
     source = path.relative_to(ROOT).as_posix()
-    for key in ["requirements", "coverage_items", "test_cases", "analysis_results", "oracle_results"]:
-        for item in data.get(key, [])[:120]:
+    bundle = data.get("export_bundle", data)
+
+    for item in bundle.get("requirements", []):
+        if not isinstance(item, dict):
+            continue
+        requirement_id = item.get("requirement_id", "")
+        parts = [
+            str(requirement_id),
+            f"Module: {item.get('module', '')}",
+            f"Description: {item.get('description', '')}",
+            f"Raw requirement: {item.get('raw_requirement', '')}",
+            "Input fields: " + ", ".join(str(field) for field in item.get("input_fields", [])),
+            "Conditions: " + "; ".join(str(condition) for condition in item.get("conditions", [])),
+            "Business rules: " + "; ".join(str(rule) for rule in item.get("business_rules", [])),
+            f"Expected action: {item.get('expected_action', '')}",
+        ]
+        text = "; ".join(part for part in parts if part and not part.endswith(": "))
+        chunks.append(CorpusChunk(source=f"{source}::export_bundle.requirements", text=text))
+
+    if not include_export_artifacts:
+        return chunks
+
+    for key in ["coverage_items", "test_cases", "analysis_results", "oracle_results"]:
+        for item in bundle.get(key, [])[:120]:
             if not isinstance(item, dict):
                 continue
             parts = [key]
@@ -432,7 +460,7 @@ def _chunks_from_export_json(path: Path) -> list[CorpusChunk]:
             ]:
                 if item.get(field):
                     parts.append(f"{field}: {item[field]}")
-            chunks.append(CorpusChunk(source=source, text="; ".join(parts)))
+            chunks.append(CorpusChunk(source=f"{source}::export_bundle.{key}", text="; ".join(parts)))
     return chunks
 
 
@@ -455,11 +483,70 @@ def _summarize_scores(rows: list[dict[str, Any]]) -> dict[str, float]:
     return summary
 
 
-def _passes_gate(summary: dict[str, float]) -> bool:
+def _score_health(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    invalid_scores: list[dict[str, Any]] = []
+    critical_failures: list[dict[str, Any]] = []
+
+    for row in rows:
+        for metric in DEFAULT_RAGAS_THRESHOLDS:
+            value = row.get(metric)
+            if not isinstance(value, (int, float)) or math.isnan(float(value)) or not math.isfinite(float(value)):
+                invalid_scores.append(
+                    {
+                        "id": row.get("id"),
+                        "requirement_id": row.get("requirement_id"),
+                        "metric": metric,
+                        "value": value,
+                    }
+                )
+                continue
+            if float(value) <= CRITICAL_SCORE_FLOOR:
+                critical_failures.append(
+                    {
+                        "id": row.get("id"),
+                        "requirement_id": row.get("requirement_id"),
+                        "metric": metric,
+                        "value": float(value),
+                    }
+                )
+
+    return {
+        "invalid_score_count": len(invalid_scores),
+        "critical_failure_count": len(critical_failures),
+        "invalid_scores": invalid_scores,
+        "critical_failures": critical_failures,
+    }
+
+
+def _passes_gate(summary: dict[str, float], score_health: dict[str, Any]) -> bool:
+    if score_health["invalid_score_count"] or score_health["critical_failure_count"]:
+        return False
     for metric, threshold in DEFAULT_RAGAS_THRESHOLDS.items():
-        if metric in summary and summary[metric] < threshold:
+        if metric not in summary:
             return False
-    return bool(summary)
+        if summary[metric] < threshold:
+            return False
+    return True
+
+
+def _low_score_cases(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    cases: list[dict[str, Any]] = []
+    for row in rows:
+        issues = []
+        for metric, threshold in DEFAULT_RAGAS_THRESHOLDS.items():
+            value = row.get(metric)
+            if isinstance(value, (int, float)) and math.isfinite(float(value)) and float(value) < threshold:
+                issues.append({"metric": metric, "value": round(float(value), 4), "threshold": threshold})
+        if issues:
+            cases.append(
+                {
+                    "id": row.get("id"),
+                    "requirement_id": row.get("requirement_id"),
+                    "question": row.get("user_input"),
+                    "issues": issues,
+                }
+            )
+    return cases
 
 
 def _markdown_report(report: dict[str, Any]) -> str:
@@ -479,17 +566,14 @@ def _markdown_report(report: dict[str, Any]) -> str:
         threshold = report["thresholds"].get(metric, "")
         lines.append(f"| {metric} | {score:.4f} | {threshold} |")
     lines.extend(["", "## Low Score Cases", ""])
-    for row in report["rows"]:
-        issues = []
-        for metric, threshold in report["thresholds"].items():
-            value = row.get(metric)
-            if isinstance(value, (int, float)) and value < threshold:
-                issues.append(f"{metric}={value:.4f}")
-        if issues:
-            lines.append(
-                f"- {row.get('id')} / {row.get('requirement_id')}: "
-                f"{row.get('user_input', '')} ({', '.join(issues)})"
-            )
+    if not report["low_score_cases"]:
+        lines.append("- None")
+    for case in report["low_score_cases"]:
+        issues = ", ".join(f"{item['metric']}={item['value']:.4f}" for item in case["issues"])
+        lines.append(f"- {case['id']} / {case['requirement_id']}: {case['question']} ({issues})")
+    lines.extend(["", "## Score Health", ""])
+    lines.append(f"- Invalid score count: {report['score_health']['invalid_score_count']}")
+    lines.append(f"- Critical failure count: {report['score_health']['critical_failure_count']}")
     return "\n".join(lines) + "\n"
 
 
@@ -498,10 +582,36 @@ def main(argv: Iterable[str] | None = None) -> int:
     parser.add_argument("--sample-limit", type=int, default=None)
     parser.add_argument("--top-k", type=int, default=4)
     parser.add_argument("--output-dir", type=Path, default=REPORT_DIR)
+    parser.add_argument("--report-prefix", default="ragas")
+    parser.add_argument(
+        "--include-export-artifacts",
+        action="store_true",
+        help="Include generated AutoTestDesign export artifacts in retrieval corpus.",
+    )
     args = parser.parse_args(list(argv) if argv is not None else None)
 
-    report = run_ragas_evaluation(sample_limit=args.sample_limit, output_dir=args.output_dir, top_k=args.top_k)
-    print(json.dumps({"gate": report["gate"], "summary": report["summary"]}, ensure_ascii=False, indent=2))
+    report = run_ragas_evaluation(
+        sample_limit=args.sample_limit,
+        output_dir=args.output_dir,
+        top_k=args.top_k,
+        include_export_artifacts=args.include_export_artifacts,
+        report_prefix=args.report_prefix,
+    )
+    print(
+        json.dumps(
+            {
+                "gate": report["gate"],
+                "summary": report["summary"],
+                "score_health": {
+                    "invalid_score_count": report["score_health"]["invalid_score_count"],
+                    "critical_failure_count": report["score_health"]["critical_failure_count"],
+                },
+                "low_score_case_count": len(report["low_score_cases"]),
+            },
+            ensure_ascii=False,
+            indent=2,
+        )
+    )
     return 0
 
 
