@@ -17,19 +17,33 @@ def test_list_members_returns_json_array(aut_session, aut_base_url):
     assert isinstance(response.json(), list)
 
 
-def test_create_and_get_member_by_id(aut_session, aut_base_url, unique_suffix):
-    created = create_member(aut_session, aut_base_url, unique_suffix)
+@pytest.mark.parametrize(
+    "member_overrides",
+    [
+        {},
+        {"name": "Anne-Marie O'Neil", "email": "anne.oneil@example.org", "phoneNumber": "+1-555-0100"},
+        {"name": "Li", "email": "member+tag@example.com", "endDate": "2029-05-09"},
+    ],
+    ids=["typical", "special-name", "short-name-long-membership"],
+)
+def test_create_and_get_member_by_id(aut_session, aut_base_url, unique_suffix, member_overrides):
+    payload = member_payload(unique_suffix)
+    payload.update(member_overrides)
+    response = aut_session.post(f"{aut_base_url}/api/members", json=payload, timeout=5)
+
+    assert response.status_code == 201
+    created = response.json()
 
     assert created["id"] > 0
-    assert created["name"] == f"Member {unique_suffix}"
-    assert created["email"] == f"member-{unique_suffix}@example.com"
+    assert created["name"] == payload["name"]
+    assert created["email"] == payload["email"]
 
     response = aut_session.get(f"{aut_base_url}/api/members/{created['id']}", timeout=5)
 
     assert response.status_code == 200
     fetched = response.json()
     assert fetched["id"] == created["id"]
-    assert fetched["phoneNumber"] == "1234567890"
+    assert fetched["phoneNumber"] == payload["phoneNumber"]
 
 
 def test_get_missing_member_returns_404(aut_session, aut_base_url):

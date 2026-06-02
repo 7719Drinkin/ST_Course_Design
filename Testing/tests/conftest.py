@@ -15,6 +15,9 @@ import requests
 _PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
+_TESTING_ROOT = _PROJECT_ROOT / "Testing"
+if str(_TESTING_ROOT) not in sys.path:
+    sys.path.insert(0, str(_TESTING_ROOT))
 _BACKEND = _PROJECT_ROOT / "backend"
 if str(_BACKEND) not in sys.path:
     sys.path.insert(0, str(_BACKEND))
@@ -25,6 +28,41 @@ def pytest_configure(config: pytest.Config) -> None:
     config.addinivalue_line("markers", "integration: integration tests")
     config.addinivalue_line("markers", "ragas: RAGAS evaluation tests")
     config.addinivalue_line("markers", "llm: tests that require LLM access")
+    config.addinivalue_line("markers", "ep: AUT equivalence partitioning test")
+    config.addinivalue_line("markers", "bva: AUT boundary value analysis test")
+    config.addinivalue_line("markers", "dt: AUT decision table test")
+    config.addinivalue_line("markers", "fsm: AUT finite state machine test")
+    config.addinivalue_line("markers", "p1: AUT priority P1 test")
+    config.addinivalue_line("markers", "p2: AUT priority P2 test")
+    config.addinivalue_line("markers", "p3: AUT priority P3 test")
+
+
+def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
+    try:
+        from tests.aut.traceability import get_traceability
+    except ModuleNotFoundError:
+        return
+
+    for item in items:
+        test_name = getattr(item, "originalname", None) or item.name.split("[", 1)[0]
+        traceability = get_traceability(test_name)
+        if not traceability:
+            continue
+
+        for technique in traceability.get("techniques", []):
+            item.add_marker(getattr(pytest.mark, technique.lower()))
+        for priority in traceability.get("priorities", []):
+            item.add_marker(getattr(pytest.mark, priority.lower()))
+
+        item.user_properties.extend(
+            [
+                ("test_ids", ",".join(traceability.get("test_ids", []))),
+                ("requirement_ids", ",".join(traceability.get("requirement_ids", []))),
+                ("coverage_item_ids", ",".join(traceability.get("coverage_item_ids", []))),
+                ("techniques", ",".join(traceability.get("techniques", []))),
+                ("priorities", ",".join(traceability.get("priorities", []))),
+            ]
+        )
 
 
 DEFAULT_AUT_BASE_URL = "http://localhost:8080"

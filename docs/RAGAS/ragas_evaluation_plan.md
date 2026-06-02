@@ -1,19 +1,19 @@
 # RAGAS Evaluation Plan
 
-本文档定义 Day5 及之后的 RAGAS 真实评价流程。
+本文档定义 B 负责的 RAGAS 评估流程。当前实现由 D 协助完成测试脚本和可复现 runner，但文档口径仍归入 B 的 RAG / Prompt / RAGAS 工作。
 
-## 1. Current Dataset
+## 1. Dataset
 
-Golden QA draft:
+Golden QA:
 
 ```text
-tests/data/ragas_golden_qa_draft.json
+Testing/tests/data/ragas_golden_qa_draft.json
 ```
 
 Current size:
 
 ```text
-8 samples
+16 samples
 ```
 
 Each sample contains:
@@ -26,90 +26,95 @@ Each sample contains:
 - `contexts`
 - `source`
 
-## 2. Required Input From B
+## 2. Implemented Runner
 
-B 需要提供 RAG pipeline 的真实输出。建议文件格式：
+RAGAS runner:
 
-```json
-[
-  {
-    "id": "RAGAS-AUT-004",
-    "requirement_id": "REQ-AUT-008",
-    "question": "What should happen when an existing member borrows an existing book with available copies?",
-    "answer": "The API returns 201 Created and creates a borrowing record...",
-    "contexts": [
-      "FR-AUT-BORROW-002 Borrow Available Book..."
-    ],
-    "retrieved_context_ids": ["AUT-SRS-001#FR-AUT-BORROW-002"],
-    "model_name": "gpt-or-compatible-model"
-  }
-]
+```text
+Testing/scripts/run_ragas_evaluation.py
 ```
 
-D 会把 B 的 `answer` 和 `contexts` 与 golden QA 的 `ground_truth` 对齐后运行 RAGAS。
+The runner performs:
+
+1. Load golden QA.
+2. Build a local retrieval corpus from AUT SRS, raw AUT requirements, exported design artifacts, and pytest files.
+3. Retrieve top-k contexts for each question.
+4. Generate candidate answers using DeepSeek `deepseek-v4-flash`.
+5. Run RAGAS metrics.
+6. Write `ragas_candidates.json`, `ragas_report.json`, and `ragas_report.md` when the output directory is writable.
 
 ## 3. Metrics
 
-最低要求：
+| Metric | Purpose | Current Threshold |
+|---|---|---:|
+| `faithfulness` | Response is supported by retrieved contexts | 0.75 |
+| `answer_relevancy` | Response is relevant to the question | 0.70 |
+| `llm_context_precision_with_reference` | Retrieved contexts are relevant to the reference answer | 0.65 |
+| `context_recall` | Retrieved contexts cover reference facts | 0.65 |
 
-| Metric | Purpose |
-|---|---|
-| answer relevancy | 回答是否直接回答问题 |
-| faithfulness | 回答是否被 contexts 支持 |
-| context precision | 检索上下文是否相关 |
-| context recall | ground truth 所需信息是否被检索到 |
+## 4. Compatibility Handling
 
-目标 gate：
+Current installed versions include `ragas==0.4.3` and `langchain-community==0.4.2`. RAGAS imports `langchain_community.chat_models.vertexai` even though this project does not use VertexAI. The runner injects a small import-time compatibility shim before importing RAGAS.
 
-```text
-Faithfulness > 0.85
-Hallucination rate < 5%
-```
+DeepSeek does not support `n > 1`, so `ResponseRelevancy` is configured with `strictness=1`.
 
-Hallucination rate 可由低 faithfulness 或人工标注 bad cases 估算。
+Embedding for answer relevancy uses local `sentence-transformers` with `BAAI/bge-small-zh-v1.5` by default. If it cannot be loaded, the runner falls back to deterministic hash embeddings.
 
-## 4. Pytest Marker
+## 5. Commands
 
-RAGAS 测试必须使用：
-
-```python
-@pytest.mark.ragas
-```
-
-无 RAGAS 输入或无模型凭据时，不应影响基础 CI：
+CI-safe checks without live LLM:
 
 ```bash
-pytest -m "not aut_api and not ragas and not llm" -q
+python -m pytest Testing\tests\test_ragas_evaluation.py -m "not ragas and not llm" -q -p no:cacheprovider
 ```
 
-## 5. Report Format
+Real RAGAS smoke test:
+
+```powershell
+$env:RAGAS_SMOKE_SAMPLE_LIMIT='1'
+python -m pytest Testing\tests\test_ragas_evaluation.py -m "ragas and llm" -q -p no:cacheprovider
+```
+
+Full runner:
+
+```bash
+python Testing\scripts\run_ragas_evaluation.py --top-k 3 --output-dir Testing\reports
+```
+
+If the current Python process cannot write to `Testing\reports`, use a writable temp directory and copy the report into the final document evidence manually.
+
+## 6. Current Smoke Result
+
+The current one-sample real RAGAS smoke run completed successfully:
+
+| Metric | Score |
+|---|---:|
+| `answer_relevancy` | 0.813 |
+| `context_recall` | 1.000 |
+| `faithfulness` | 1.000 |
+| `llm_context_precision_with_reference` | 1.000 |
+
+Gate:
 
 ```text
-RAGAS Evaluation Report
-
-Dataset:
-- Golden QA: tests/data/ragas_golden_qa_draft.json
-- Candidate output: <path>
-
-Metrics:
-| Metric | Score | Pass |
-|---|---:|---|
-
-Bad Cases:
-| Sample | Requirement | Question | Issue | Owner |
-|---|---|---|---|---|
-
-Conclusion:
-- PASS / FAIL / BLOCKED
+PASS
 ```
 
-## 6. Blocker Rule
-
-如果 B 尚未提供 RAG output，D 记录：
+Report output generated in the current run:
 
 ```text
-Status: BLOCKED
-Owner: B
-Missing input: RAG answers and retrieved contexts
-Impact: RAGAS baseline cannot be computed
+C:\Users\Drink\AppData\Local\Temp\ST_Course_Design_docx_filled_20260602\ragas_candidates.json
+C:\Users\Drink\AppData\Local\Temp\ST_Course_Design_docx_filled_20260602\ragas_report.json
+C:\Users\Drink\AppData\Local\Temp\ST_Course_Design_docx_filled_20260602\ragas_report.md
 ```
+
+## 7. Documentation Rule
+
+For the final report, write:
+
+```text
+B implemented the RAGAS evaluation workflow with D's assistance. The evaluation uses a golden QA set, reproducible retrieved contexts, DeepSeek-generated candidate answers, and RAGAS metrics including faithfulness, answer relevancy, context precision, and context recall.
+```
+
+If only the smoke result is used, explicitly state that the result is a smoke evaluation. A full 16-sample run should be used before claiming final RAGAS benchmark quality.
+

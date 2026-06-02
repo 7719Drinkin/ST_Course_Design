@@ -17,14 +17,16 @@ def test_list_borrowing_records_returns_json_array(aut_session, aut_base_url):
     assert isinstance(response.json(), list)
 
 
+@pytest.mark.parametrize("available_copies", [1, 5, 50, 999], ids=["one", "multiple", "mid-range", "high"])
 def test_borrow_available_book_creates_record_and_decrements_copies(
     aut_session,
     aut_base_url,
     unique_suffix,
     today_iso,
     due_date_iso,
+    available_copies,
 ):
-    book = create_book(aut_session, aut_base_url, unique_suffix, available_copies=2)
+    book = create_book(aut_session, aut_base_url, unique_suffix, available_copies=available_copies)
     member = create_member(aut_session, aut_base_url, unique_suffix)
 
     response = borrow_book(aut_session, aut_base_url, book["id"], member["id"])
@@ -37,10 +39,10 @@ def test_borrow_available_book_creates_record_and_decrements_copies(
     assert record["borrowDate"] == today_iso
     assert record["dueDate"] == due_date_iso
     assert record["returnDate"] is None
-    assert record["book"]["availableCopies"] == 1
+    assert record["book"]["availableCopies"] == available_copies - 1
 
     fetched_book = aut_session.get(f"{aut_base_url}/api/books/{book['id']}", timeout=5).json()
-    assert fetched_book["availableCopies"] == 1
+    assert fetched_book["availableCopies"] == available_copies - 1
 
 
 def test_borrow_rejects_unknown_book(aut_session, aut_base_url, unique_suffix):
@@ -126,10 +128,15 @@ def test_duplicate_return_is_rejected(aut_session, aut_base_url, unique_suffix):
     assert second_return.status_code == 400
 
 
-def test_malformed_json_request_returns_400(aut_session, aut_base_url):
+@pytest.mark.parametrize(
+    "malformed_body",
+    ["{\"book\":{\"id\":1}", "{\"book\":{\"id\":1},}", "{book:{id:1}}"],
+    ids=["missing-closing-brace", "trailing-comma", "unquoted-key"],
+)
+def test_borrow_malformed_json_request_returns_400(aut_session, aut_base_url, malformed_body):
     response = aut_session.post(
-        f"{aut_base_url}/api/books",
-        data="{bad-json",
+        f"{aut_base_url}/api/borrow",
+        data=malformed_body,
         headers={"Content-Type": "application/json"},
         timeout=5,
     )
